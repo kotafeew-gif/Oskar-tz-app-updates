@@ -2,7 +2,7 @@
 
 // ─── Константы справочников ─────────────────────────────────────────────────
 
-const APP_VERSION = "2.4.2";
+const APP_VERSION = "2.4.3";
 
 const DEFAULT_PRODUCT_TYPES = [
   "Визитки", "Листовки", "Буклеты", "Флаеры", "Брошюры", "Каталоги",
@@ -2162,7 +2162,13 @@ function LegacyApp() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow">
             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           </div>
-          <div><h1 className="text-lg font-bold text-slate-800 leading-none">ТЗ Оскар-Принт</h1><p className="text-xs text-slate-500">Формирование технического задания</p></div>
+          <div>
+            <h1 className="text-lg font-bold text-slate-800 leading-none">ТЗ Оскар-Принт</h1>
+            <p className="text-xs text-slate-500">
+              Формирование технического задания
+              <span className="ml-2 text-[10px] text-slate-400">v{APP_VERSION}</span>
+            </p>
+          </div>
           <div className="ml-auto flex gap-2"><button onClick={handleReset} className="text-sm px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200">🗑 Очистить</button></div>
         </div>
       </header>
