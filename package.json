@@ -48,7 +48,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "kotafee-w-gif",
+        "owner": "kotafeew-gif",
         "repo": "Oskar-tz-app-updates",
         "releaseType": "release"
       }
