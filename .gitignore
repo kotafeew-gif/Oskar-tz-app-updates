@@ -1,0 +1,7 @@
+node_modules/
+dist/
+out/
+release/
+electron-app/google-key.json
+.DS_Store
+*.log
