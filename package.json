@@ -1,0 +1,68 @@
+{
+  "name": "oscar-print-app",
+  "private": true,
+  "version": "2.4.2",
+  "author": "YourName",
+  "description": "TZ Oscar-Print",
+  "main": "electron-app/main.mjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "electron .",
+    "pack": "vite build && electron-builder --dir",
+    "dist": "vite build && electron-builder"
+  },
+  "dependencies": {
+    "clsx": "2.1.1",
+    "electron-updater": "^6.8.9",
+    "googleapis": "^171.4.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "tailwind-merge": "3.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.17",
+    "@types/node": "22.19.17",
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
+    "electron": "31.0.0",
+    "electron-builder": "^24.13.3",
+    "tailwindcss": "4.1.17",
+    "typescript": "5.9.3",
+    "vite": "7.2.4",
+    "vite-plugin-singlefile": "2.3.0"
+  },
+  "build": {
+    "appId": "com.oskarprint.tz",
+    "productName": "Оскар-Принт ТЗ",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kotafee-w-gif",
+        "repo": "Oskar-tz-app-updates",
+        "releaseType": "release"
+      }
+    ],
+    "files": [
+      "dist/**/*",
+      "electron-app/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "electron-app/google-key.json",
+        "to": "google-key.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,3071 @@
+﻿import { Fragment, useEffect, useRef, useState } from "react";
+
+// ─── Константы справочников ─────────────────────────────────────────────────
+
+const APP_VERSION = "2.4.2";
+
+const DEFAULT_PRODUCT_TYPES = [
+  "Визитки", "Листовки", "Буклеты", "Флаеры", "Брошюры", "Каталоги",
+  "Календари", "Плакаты", "Наклейки", "Открытка", "Конверты", "Бланки",
+  "Папки", "Блокноты", "Бумажные Пакеты", "Другое...",
+];
+
+const DEFAULT_PAPER_SIZES = [
+  "A6 (105×148 мм)", "A5 (148×210 мм)", "A4 (210×297 мм)",
+  "A3 (297×420 мм)", "A2 (420×594 мм)", "A1 (594×841 мм)",
+  "A0 (841×1189 мм)", "Евро (100×210 мм)", "Нестандартный",
+];
+
+const DEFAULT_POCKET_CALENDAR_SIZES = [
+  "70×100",
+  "Нестандартный",
+];
+
+const DEFAULT_BUSINESS_CARD_SIZES = [
+  "90×50 мм",
+  "85×55 мм",
+  "Евро-визитка 85×54 мм",
+  "Нестандартный",
+];
+
+const DEFAULT_ENVELOPE_SIZES = [
+  "E65 / Евро (110×220 мм)", "C3 (324×458 мм)", "C4 (229×324 мм)",
+  "C5 (162×229 мм)", "C6 (114×162 мм)", "C65 (114×229 мм)",
+  "DL (110×220 мм)", "B4 (250×353 мм)", "B5 (176×250 мм)",
+  "B6 (125×176 мм)", "Каталожный C4 с расширением", "Нестандартный",
+];
+
+const DEFAULT_DENSITIES = [
+  "80 г/м² (офисная)", "90 г/м²", "115 г/м²", "130 г/м²", "150 г/м²",
+  "170 г/м²", "200 г/м²", "250 г/м²", "300 г/м²", "350 г/м²", "400 г/м²",
+];
+
+const PAPER_TYPE_OPTIONS = ["Мелованная", "Офсетная", "Каландр", "Картон", "Дизайнерская"] as const;
+type PaperTypeOption = typeof PAPER_TYPE_OPTIONS[number];
+
+const DEFAULT_PAPER_LIBRARY = {
+  coated: ["115 г/м²", "130 г/м²", "150 г/м²", "170 г/м²", "200 г/м²", "250 г/м²", "300 г/м²", "350 г/м²"],
+  offset: ["80 г/м²", "90 г/м²", "100 г/м²", "115 г/м²", "130 г/м²", "150 г/м²"],
+  calender: ["90 г/м²", "115 г/м²", "130 г/м²", "150 г/м²", "170 г/м²", "200 г/м²"],
+  cardboard: ["270 г/м²"],
+  designer: ["Sirio Color", "Touch Cover", "Curious Metallic", "Nettuno", "Constellation"],
+};
+
+type PaperLibraryKey = keyof typeof DEFAULT_PAPER_LIBRARY;
+
+const PAPER_TYPE_TO_LIBRARY_KEY: Record<PaperTypeOption, PaperLibraryKey> = {
+  "Мелованная": "coated",
+  "Офсетная": "offset",
+  "Каландр": "calender",
+  "Картон": "cardboard",
+  "Дизайнерская": "designer",
+};
+
+const DEFAULT_COLORS = [
+  "1+0 (чёрно-белая, одна сторона)", "1+1 (чёрно-белая, две стороны)",
+  "4+0 (полноцвет, одна сторона)", "4+4 (полноцвет, две стороны)",
+  "4+1 (полноцвет + чб)", "Пантон (Pantone)",
+];
+
+const STICKER_COLOR_MODES = ["1+0", "4+0", "5+0"];
+
+const DEFAULT_POST_PROCESSING = [
+  "Перфорация", "Тиснение фольгой", "Фольгирование", "УФ-лак", "Скругление углов", "Раскрой IECHO", "Сортировка/упаковка",
+];
+
+const DEFAULT_BINDING_TYPES = [
+  "Скоба", "Термобиндер", "PUR-клей", "Пружина",
+];
+
+const DEFAULT_LAMINATION_KINDS = ["Глянцевая", "Матовая", "Софт (Soft-Touch)"];
+const DEFAULT_LAMINATION_THICKNESS = ["30 мк", "80 мк", "125 мк"];
+
+const SPRING_COLORS = [
+  "Прозрачная", "Чёрная", "Белая", "Синяя", "Красная", "Зелёная", "Жёлтая",
+  "Серебряная", "Золотая", "Другой цвет...",
+];
+
+const SPRING_DIAMETERS = [
+  "6 мм", "8 мм", "10 мм", "12 мм", "14 мм", "16 мм", "19 мм",
+  "22 мм", "25 мм", "28 мм", "32 мм", "38 мм", "45 мм", "51 мм",
+];
+const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голубой", "3в1 (серый)"];
+const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
+const STICKER_MATERIALS = [
+  "Самоклеящаяся бумага без просечки",
+  "Самоклеящаяся бумага с просечкой",
+  "Полилазер белый матовый",
+  "Полилазер белый глянцевый",
+  "Полилазер прозрачный",
+];
+
+const KASHUROVKA_BASE_TYPES = [
+  "Переплётный картон 1.5 мм", "Переплётный картон 2.0 мм",
+  "Переплётный картон 2.5 мм", "Переплётный картон 3.0 мм",
+  "Микрогофрокартон", "Картон 300 г/м²", "Картон 400 г/м²", "Картон 500 г/м²",
+];
+
+const KASHUROVKA_LINER_TYPES = [
+  "Мелованная 150 г/м²", "Мелованная 170 г/м²", "Мелованная 200 г/м²",
+  "Мелованная 250 г/м²", "Дизайнерская 150 г/м²", "Дизайнерская 200 г/м²",
+  "Крафт 150 г/м²", "Крафт 200 г/м²",
+];
+
+const FORSAC_PAPER_TYPES = [
+  "Мелованная 115 г/м²", "Мелованная 130 г/м²", "Мелованная 150 г/м²",
+  "Мелованная 170 г/м²", "Мелованная 200 г/м²", "Мелованная 250 г/м²",
+  "Офсетная 80 г/м²", "Офсетная 90 г/м²", "Офсетная 115 г/м²",
+  "Дизайнерская 120 г/м²", "Дизайнерская 150 г/м²", "Дизайнерская 200 г/м²",
+  "Крафт 90 г/м²", "Крафт 120 г/м²", "Крафт 150 г/м²",
+];
+
+const DEFAULT_MANAGERS = [
+  "Алёна", "Аня", "Катя", "Кристина", "Лиза", "Татьяна Почебыт"
+];
+
+const DEFAULT_PAPER_PROFILES = {
+  common: ["80 г/м² (офисная)", "90 г/м²", "115 г/м²", "130 г/м²", "150 г/м²", "170 г/м²", "200 г/м²"],
+  heavy: ["170 г/м²", "200 г/м²", "250 г/м²", "300 г/м²", "350 г/м²", "400 г/м²"],
+  notebookCover: ["200 г/м²", "250 г/м²", "300 г/м²", "350 г/м²"],
+  notebookBlock: ["80 г/м² (офисная)", "90 г/м²", "100 г/м²", "120 г/м²"],
+  calendarBase: ["Картон 250 г/м²", "Картон 300 г/м²", "Картон 350 г/м²", "Переплётный картон 1.5 мм"],
+  calendarGridDigital: ["115 г/м²", "130 г/м²", "150 г/м²", "170 г/м²"],
+  calendarGridOffset: ["Офсетная 80 г/м²", "Офсетная 90 г/м²"],
+  bag: ["170 г/м²", "200 г/м²", "250 г/м²", "300 г/м²", "Крафт 120 г/м²", "Крафт 150 г/м²"],
+  sticker: STICKER_MATERIALS,
+  kashLiner: ["Мелованная 150 г/м²", "Мелованная 170 г/м²", "Мелованная 200 г/м²", "Мелованная 250 г/м²", "Дизайнерская 150 г/м²", "Крафт 150 г/м²"],
+  kashForsac: ["Мелованная 130 г/м²", "Мелованная 150 г/м²", "Офсетная 80 г/м²", "Офсетная 90 г/м²", "Дизайнерская 120 г/м²"],
+  slip: ["Мелованная 170 г/м²", "Мелованная 200 г/м²", "Мелованная 250 г/м²", "Дизайнерская 200 г/м²"],
+};
+
+type PaperProfileKey = keyof typeof DEFAULT_PAPER_PROFILES;
+
+const PAPER_PROFILE_LABELS: Record<PaperProfileKey, string> = {
+  common: "Бумаги для стандартной продукции",
+  heavy: "Плотные бумаги / обложки",
+  notebookCover: "Бумаги для обложек блокнотов",
+  notebookBlock: "Бумаги для блоков блокнотов",
+  calendarBase: "Материалы для оснований календарей",
+  calendarGridDigital: "Материалы для календарной сетки (цифра)",
+  calendarGridOffset: "Материалы для календарной сетки (офсет)",
+  bag: "Материалы для пакетов",
+  sticker: "Материалы для наклеек",
+  kashLiner: "Лайнеры для кашировки",
+  kashForsac: "Материалы форзаца",
+  slip: "Бумаги для слип-кашировки",
+};
+
+const LS_KEYS = {
+  productTypes: "dict_productTypes",
+  paperSizes: "dict_paperSizes",
+  pocketCalendarSizes: "dict_pocketCalendarSizes",
+  businessCardSizes: "dict_businessCardSizes",
+  paperLibrary: "dict_paperLibrary",
+  envelopeSizes: "dict_envelopeSizes",
+  densities: "dict_densities",
+  colors: "dict_colors",
+  postProcessing: "dict_postProcessing",
+  bindingTypes: "dict_bindingTypes",
+  laminationKinds: "dict_laminationKinds",
+  laminationThickness: "dict_laminationThickness",
+  managers: "dict_managers",
+  paperProfiles: "dict_paperProfiles",
+  sheetName: "config_sheetName",
+};
+
+function loadList(key: string, defaults: string[]): string[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : defaults;
+    }
+  } catch {}
+  return defaults;
+}
+
+function saveList(key: string, list: string[]) {
+  localStorage.setItem(key, JSON.stringify(list));
+}
+
+function loadPaperLibrary(): typeof DEFAULT_PAPER_LIBRARY {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.paperLibrary);
+    if (!raw) return DEFAULT_PAPER_LIBRARY;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return DEFAULT_PAPER_LIBRARY;
+
+    const next = { ...DEFAULT_PAPER_LIBRARY };
+    (Object.keys(DEFAULT_PAPER_LIBRARY) as PaperLibraryKey[]).forEach((key) => {
+      const value = parsed[key];
+      next[key] = Array.isArray(value) ? mergeUniqueStrings(value, DEFAULT_PAPER_LIBRARY[key]) : DEFAULT_PAPER_LIBRARY[key];
+    });
+    return next;
+  } catch {
+    return DEFAULT_PAPER_LIBRARY;
+  }
+}
+
+function savePaperLibrary(library: typeof DEFAULT_PAPER_LIBRARY) {
+  localStorage.setItem(LS_KEYS.paperLibrary, JSON.stringify(library));
+}
+
+function loadPaperProfiles(): typeof DEFAULT_PAPER_PROFILES {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.paperProfiles);
+    if (!raw) return DEFAULT_PAPER_PROFILES;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return DEFAULT_PAPER_PROFILES;
+
+    const next = { ...DEFAULT_PAPER_PROFILES };
+    (Object.keys(DEFAULT_PAPER_PROFILES) as PaperProfileKey[]).forEach((key) => {
+      const value = parsed[key];
+      next[key] = Array.isArray(value) ? value : DEFAULT_PAPER_PROFILES[key];
+    });
+    return next;
+  } catch {
+    return DEFAULT_PAPER_PROFILES;
+  }
+}
+
+function savePaperProfiles(profiles: typeof DEFAULT_PAPER_PROFILES) {
+  localStorage.setItem(LS_KEYS.paperProfiles, JSON.stringify(profiles));
+}
+
+function mergeUniqueStrings(primary: string[], fallback: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  [...primary, ...fallback].forEach((item) => {
+    const value = typeof item === "string" ? item.trim() : "";
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    result.push(value);
+  });
+
+  return result;
+}
+
+function compareVersions(a?: string | null, b?: string | null): number {
+  const left = String(a || "").split(".").map((part) => parseInt(part, 10) || 0);
+  const right = String(b || "").split(".").map((part) => parseInt(part, 10) || 0);
+  const maxLength = Math.max(left.length, right.length);
+
+  for (let i = 0; i < maxLength; i += 1) {
+    const diff = (left[i] || 0) - (right[i] || 0);
+    if (diff !== 0) return diff > 0 ? 1 : -1;
+  }
+
+  return 0;
+}
+
+function normalizeDictsPayload(payload: any, fallback?: Partial<Dicts>): Dicts {
+  const fallbackPaperProfiles = fallback?.paperProfiles || DEFAULT_PAPER_PROFILES;
+  const fallbackPaperLibrary = fallback?.paperLibrary || DEFAULT_PAPER_LIBRARY;
+  const normalizedPaperProfiles = { ...DEFAULT_PAPER_PROFILES };
+  const normalizedPaperLibrary = { ...DEFAULT_PAPER_LIBRARY };
+
+  if (payload?.paperProfiles && typeof payload.paperProfiles === "object") {
+    (Object.keys(DEFAULT_PAPER_PROFILES) as PaperProfileKey[]).forEach((key) => {
+      const cloudItems = Array.isArray(payload.paperProfiles[key]) ? payload.paperProfiles[key] : [];
+      normalizedPaperProfiles[key] = mergeUniqueStrings(
+        cloudItems,
+        fallbackPaperProfiles[key] || DEFAULT_PAPER_PROFILES[key],
+      );
+    });
+  } else {
+    (Object.keys(DEFAULT_PAPER_PROFILES) as PaperProfileKey[]).forEach((key) => {
+      normalizedPaperProfiles[key] = mergeUniqueStrings(
+        fallbackPaperProfiles[key] || DEFAULT_PAPER_PROFILES[key],
+        DEFAULT_PAPER_PROFILES[key],
+      );
+    });
+  }
+
+  if (payload?.paperLibrary && typeof payload.paperLibrary === "object") {
+    (Object.keys(DEFAULT_PAPER_LIBRARY) as PaperLibraryKey[]).forEach((key) => {
+      const cloudItems = Array.isArray(payload.paperLibrary[key]) ? payload.paperLibrary[key] : [];
+      normalizedPaperLibrary[key] = mergeUniqueStrings(
+        cloudItems,
+        fallbackPaperLibrary[key] || DEFAULT_PAPER_LIBRARY[key],
+      );
+    });
+  } else {
+    (Object.keys(DEFAULT_PAPER_LIBRARY) as PaperLibraryKey[]).forEach((key) => {
+      normalizedPaperLibrary[key] = mergeUniqueStrings(
+        fallbackPaperLibrary[key] || DEFAULT_PAPER_LIBRARY[key],
+        DEFAULT_PAPER_LIBRARY[key],
+      );
+    });
+  }
+
+  return {
+    productTypes: ensureProductTypes(mergeUniqueStrings(
+      Array.isArray(payload?.productTypes) ? payload.productTypes : [],
+      fallback?.productTypes || DEFAULT_PRODUCT_TYPES,
+    )),
+    paperSizes: mergeUniqueStrings(Array.isArray(payload?.paperSizes) ? payload.paperSizes : [], fallback?.paperSizes || DEFAULT_PAPER_SIZES),
+    pocketCalendarSizes: mergeUniqueStrings(
+      Array.isArray(payload?.pocketCalendarSizes) ? payload.pocketCalendarSizes : [],
+      fallback?.pocketCalendarSizes || DEFAULT_POCKET_CALENDAR_SIZES,
+    ),
+    businessCardSizes: mergeUniqueStrings(Array.isArray(payload?.businessCardSizes) ? payload.businessCardSizes : [], fallback?.businessCardSizes || DEFAULT_BUSINESS_CARD_SIZES),
+    envelopeSizes: mergeUniqueStrings(Array.isArray(payload?.envelopeSizes) ? payload.envelopeSizes : [], fallback?.envelopeSizes || DEFAULT_ENVELOPE_SIZES),
+    densities: mergeUniqueStrings(Array.isArray(payload?.densities) ? payload.densities : [], fallback?.densities || DEFAULT_DENSITIES),
+    colors: mergeUniqueStrings(Array.isArray(payload?.colors) ? payload.colors : [], fallback?.colors || DEFAULT_COLORS),
+    postProcessing: mergeUniqueStrings(Array.isArray(payload?.postProcessing) ? payload.postProcessing : [], fallback?.postProcessing || DEFAULT_POST_PROCESSING),
+    bindingTypes: mergeUniqueStrings(Array.isArray(payload?.bindingTypes) ? payload.bindingTypes : [], fallback?.bindingTypes || DEFAULT_BINDING_TYPES),
+    laminationKinds: mergeUniqueStrings(Array.isArray(payload?.laminationKinds) ? payload.laminationKinds : [], fallback?.laminationKinds || DEFAULT_LAMINATION_KINDS),
+    laminationThickness: mergeUniqueStrings(Array.isArray(payload?.laminationThickness) ? payload.laminationThickness : [], fallback?.laminationThickness || DEFAULT_LAMINATION_THICKNESS),
+    managers: mergeUniqueStrings(Array.isArray(payload?.managers) ? payload.managers : [], fallback?.managers || DEFAULT_MANAGERS),
+    paperProfiles: normalizedPaperProfiles,
+    paperLibrary: normalizedPaperLibrary,
+  };
+}
+
+// ─── Интерфейсы ─────────────────────────────────────────────────────────────
+
+interface Dicts {
+  productTypes: string[]; paperSizes: string[]; envelopeSizes: string[];
+  pocketCalendarSizes: string[];
+  businessCardSizes: string[];
+  densities: string[]; colors: string[]; postProcessing: string[];
+  bindingTypes: string[]; laminationKinds: string[]; laminationThickness: string[];
+  managers: string[];
+  paperProfiles: typeof DEFAULT_PAPER_PROFILES;
+  paperLibrary: typeof DEFAULT_PAPER_LIBRARY;
+}
+
+type PaperFinish = "Матовая" | "Глянцевая";
+interface LaminationBlock { enabled: boolean; side: string; thickness: string; kind: string; }
+interface KashurovkaBlock {
+  enabled: boolean; baseType: string; linerType: string; linerSize: string; connectionType: string; turnoverType: string;
+  forsacEnabled: boolean; forsacPaper: string; forsacSize: string; forsacPrintMode: string;
+  linerFinish: PaperFinish; linerColor: string; linerLamination: LaminationBlock; forsacFinish: PaperFinish; forsacColor: string; forsacLamination: LaminationBlock;
+  slimPaperTop: string; slimPaperBottom: string; slimPaperTopLamination: LaminationBlock; slimPaperBottomLamination: LaminationBlock;
+  slimPaperTopFinish: PaperFinish; slimPaperTopColor: string; slimPaperBottomFinish: PaperFinish; slimPaperBottomColor: string;
+  linerPaperType: PaperTypeOption | ""; linerPaperCustomName: string; linerPaperDensity: string;
+  forsacPaperType: PaperTypeOption | ""; forsacPaperCustomName: string; forsacPaperDensity: string;
+  slimPaperTopPaperType: PaperTypeOption | ""; slimPaperTopPaperCustomName: string; slimPaperTopPaperDensity: string;
+  slimPaperBottomPaperType: PaperTypeOption | ""; slimPaperBottomPaperCustomName: string; slimPaperBottomPaperDensity: string;
+}
+
+const defaultLaminationBlock = (): LaminationBlock => ({ enabled: false, side: "Односторонняя", thickness: "80 мк", kind: "Глянцевая" });
+const defaultKashurovkaBlock = (): KashurovkaBlock => ({
+  enabled: false, baseType: "", linerType: "", linerSize: "", connectionType: "Каширование", turnoverType: "Без заворота",
+  forsacEnabled: false, forsacPaper: "", forsacSize: "", forsacPrintMode: "Белые",
+  linerFinish: "Матовая", linerColor: "", linerLamination: defaultLaminationBlock(), forsacFinish: "Матовая", forsacColor: "", forsacLamination: defaultLaminationBlock(),
+  slimPaperTop: "", slimPaperBottom: "", slimPaperTopLamination: defaultLaminationBlock(), slimPaperBottomLamination: defaultLaminationBlock(),
+  slimPaperTopFinish: "Матовая", slimPaperTopColor: "", slimPaperBottomFinish: "Матовая", slimPaperBottomColor: "",
+  linerPaperType: "", linerPaperCustomName: "", linerPaperDensity: "",
+  forsacPaperType: "", forsacPaperCustomName: "", forsacPaperDensity: "",
+  slimPaperTopPaperType: "", slimPaperTopPaperCustomName: "", slimPaperTopPaperDensity: "",
+  slimPaperBottomPaperType: "", slimPaperBottomPaperCustomName: "", slimPaperBottomPaperDensity: "",
+});
+
+interface FormData {
+  orderNumber: string; clientName: string; managerName: string; deadline: string; deadlineTime: string; quantity: string;
+  productType: string; productTypeCustom: string; paperSize: string; paperSizeCustom: string; envelopeSize: string; envelopeSizeCustom: string;
+  businessCardSize: string; businessCardSizeCustom: string;
+  paperType: PaperTypeOption | ""; paperCustomName: string; density: string; densityFinish: PaperFinish; colorProof: string; colorMode: string; pageCount: string; coverUseKash: boolean; coverPaperType: PaperTypeOption | ""; coverPaperCustomName: string; coverDensity: string; coverFinish: PaperFinish; coverColor: string; coverLamination: LaminationBlock;
+  catalogFormat: string; catalogFormatCustom: string;
+  blockPaperType: PaperTypeOption | ""; blockPaperCustomName: string; blockDensity: string; blockFinish: PaperFinish; blockColor: string; blockLamination: LaminationBlock; blockPages: string;
+  adBlocks: string; calendarKind: string; wallMountType: string; wallMountDesc: string; gridType: string; hasPlanka: boolean; plankaDesc: string; hasRigel: boolean;
+  calendarBaseUseKash: boolean; calendarBaseMaterial: string; calendarBaseFinish: PaperFinish; calendarBaseLamination: LaminationBlock; calendarBaseBigovkaLines: string; calendarGridMaterial: string; calendarGridFinish: PaperFinish; calendarGridColorMode: string; calendarOffsetColor: string;
+  calendarHeaderPaperType: PaperTypeOption | ""; calendarHeaderPaperCustomName: string; calendarHeaderPaperDensity: string; calendarHeaderPaperFinish: PaperFinish;
+  postProcessing: string[]; foilColor: string; uvType: string; bigkovka: boolean; bigkovkaLines: string;
+  lamination: LaminationBlock; kashurovka: KashurovkaBlock;
+  binding: boolean; bindingType: string; stapleCount: string; staplePosition: string; springColor: string; springColorCustom: string; springDiameter: string; springPosition: string; springHidden: boolean;
+  subcontractWorks: SubcontractWork[];
+  bagHeight: string; bagWidth: string; bagDepth: string; bagEyeletColor: string; bagEyeletColorCustom: string; bagHandleColor: string; bagHandleColorCustom: string;
+  stickerMaterial: string; stickerFinish: PaperFinish; stickerPlotterCut: boolean;
+  fileLink: string; notes: string;
+}
+
+interface SubcontractWork {
+  id: string;
+  note: string;
+  date: string;
+  time: string;
+}
+
+interface ClientStore {
+  byManager: Record<string, string[]>;
+}
+
+function createSubcontractWork(): SubcontractWork {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    note: "",
+    date: "",
+    time: "",
+  };
+}
+
+function createEmptyClientStore(): ClientStore {
+  return { byManager: {} };
+}
+
+function createDefaultForm(): FormData {
+  return {
+    orderNumber: "", clientName: "", managerName: "", deadline: "", deadlineTime: "", quantity: "",
+    productType: "", productTypeCustom: "", paperSize: "", paperSizeCustom: "", envelopeSize: "", envelopeSizeCustom: "",
+    businessCardSize: "", businessCardSizeCustom: "",
+    paperType: "", paperCustomName: "", density: "", densityFinish: "Матовая", colorProof: "Не надо", colorMode: "", pageCount: "", coverUseKash: false, coverPaperType: "", coverPaperCustomName: "", coverDensity: "", coverFinish: "Матовая", coverColor: "", coverLamination: defaultLaminationBlock(),
+    catalogFormat: "", catalogFormatCustom: "",
+    blockPaperType: "", blockPaperCustomName: "", blockDensity: "", blockFinish: "Матовая", blockColor: "", blockLamination: defaultLaminationBlock(), blockPages: "",
+    adBlocks: "3", calendarKind: "Настенный", wallMountType: "Ригель", wallMountDesc: "", gridType: "Цифра", hasPlanka: false, plankaDesc: "", hasRigel: false,
+    calendarBaseUseKash: false, calendarBaseMaterial: "", calendarBaseFinish: "Матовая", calendarBaseLamination: defaultLaminationBlock(), calendarBaseBigovkaLines: "", calendarGridMaterial: "", calendarGridFinish: "Матовая", calendarGridColorMode: "", calendarOffsetColor: "Серый",
+    calendarHeaderPaperType: "", calendarHeaderPaperCustomName: "", calendarHeaderPaperDensity: "", calendarHeaderPaperFinish: "Матовая",
+    postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1",
+    lamination: defaultLaminationBlock(), kashurovka: defaultKashurovkaBlock(),
+    binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springDiameter: "8 мм", springPosition: "По широкой стороне", springHidden: false,
+    subcontractWorks: [],
+    bagHeight: "", bagWidth: "", bagDepth: "", bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleColor: "Белый", bagHandleColorCustom: "",
+    stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false,
+    fileLink: "", notes: "",
+  };
+}
+
+const defaultForm: FormData = createDefaultForm();
+
+// ─── Вспомогательные функции ────────────────────────────────────────────────
+
+const MULTIBLOCK_TYPES = ["Каталоги", "Брошюры"];
+const isMultiBlock = (pt: string) => MULTIBLOCK_TYPES.includes(pt);
+const isCatalog = (pt: string) => pt === "Каталоги";
+const isCalendar = (pt: string) => pt === "Календари";
+const isNotebook = (pt: string) => pt === "Блокноты";
+const isEnvelope = (pt: string) => pt === "Конверты";
+const isBusinessCard = (pt: string) => pt === "Визитки";
+const isBag = (pt: string) => pt === "Бумажные Пакеты" || pt === "Пакеты";
+const isSticker = (pt: string) => pt === "Наклейки";
+const PAPER_FINISHES: PaperFinish[] = ["Матовая", "Глянцевая"];
+
+function isPocketCalendar(form: FormData): boolean {
+  return isCalendar(form.productType) && form.calendarKind === "Карманный";
+}
+
+function ensureProductTypes(list: string[]): string[] {
+  return list.includes("Бумажные Пакеты") ? list : [...list.filter((item) => item !== "Пакеты"), "Бумажные Пакеты"];
+}
+
+function resolveProductName(form: FormData): string {
+  return form.productType === "Другое..." ? form.productTypeCustom.trim() : form.productType;
+}
+
+function normalizeMaterial(material: string): string {
+  return material.replace(/\s*\(.*\)/, "").trim();
+}
+
+function normalizeColorMode(value: string): string {
+  return value.replace(/\s*\(.*\)/, "").trim();
+}
+
+function stripParentheticalNote(value: string): string {
+  return value.replace(/\s*\([^)]*\)/g, "").trim();
+}
+
+function normalizeTimeInput(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  if (!digits) return "";
+  if (digits.length <= 2) return digits;
+  const hoursRaw = digits.slice(0, 2);
+  const minutesRaw = digits.slice(2, 4);
+  const hours = Math.min(Number(hoursRaw || "0"), 23);
+  const minutes = Math.min(Number(minutesRaw || "0"), 59);
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function getTodayLocalIso(): string {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function formatDateForFilename(isoDate: string): string {
+  if (!isoDate) return getTodayLocalIso().split("-").reverse().join(".");
+  return isoDate.split("-").reverse().join(".");
+}
+
+function getCurrentDateTimeForFilename(): string {
+  const now = new Date();
+  const date = `${String(now.getDate()).padStart(2, "0")}.${String(now.getMonth() + 1).padStart(2, "0")}.${now.getFullYear()}`;
+  const time = `${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}`;
+  return `${date} ${time}`;
+}
+
+function getLaminationSideNotation(side: string): string {
+  return side === "Двухсторонняя" ? "1+1" : "1+0";
+}
+
+function formatLamination(value: LaminationBlock): string {
+  if (!value.enabled) return "Без ламинации";
+  return `${getLaminationSideNotation(value.side)}, ${value.kind}, ${value.thickness}`;
+}
+
+function formatLaminationCompact(value: LaminationBlock): string {
+  if (!value.enabled) return "без лам.";
+  const kind = value.kind === "Глянцевая" ? "глян." : value.kind === "Матовая" ? "мат." : "софт";
+  return `лам. ${getLaminationSideNotation(value.side)} ${kind} ${value.thickness}`;
+}
+
+function formatPaperSelection(type: PaperTypeOption | "", value: string, customName = ""): string {
+  const trimmedValue = normalizeMaterial(value);
+  const trimmedCustom = customName.trim();
+  if (!type) return trimmedCustom || trimmedValue;
+  if (type === "Дизайнерская") {
+    return trimmedCustom ? `Дизайнерская бумага ${trimmedCustom}` : "Дизайнерская бумага";
+  }
+  return trimmedValue ? `${type} ${trimmedValue}` : type;
+}
+
+function formatPaperSelectionWithFinish(type: PaperTypeOption | "", value: string, customName: string, finish: PaperFinish): string {
+  const paper = formatPaperSelection(type, value, customName);
+  if (!paper) return "";
+  return `${paper}, ${finish.toLowerCase()}`;
+}
+
+type PaperSelectionValue = {
+  type: PaperTypeOption | "";
+  value: string;
+  customName: string;
+  finish: PaperFinish;
+};
+
+function paperSelectionKey(selection: PaperSelectionValue): string {
+  return [
+    selection.type,
+    normalizeMaterial(selection.value).toLowerCase(),
+    selection.customName.trim().toLowerCase(),
+    selection.finish,
+  ].join("|");
+}
+
+function isSamePaperSelection(left: PaperSelectionValue, right: PaperSelectionValue): boolean {
+  return !!formatPaperSelectionWithFinish(left.type, left.value, left.customName, left.finish)
+    && paperSelectionKey(left) === paperSelectionKey(right);
+}
+
+function getCurrentLocalTimeIso(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
+function isDateTimeInPast(date: string, time: string): boolean {
+  if (!date || date !== getTodayLocalIso()) return false;
+  if (!/^\d{2}:\d{2}$/.test(time)) return false;
+  return time < getCurrentLocalTimeIso();
+}
+
+function isDeadlineTimeInPast(deadline: string, time: string): boolean {
+  return isDateTimeInPast(deadline, time);
+}
+
+function formatDateTimeText(date: string, time: string): string {
+  const dateText = date ? date.split("-").reverse().join(".") : "—";
+  return time ? `${dateText} ${time}` : dateText;
+}
+
+function formatQuantityText(value: string): string {
+  const normalized = String(value || "").replace(/\s+/g, "").trim();
+  if (!normalized) return "—";
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return normalized;
+  return parsed.toLocaleString("ru-RU").replace(/\u00A0/g, " ");
+}
+
+function getActiveSubcontractWorks(form: FormData): SubcontractWork[] {
+  return form.subcontractWorks.filter((work) => work.note.trim() || work.date || work.time);
+}
+
+function normalizeClientName(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeManagerName(value: string): string {
+  return normalizeClientName(value);
+}
+
+function getClientSuggestions(store: ClientStore, managerName: string): string[] {
+  const managerKey = normalizeManagerName(managerName);
+  const allValues = managerKey
+    ? store.byManager[managerKey] || []
+    : Object.values(store.byManager).flat();
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+  allValues.forEach((item) => {
+    const value = normalizeClientName(item);
+    if (!value) return;
+    const key = value.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    result.push(value);
+  });
+  return result;
+}
+
+function getPaperLibraryItems(library: typeof DEFAULT_PAPER_LIBRARY, type: PaperTypeOption | ""): string[] {
+  if (!type) return [];
+  return library[PAPER_TYPE_TO_LIBRARY_KEY[type]] || [];
+}
+
+function parseWeight(material: string): number {
+  const match = material.match(/(\d+(?:[.,]\d+)?)/);
+  return match ? Number(match[1].replace(",", ".")) : 0;
+}
+
+const UNCOATED_THICKNESS_MM: Record<number, number> = {
+  80: 0.1,
+  90: 0.11,
+  100: 0.12,
+  115: 0.135,
+  120: 0.14,
+  130: 0.155,
+  150: 0.18,
+  170: 0.205,
+  200: 0.24,
+};
+
+const COATED_MATTE_THICKNESS_MM: Record<number, number> = {
+  105: 0.095,
+  115: 0.103,
+  128: 0.125,
+  130: 0.127,
+  150: 0.145,
+  157: 0.152,
+  170: 0.162,
+  200: 0.19,
+  250: 0.255,
+  300: 0.305,
+  350: 0.36,
+};
+
+const COATED_GLOSS_THICKNESS_MM: Record<number, number> = {
+  105: 0.092,
+  115: 0.1,
+  128: 0.12,
+  130: 0.123,
+  150: 0.14,
+  157: 0.148,
+  170: 0.158,
+  200: 0.185,
+  250: 0.25,
+  300: 0.295,
+  350: 0.35,
+};
+
+function interpolateThickness(gsm: number, table: Record<number, number>): number | null {
+  const keys = Object.keys(table).map(Number).sort((a, b) => a - b);
+  if (keys.length === 0) return null;
+  if (table[gsm]) return table[gsm];
+  if (gsm < keys[0]) return table[keys[0]];
+  if (gsm > keys[keys.length - 1]) return table[keys[keys.length - 1]];
+  for (let i = 0; i < keys.length - 1; i += 1) {
+    const left = keys[i];
+    const right = keys[i + 1];
+    if (gsm > left && gsm < right) {
+      const ratio = (gsm - left) / (right - left);
+      return table[left] + (table[right] - table[left]) * ratio;
+    }
+  }
+  return null;
+}
+
+function estimateThicknessMm(material: string, finish: PaperFinish = "Матовая"): number {
+  const gsm = parseWeight(material);
+  if (!gsm) return 0;
+
+  const normalized = material.toLowerCase();
+  const isKraft = normalized.includes("крафт");
+  const isOffice = normalized.includes("офис") || normalized.includes("офсет");
+  const isCoatedByName = normalized.includes("мелов");
+
+  if (isKraft) return Math.max(gsm / 670, 0.08);
+
+  if (isOffice || (!isCoatedByName && finish === "Матовая")) {
+    return interpolateThickness(gsm, UNCOATED_THICKNESS_MM) ?? Math.max(gsm / 750, 0.06);
+  }
+
+  const coatedTable = finish === "Глянцевая" ? COATED_GLOSS_THICKNESS_MM : COATED_MATTE_THICKNESS_MM;
+  return interpolateThickness(gsm, coatedTable) ?? Math.max(gsm / (finish === "Глянцевая" ? 1080 : 980), 0.06);
+}
+
+function getSpringColor(form: FormData): string {
+  return form.springColor === "Другой цвет..." ? form.springColorCustom.trim() : form.springColor;
+}
+
+function getBagColor(value: string, custom: string): string {
+  return value === "Другой цвет..." ? custom.trim() : value;
+}
+
+function buildSpringSuggestion(form: FormData): { thickness: number; diameter: string } | null {
+  if (form.bindingType !== "Пружина") return null;
+
+  const pageCount = isNotebook(form.productType)
+    ? Number(form.blockPages)
+    : isMultiBlock(form.productType)
+      ? Number(form.pageCount)
+      : 0;
+
+  if (!pageCount) return null;
+
+  const bodyThickness = estimateThicknessMm(
+    isNotebook(form.productType) ? form.blockDensity : isMultiBlock(form.productType) ? form.blockDensity : form.density,
+    isNotebook(form.productType) ? form.blockFinish : isMultiBlock(form.productType) ? form.blockFinish : form.densityFinish,
+  );
+  if (!bodyThickness) return null;
+
+  const coverMaterial = form.coverUseKash ? form.kashurovka.linerType : form.coverDensity;
+  const coverFinish = form.coverUseKash ? form.kashurovka.linerFinish : form.coverFinish;
+  const coverThickness = (isNotebook(form.productType) || isMultiBlock(form.productType))
+    ? estimateThicknessMm(coverMaterial, coverFinish)
+    : 0;
+
+  const thickness = (pageCount / 2) * bodyThickness + (coverThickness ? 2 * coverThickness : 0);
+  const target = Math.ceil(thickness + 2);
+  const nearest = SPRING_DIAMETERS.find((item) => parseWeight(item) >= target) ?? SPRING_DIAMETERS[SPRING_DIAMETERS.length - 1];
+  return { thickness, diameter: nearest };
+}
+
+function formatMaterialWithFinish(material: string, finish: PaperFinish): string {
+  return material ? `${material}, ${finish.toLowerCase()}` : material;
+}
+
+function getDisplaySize(form: FormData): string {
+  if (isEnvelope(form.productType)) return form.envelopeSize === "Нестандартный" ? form.envelopeSizeCustom : form.envelopeSize;
+  if (form.productType === "Визитки") return form.businessCardSize === "Нестандартный" ? form.businessCardSizeCustom : form.businessCardSize;
+  if (isBag(form.productType)) return form.bagHeight || form.bagWidth || form.bagDepth ? `${form.bagHeight || "?"}×${form.bagWidth || "?"}×${form.bagDepth || "?"} мм` : "";
+  if (isCatalog(form.productType)) return form.catalogFormat === "Нестандартный" ? form.catalogFormatCustom : form.catalogFormat;
+  if (isPocketCalendar(form)) return form.paperSize === "Нестандартный" ? form.paperSizeCustom : form.paperSize;
+  if (!isMultiBlock(form.productType) && !isCalendar(form.productType)) return form.paperSize === "Нестандартный" ? form.paperSizeCustom : form.paperSize;
+  return "";
+}
+
+function generateShortTZ(form: FormData): string {
+  const parts: string[] = [];
+  const product = resolveProductName(form);
+  if (product) parts.push(product.toLowerCase());
+  const size = getDisplaySize(form);
+  if (size) parts.push(size.split(/\s*[(/]/)[0].trim());
+
+  if (isMultiBlock(form.productType)) {
+    if (form.pageCount) parts.push(`${form.pageCount} стр.`);
+    const coverSelection = { type: form.coverPaperType, value: form.coverDensity, customName: form.coverPaperCustomName, finish: form.coverFinish };
+    const blockSelection = { type: form.blockPaperType, value: form.blockDensity, customName: form.blockPaperCustomName, finish: form.blockFinish };
+    const samePaper = isSamePaperSelection(coverSelection, blockSelection);
+    const covParts = [
+      formatPaperSelectionWithFinish(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish),
+      form.coverColor.split(/\s/)[0],
+      form.coverLamination.enabled ? getLaminationShort(form.coverLamination) : "",
+    ].filter(Boolean);
+    const blkParts = [
+      samePaper ? "" : formatPaperSelectionWithFinish(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish),
+      form.blockColor.split(/\s/)[0],
+      form.blockLamination.enabled ? getLaminationShort(form.blockLamination) : "",
+    ].filter(Boolean);
+    if (covParts.length) parts.push(samePaper ? covParts.join(" ") : `обложка: ${covParts.join(" ")}`);
+    if (blkParts.length) parts.push(samePaper ? blkParts.join(" ") : `блок: ${blkParts.join(" ")}`);
+  } else if (isNotebook(form.productType)) {
+    if (form.blockPages) parts.push(`${form.blockPages} стр. в блоке`);
+    const coverSelection = { type: form.coverPaperType, value: form.coverDensity, customName: form.coverPaperCustomName, finish: form.coverFinish };
+    const blockSelection = { type: form.blockPaperType, value: form.blockDensity, customName: form.blockPaperCustomName, finish: form.blockFinish };
+    const samePaper = isSamePaperSelection(coverSelection, blockSelection);
+    const covParts = [
+      formatPaperSelectionWithFinish(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish),
+      form.coverColor.split(/\s/)[0],
+      form.coverLamination.enabled ? getLaminationShort(form.coverLamination) : "",
+    ].filter(Boolean);
+    const blkParts = [
+      samePaper ? "" : formatPaperSelectionWithFinish(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish),
+      form.blockColor.split(/\s/)[0],
+      form.blockLamination.enabled ? getLaminationShort(form.blockLamination) : "",
+    ].filter(Boolean);
+    if (covParts.length) parts.push(samePaper ? covParts.join(" ") : `обложка: ${covParts.join(" ")}`);
+    if (blkParts.length) parts.push(samePaper ? blkParts.join(" ") : `блок: ${blkParts.join(" ")}`);
+  } else if (isCalendar(form.productType)) {
+    parts.push(form.calendarKind.toLowerCase());
+    if (form.calendarKind === "Настенный" && form.adBlocks) parts.push(`${form.adBlocks} рекл. блока`);
+    if (form.calendarKind === "Настенный") {
+      const headerPaper = formatPaperSelectionWithFinish(
+        form.calendarHeaderPaperType,
+        form.calendarHeaderPaperDensity,
+        form.calendarHeaderPaperCustomName,
+        form.calendarHeaderPaperFinish,
+      );
+      if (headerPaper) parts.push(`шапка ${headerPaper}`);
+    }
+    if (form.gridType === "Цифра") {
+      const gridMaterial = normalizeMaterial(form.calendarGridMaterial);
+      const gridColor = form.calendarGridColorMode ? form.calendarGridColorMode.split(/\s/)[0] : "";
+      if (gridMaterial || gridColor) parts.push(`Сетка: ${[gridMaterial, gridColor].filter(Boolean).join(" ")}`);
+    } else if (form.gridType === "Офсет") {
+      const gridMaterial = normalizeMaterial(form.calendarGridMaterial);
+      const gridColor = form.calendarOffsetColor || "";
+      parts.push(`Сетка: офсет${gridMaterial || gridColor ? `, ${[gridMaterial, gridColor].filter(Boolean).join(" ")}` : ""}`);
+    }
+    if (form.calendarKind === "Настольный" && form.calendarBaseMaterial) {
+      parts.push(`Основание: ${normalizeMaterial(form.calendarBaseMaterial)} ${form.calendarBaseFinish.toLowerCase()}`);
+    }
+  } else if (isBag(form.productType)) {
+    if (form.density) parts.push(`${normalizeMaterial(form.density)} ${form.densityFinish.toLowerCase()}`);
+    if (form.colorMode) parts.push(form.colorMode.split(/\s/)[0]);
+  } else if (isSticker(form.productType)) {
+    if (form.stickerMaterial) parts.push(`${normalizeMaterial(form.stickerMaterial)} ${form.stickerFinish.toLowerCase()}`.toLowerCase());
+    if (form.stickerPlotterCut) parts.push("плоттерная резка");
+  } else if (!isEnvelope(form.productType)) {
+    const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+    if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
+    if (form.colorMode) parts.push(form.colorMode.split(/\s/)[0]);
+  }
+
+  if (form.postProcessing.length > 0) {
+    const ppShort = form.postProcessing.map((p) => {
+      if (p.includes("Перфорация")) return "перфор.";
+      if (p.includes("Тиснение")) return `тиснение${form.foilColor ? " " + form.foilColor : ""}`;
+      if (p.includes("Фольгирование")) return `фольгирование${form.foilColor ? " " + form.foilColor : ""}`;
+      if (p.includes("УФ-лак")) return form.uvType === "Текстурный" ? "УФ-лак текстурный" : "УФ-лак";
+      if (p.includes("Скругление")) return "скругл. углов";
+      return p.toLowerCase();
+    });
+    parts.push(ppShort.join(", "));
+  }
+
+  if (form.bigkovka) {
+    const lines = form.bigkovkaLines || "?";
+    parts.push(`${lines} биговк${lines === "1" ? "а" : "и"}`);
+  }
+
+  if (isCalendar(form.productType) && form.calendarKind === "Настольный" && form.calendarBaseBigovkaLines) {
+    parts.push(`${form.calendarBaseBigovkaLines} биговк основания`);
+  }
+
+  if (form.lamination.enabled && !isMultiBlock(form.productType) && !isNotebook(form.productType) && !isCalendar(form.productType)) {
+    parts.push(getLaminationShort(form.lamination));
+  }
+
+  if (form.kashurovka.enabled) parts.push(getKashShortTZ(form));
+
+  if (isCalendar(form.productType) && form.calendarBaseLamination.enabled) parts.push(`осн. ${getLaminationShort(form.calendarBaseLamination)}`);
+  if (isPocketCalendar(form)) {
+    const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+    if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
+    if (form.colorMode) parts.push(form.colorMode.split(/\s/)[0]);
+    if (form.lamination.enabled) parts.push(getLaminationShort(form.lamination));
+  }
+
+  if (form.binding && form.bindingType) {
+    if (form.bindingType === "Скоба") {
+      const pos = form.stapleCount === "Одна" ? `, ${form.staplePosition.toLowerCase()}` : "";
+      parts.push(`${form.stapleCount === "Две" ? "две скобы" : "одна скоба"}${pos}`);
+    } else if (form.bindingType === "Пружина") {
+      const col = getSpringColor(form);
+      const dia = form.springDiameter;
+      parts.push(`пружина${col ? " " + col.toLowerCase() : ""}${dia ? " " + dia : ""}${form.springPosition ? `, ${form.springPosition.toLowerCase()}` : ""}${form.springHidden ? ", скрытая" : ", открытая"}`);
+    } else parts.push(form.bindingType.toLowerCase());
+  }
+
+  const notesBlock = form.notes.trim();
+  const colorProofNote = form.colorProof === "Надо"
+    ? "Показать перед тиражом"
+    : form.colorProof === "Есть образец"
+      ? "Показать перед тиражом, есть образец цвета"
+      : "";
+
+  const blocks = [parts.join(" / "), notesBlock, colorProofNote].filter(Boolean);
+  return blocks.join("\n\n");
+}
+
+function generateTZ(form: FormData, _tzNumber: number): string {
+  const deadlineFormatted = form.deadline ? (form.deadlineTime ? `${form.deadline.split("-").reverse().join(".")} в ${form.deadlineTime}` : form.deadline.split("-").reverse().join(".")) : "—";
+  const product = resolveProductName(form);
+  const size = getDisplaySize(form);
+  const cleanSize = size ? stripParentheticalNote(size) : "";
+  const activeSubcontractWorks = getActiveSubcontractWorks(form);
+
+  const lines: string[] = [];
+  lines.push(` ЗАКАЗ № ${form.orderNumber || "БЕЗ НОМЕРА"}`);
+  lines.push("============================================================");
+  lines.push(` Срок сдачи : ${deadlineFormatted}`);
+  lines.push(` ЗАКАЗЧИК : ${form.clientName || "—"}`);
+  lines.push(` МЕНЕДЖЕР : ${form.managerName || "—"}`);
+  lines.push(` ТИРАЖ : ${form.quantity ? `${formatQuantityText(form.quantity)} экз.` : "—"}`);
+  if (activeSubcontractWorks.length > 0) {
+    lines.push("");
+    lines.push(" ПОДРЯДНЫЕ РАБОТЫ");
+    lines.push(" ----------------");
+    activeSubcontractWorks.forEach((work, index) => {
+      lines.push(` ${work.note.trim() || "—"}`);
+      lines.push(` ${formatDateTimeText(work.date, work.time)}`);
+      if (index < activeSubcontractWorks.length - 1) lines.push("");
+    });
+  }
+  if (form.colorProof && form.colorProof !== "Не надо") lines.push(` ЦВЕТОПРОБА : ${form.colorProof}`);
+  lines.push("");
+  lines.push(" ПАРАМЕТРЫ ИЗДЕЛИЯ");
+  lines.push(" -----------------");
+  lines.push(` Тип изделия : ${product || "—"}`);
+
+  if (cleanSize) lines.push(` Формат : ${cleanSize}`);
+
+  if (isMultiBlock(form.productType)) {
+    lines.push(` Страниц (с обложкой) : ${form.pageCount || "—"}`);
+    lines.push("");
+    lines.push(" ОБЛОЖКА");
+    if (form.coverUseKash) lines.push(" Обложка задаётся в блоке кашировки");
+    else {
+      lines.push(` Бумага : ${formatPaperSelectionWithFinish(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish) || "—"}`);
+      lines.push(` Цветность : ${normalizeColorMode(form.coverColor) || "—"}`);
+      if (form.coverLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.coverLamination)}`);
+    }
+    lines.push(" БЛОК");
+    const coverSelection = { type: form.coverPaperType, value: form.coverDensity, customName: form.coverPaperCustomName, finish: form.coverFinish };
+    const blockSelection = { type: form.blockPaperType, value: form.blockDensity, customName: form.blockPaperCustomName, finish: form.blockFinish };
+    lines.push(` Бумага : ${isSamePaperSelection(coverSelection, blockSelection) ? "как у обложки" : (formatPaperSelectionWithFinish(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish) || "—")}`);
+    lines.push(` Цветность : ${normalizeColorMode(form.blockColor) || "—"}`);
+    if (form.blockLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.blockLamination)}`);
+  } else if (isNotebook(form.productType)) {
+    lines.push(` Страниц в блоке : ${form.blockPages || "—"}`);
+    lines.push("");
+    lines.push(" ОБЛОЖКА");
+    if (form.coverUseKash) lines.push(" Обложка задаётся в блоке кашировки");
+    else {
+      lines.push(` Бумага : ${formatPaperSelectionWithFinish(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish) || "—"}`);
+      lines.push(` Цветность : ${normalizeColorMode(form.coverColor) || "—"}`);
+      if (form.coverLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.coverLamination)}`);
+    }
+    lines.push(" БЛОК");
+    const coverSelection = { type: form.coverPaperType, value: form.coverDensity, customName: form.coverPaperCustomName, finish: form.coverFinish };
+    const blockSelection = { type: form.blockPaperType, value: form.blockDensity, customName: form.blockPaperCustomName, finish: form.blockFinish };
+    lines.push(` Бумага : ${isSamePaperSelection(coverSelection, blockSelection) ? "как у обложки" : (formatPaperSelectionWithFinish(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish) || "—")}`);
+    lines.push(` Цветность : ${normalizeColorMode(form.blockColor) || "—"}`);
+    if (form.blockLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.blockLamination)}`);
+  } else if (isCalendar(form.productType)) {
+    lines.push(` Вид календаря : ${form.calendarKind || "—"}`);
+    if (form.calendarKind === "Настенный") {
+      lines.push(` Рекламных блоков : ${form.adBlocks || "—"}`);
+      const headerPaper = formatPaperSelectionWithFinish(
+        form.calendarHeaderPaperType,
+        form.calendarHeaderPaperDensity,
+        form.calendarHeaderPaperCustomName,
+        form.calendarHeaderPaperFinish,
+      );
+      if (headerPaper) lines.push(` Шапка : ${headerPaper}`);
+      lines.push(` Крепление : ${form.wallMountType || "—"}`);
+      lines.push(` Описание крепления : ${form.wallMountDesc || "—"}`);
+    } else {
+      if (form.calendarBaseUseKash) lines.push(" Основание задаётся в блоке кашировки");
+      else {
+        lines.push(` Основание : ${formatMaterialWithFinish(form.calendarBaseMaterial, form.calendarBaseFinish) || "—"}`);
+        if (form.calendarBaseLamination.enabled) lines.push(` Ламинация основания : ${formatLamination(form.calendarBaseLamination)}`);
+      }
+      if (form.calendarBaseBigovkaLines) lines.push(` Биговка основания : ${form.calendarBaseBigovkaLines} линий`);
+      lines.push(` Тип сетки : ${form.gridType || "—"}`);
+      lines.push(` Материал сетки : ${formatMaterialWithFinish(form.calendarGridMaterial, form.calendarGridFinish) || "—"}`);
+      lines.push(` ${form.gridType === "Цифра" ? "Цветность сетки" : "Цвет офсета"} : ${form.gridType === "Цифра" ? normalizeColorMode(form.calendarGridColorMode) || "—" : normalizeColorMode(form.calendarOffsetColor) || "—"}`);
+    }
+    if (form.calendarKind === "Карманный") {
+      const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+      const paperLine = paperText
+        ? `${paperText}${form.paperType === "Дизайнерская" ? "" : `, ${form.densityFinish.toLowerCase()}`}`
+        : "—";
+      lines.push(` Материал : ${paperLine}`);
+      lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
+      if (form.lamination.enabled) lines.push(` Ламинация : ${formatLamination(form.lamination)}`);
+    }
+  } else if (isBag(form.productType)) {
+    lines.push(` Материал : ${formatMaterialWithFinish(form.density, form.densityFinish) || "—"}`);
+    lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
+    lines.push(` Размер В×Ш×Г : ${size || "—"}`);
+    lines.push(` Цвет люверсов : ${getBagColor(form.bagEyeletColor, form.bagEyeletColorCustom) || "—"}`);
+    lines.push(` Цвет ручек : ${getBagColor(form.bagHandleColor, form.bagHandleColorCustom) || "—"}`);
+  } else if (isSticker(form.productType)) {
+    lines.push(` Материал : ${formatMaterialWithFinish(form.stickerMaterial, form.stickerFinish) || "—"}`);
+    lines.push(` Плоттерная резка : ${form.stickerPlotterCut ? "Да" : "Нет"}`);
+    lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
+  } else if (!isEnvelope(form.productType)) {
+    if (form.kashurovka.enabled) lines.push(" Базовые материалы задаются в блоке кашировки");
+    else {
+      const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+      const paperLine = paperText
+        ? `${paperText}${form.paperType === "Дизайнерская" ? "" : `, ${form.densityFinish.toLowerCase()}`}`
+        : "—";
+      lines.push(` Материал : ${paperLine}`);
+    }
+    if (!form.kashurovka.enabled) lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
+  }
+  lines.push("");
+
+  if (!isMultiBlock(form.productType) && !isNotebook(form.productType) && !isCalendar(form.productType) && form.lamination.enabled) {
+    lines.push(" ЛАМИНАЦИЯ");
+    lines.push(" ---------");
+    lines.push(` Ламинация : ${formatLamination(form.lamination)}`);
+    lines.push("");
+  }
+
+  if (form.postProcessing.length > 0) {
+    lines.push(" ОБРАБОТКА");
+    lines.push(" ---------");
+    form.postProcessing.forEach((p) => {
+      if (p.includes("Тиснение") && form.foilColor) lines.push(` [x] ${p} — цвет фольги: ${form.foilColor}`);
+      else if (p.includes("Фольгирование") && form.foilColor) lines.push(` [x] ${p} — цвет фольги: ${form.foilColor}`);
+      else if (p.includes("УФ-лак")) lines.push(` [x] ${form.uvType === "Текстурный" ? "УФ-лак текстурный" : "УФ-лак"}`);
+      else lines.push(` [x] ${p}`);
+    });
+    lines.push("");
+  }
+
+  if (form.bigkovka) {
+    lines.push(" БИГОВКА");
+    lines.push(" -------");
+    lines.push(` Кол-во линий: ${form.bigkovkaLines || "—"}`);
+    lines.push("");
+  }
+
+  if (form.kashurovka.enabled) {
+    lines.push(" КАШИРОВКА");
+    lines.push(" ---------");
+    lines.push(` Тип соединения : ${form.kashurovka.connectionType}`);
+    if (form.kashurovka.connectionType === "Слим-каширование") {
+      lines.push(` Бумага 1 : ${formatMaterialWithFinish(form.kashurovka.slimPaperTop, form.kashurovka.slimPaperTopFinish) || "—"}`);
+      lines.push(` Цветность бумаги 1 : ${form.kashurovka.slimPaperTopColor || "—"}`);
+      lines.push(` Ламинация бумаги 1 : ${formatLamination(form.kashurovka.slimPaperTopLamination)}`);
+      lines.push(` Бумага 2 : ${formatMaterialWithFinish(form.kashurovka.slimPaperBottom, form.kashurovka.slimPaperBottomFinish) || "—"}`);
+      lines.push(` Цветность бумаги 2 : ${form.kashurovka.slimPaperBottomColor || "—"}`);
+      lines.push(` Ламинация бумаги 2 : ${formatLamination(form.kashurovka.slimPaperBottomLamination)}`);
+    } else {
+      lines.push(` Основа : ${form.kashurovka.baseType || "—"}`);
+      lines.push(` Лайнер : ${formatMaterialWithFinish(form.kashurovka.linerType, form.kashurovka.linerFinish) || "—"}`);
+      lines.push(` Цветность лайнера : ${form.kashurovka.linerColor || "—"}`);
+      lines.push(` Ламинация лайнера : ${formatLamination(form.kashurovka.linerLamination)}`);
+      if (form.kashurovka.linerSize) lines.push(` Размер лайнера : ${form.kashurovka.linerSize}`);
+      lines.push(` Заворот : ${form.kashurovka.turnoverType}`);
+    }
+    if (form.kashurovka.forsacEnabled) {
+      lines.push(` Форзац : ${formatMaterialWithFinish(form.kashurovka.forsacPaper, form.kashurovka.forsacFinish) || "—"}`);
+      lines.push(` Цветность форзаца : ${form.kashurovka.forsacColor || "—"}`);
+      lines.push(` Ламинация форзаца : ${formatLamination(form.kashurovka.forsacLamination)}`);
+      lines.push(` Режим форзаца : ${form.kashurovka.forsacPrintMode}`);
+      if (form.kashurovka.forsacSize) lines.push(` Размер форзаца : ${form.kashurovka.forsacSize}`);
+    }
+    lines.push("");
+  }
+
+  if (form.binding) {
+    lines.push(" СШИВКА / ПЕРЕПЛЁТ");
+    lines.push(" -----------------");
+    if (form.bindingType === "Скоба") {
+      lines.push(` Тип : Скоба (${form.stapleCount})`);
+      if (form.stapleCount === "Одна") lines.push(` Расположение: ${form.staplePosition}`);
+    } else if (form.bindingType === "Пружина") {
+      const col = getSpringColor(form);
+      lines.push(` Тип : Пружина`);
+      if (col) lines.push(` Цвет : ${col}`);
+      if (form.springDiameter) lines.push(` Диаметр : ${form.springDiameter}`);
+      lines.push(` Расположение : ${form.springPosition}`);
+      lines.push(` Скрытая пружина : ${form.springHidden ? "Да" : "Нет"}`);
+    } else lines.push(` Тип : ${form.bindingType || "не указан"}`);
+    lines.push("");
+  }
+
+  if (form.notes.trim()) {
+    lines.push(" ДОПОЛНИТЕЛЬНО");
+    lines.push(" -------------");
+    form.notes.split("\n").forEach((l) => lines.push(` ${l}`));
+    lines.push("");
+  }
+
+  lines.push(` ТИРАЖ : ${form.quantity ? `${formatQuantityText(form.quantity)} экз.` : "—"}`);
+
+  return lines.join("\n");
+}
+
+function getTZNumber(): number {
+  const stored = localStorage.getItem("tz_counter");
+  const n = stored ? parseInt(stored) + 1 : 1;
+  localStorage.setItem("tz_counter", String(n));
+  return n;
+}
+
+// ─── Вспомогательные компоненты ──────────────────────────────────────────────
+
+function YesNo({ value, onChange, disabled = false }: { value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <div className="flex gap-1">
+      <button type="button" disabled={disabled} onClick={() => onChange(true)} className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors ${value ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}>Да</button>
+      <button type="button" disabled={disabled} onClick={() => onChange(false)} className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-colors ${!value ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}>Нет</button>
+    </div>
+  );
+}
+
+const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all";
+const selectClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none cursor-pointer";
+
+function fieldClass(invalid: boolean) {
+  return `${inputClass} ${invalid ? "border-red-500 bg-red-50 ring-2 ring-red-200 shadow-sm shadow-red-100" : ""}`;
+}
+
+function selectFieldClass(invalid: boolean) {
+  return `${selectClass} ${invalid ? "border-red-500 bg-red-50 ring-2 ring-red-200 shadow-sm shadow-red-100" : ""}`;
+}
+
+function Section({ title, children, accent }: { title: string; children: React.ReactNode; accent?: string }) {
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className={`px-4 py-2.5 bg-gradient-to-r ${accent || "from-slate-50 to-white"} border-b border-slate-100`}>
+        <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+      </div>
+      <div className="p-4">{children}</div>
+    </div>
+  );
+}
+
+function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
+  return (
+    <div className="flex flex-col gap-1 w-full">
+      <label className="text-xs font-medium text-slate-600 uppercase tracking-wide">
+        {label}{required && <span className="text-red-400 ml-0.5">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function DateTimeField({
+  dateFieldName,
+  timeFieldName,
+  dateValue,
+  timeValue,
+  onDateChange,
+  onTimeChange,
+  invalidDate,
+  invalidTime,
+}: {
+  dateFieldName: string;
+  timeFieldName: string;
+  dateValue: string;
+  timeValue: string;
+  onDateChange: (value: string) => void;
+  onTimeChange: (value: string) => void;
+  invalidDate: boolean;
+  invalidTime: boolean;
+}) {
+  const timePickerRef = useRef<HTMLInputElement | null>(null);
+  const todayIso = getTodayLocalIso();
+
+  return (
+    <div className="flex gap-2 w-full">
+      <input
+        data-field={dateFieldName}
+        type="date"
+        min={todayIso}
+        className={`${fieldClass(invalidDate)} min-w-[150px] flex-1`}
+        value={dateValue}
+        onChange={(e) => {
+          if (e.target.value && e.target.value < todayIso) return;
+          onDateChange(e.target.value);
+        }}
+      />
+      <input
+        data-field={timeFieldName}
+        type="text"
+        inputMode="numeric"
+        className={`${fieldClass(invalidTime)} w-28 min-w-0 shrink`}
+        placeholder="ЧЧ:ММ"
+        value={timeValue}
+        onChange={(e) => {
+          const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+          const next = digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+          onTimeChange(next);
+        }}
+        onBlur={(e) => onTimeChange(normalizeTimeInput(e.target.value))}
+      />
+      <input
+        data-field={timeFieldName}
+        ref={timePickerRef}
+        type="time"
+        className="absolute h-px w-px overflow-hidden opacity-0 pointer-events-none"
+        tabIndex={-1}
+        aria-hidden="true"
+        min={dateValue === todayIso ? getCurrentLocalTimeIso() : undefined}
+        value={/^\d{2}:\d{2}$/.test(timeValue) ? timeValue : ""}
+        onChange={(e) => onTimeChange(e.target.value)}
+      />
+      <button
+        type="button"
+        onClick={() => {
+          timePickerRef.current?.showPicker?.();
+          timePickerRef.current?.focus();
+        }}
+        className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-slate-600 hover:bg-slate-50 transition-colors"
+        aria-label="Открыть выбор времени"
+      >
+        🕒
+      </button>
+    </div>
+  );
+}
+
+// ─── Компоненты-Блоки ────────────────────────────────────────────────────────
+
+function LaminationBlockComponent({ label, value, onChange, laminationKinds, laminationThickness }: any) {
+  const upd = (key: string, val: any) => onChange({ ...value, [key]: val });
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">{label}</span>
+        <YesNo value={value.enabled} onChange={(v) => upd("enabled", v)} />
+      </div>
+      {value.enabled && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-2 border-l-2 border-blue-100 mt-2">
+          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Сторонность</label><select value={value.side} className={selectClass} onChange={(e) => upd("side", e.target.value)}><option>Односторонняя</option><option>Двухсторонняя</option></select></div>
+          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Толщина</label><select value={value.thickness} className={selectClass} onChange={(e) => upd("thickness", e.target.value)}>{laminationThickness.map((t: string) => <option key={t}>{t}</option>)}</select></div>
+          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Вид</label><select value={value.kind} className={selectClass} onChange={(e) => upd("kind", e.target.value)}>{laminationKinds.map((k: string) => <option key={k}>{k}</option>)}</select></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaperFinishField({ label = "Поверхность", value, onChange }: { label?: string; value: PaperFinish; onChange: (value: PaperFinish) => void }) {
+  return (
+    <Field label={label}>
+      <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+        {PAPER_FINISHES.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onChange(item)}
+            className={`px-3 py-1 text-xs rounded-md transition-all ${value === item ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}
+          >
+            {item === "Матовая" ? "Мат" : "Глянец"}
+          </button>
+        ))}
+      </div>
+    </Field>
+  );
+}
+
+function PaperSelectionField({
+  label,
+  typeValue,
+  materialValue,
+  customValue,
+  library,
+  onTypeChange,
+  onMaterialChange,
+  onCustomChange,
+  typeFieldName,
+  materialFieldName,
+  customFieldName,
+  showValidation,
+  invalidType,
+  invalidMaterial,
+  invalidCustom,
+  disabled = false,
+}: {
+  label: string;
+  typeValue: PaperTypeOption | "";
+  materialValue: string;
+  customValue: string;
+  library: typeof DEFAULT_PAPER_LIBRARY;
+  onTypeChange: (value: PaperTypeOption | "") => void;
+  onMaterialChange: (value: string) => void;
+  onCustomChange: (value: string) => void;
+  typeFieldName: string;
+  materialFieldName: string;
+  customFieldName: string;
+  showValidation: boolean;
+  invalidType: boolean;
+  invalidMaterial: boolean;
+  invalidCustom: boolean;
+  disabled?: boolean;
+}) {
+  const isDesigner = typeValue === "Дизайнерская";
+  const isCardboard = typeValue === "Картон";
+  const items = typeValue ? getPaperLibraryItems(library, typeValue) : [];
+  const effectiveMaterialValue = isCardboard && !materialValue && items[0] ? items[0] : materialValue;
+
+  useEffect(() => {
+    if (!isCardboard || disabled || !items.length || materialValue) return;
+    onMaterialChange(items[0]);
+  }, [disabled, isCardboard, items, materialValue, onMaterialChange]);
+
+  return (
+    <div className="flex flex-col gap-1 w-full">
+      <label className="text-xs font-medium text-slate-600 uppercase tracking-wide">
+        {label}<span className="text-red-400 ml-0.5">*</span>
+      </label>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <select
+          data-field={typeFieldName}
+          value={typeValue}
+          disabled={disabled}
+          className={selectFieldClass(showValidation && invalidType)}
+          onChange={(e) => onTypeChange(e.target.value as PaperTypeOption | "")}
+        >
+          <option value="">— тип бумаги —</option>
+          {PAPER_TYPE_OPTIONS.map((item) => <option key={item}>{item}</option>)}
+        </select>
+        {isDesigner ? (
+          <div>
+            <input
+              data-field={customFieldName}
+              list={`designer-paper-suggestions-${customFieldName}`}
+              value={customValue}
+              disabled={disabled}
+              className={fieldClass(showValidation && invalidCustom)}
+              placeholder="Название дизайнерской бумаги"
+              onChange={(e) => onCustomChange(e.target.value)}
+            />
+            <datalist id={`designer-paper-suggestions-${customFieldName}`}>
+              {library.designer.map((item) => <option key={item} value={item} />)}
+            </datalist>
+          </div>
+        ) : (
+          <select
+            data-field={materialFieldName}
+            value={effectiveMaterialValue}
+            disabled={disabled || !typeValue}
+            className={selectFieldClass(showValidation && invalidMaterial)}
+            onChange={(e) => onMaterialChange(e.target.value)}
+          >
+            <option value="">— плотность —</option>
+            {items.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KashurovkaBlockComponent({ value, onChange, paperProfiles, paperLibrary, laminationKinds, laminationThickness, colors, showValidation = false, requiredFields = [] }: any) {
+  const upd = (key: string, val: any) => onChange({ ...value, [key]: val });
+  const isSlim = value.connectionType === "Слим-каширование";
+  const isRequired = (field: string) => showValidation && requiredFields.includes(field);
+  const syncPaper = (keys: {
+    typeKey: string;
+    customKey: string;
+    densityKey: string;
+    legacyKey: string;
+  }, type: PaperTypeOption | "", density: string, customName: string) => {
+    onChange({
+      ...value,
+      [keys.typeKey]: type,
+      [keys.densityKey]: density,
+      [keys.customKey]: customName,
+      [keys.legacyKey]: formatPaperSelection(type, density, customName),
+    });
+  };
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Кашировка</span>
+        <YesNo value={value.enabled} onChange={(v) => upd("enabled", v)} />
+      </div>
+      {value.enabled && (
+        <div className="space-y-4 pl-2 border-l-2 border-violet-200 mt-3">
+          <Field label="Тип кашировки">
+            <div className="flex gap-2">
+              {["Каширование", "Слим-каширование"].map((ct) => (
+                <button key={ct} type="button" onClick={() => upd("connectionType", ct)} className={`flex-1 py-1.5 rounded-lg text-sm border transition-colors ${value.connectionType === ct ? "bg-violet-600 text-white border-violet-600 shadow" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>{ct}</button>
+              ))}
+            </div>
+          </Field>
+
+          {!isSlim && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Field label="Основа"><select value={value.baseType} className={selectClass} onChange={(e) => upd("baseType", e.target.value)}><option value="">— выберите —</option>{KASHUROVKA_BASE_TYPES.map((t) => <option key={t}>{t}</option>)}</select></Field>
+                <PaperSelectionField
+                  label="Лайнер"
+                  typeValue={value.linerPaperType}
+                  materialValue={value.linerPaperDensity}
+                  customValue={value.linerPaperCustomName}
+                  library={paperLibrary}
+                  onTypeChange={(nextType) => syncPaper(
+                    {
+                      typeKey: "linerPaperType",
+                      customKey: "linerPaperCustomName",
+                      densityKey: "linerPaperDensity",
+                      legacyKey: "linerType",
+                    },
+                    nextType,
+                    "",
+                    "",
+                  )}
+                  onMaterialChange={(nextDensity) => syncPaper(
+                    {
+                      typeKey: "linerPaperType",
+                      customKey: "linerPaperCustomName",
+                      densityKey: "linerPaperDensity",
+                      legacyKey: "linerType",
+                    },
+                    value.linerPaperType,
+                    nextDensity,
+                    value.linerPaperCustomName,
+                  )}
+                  onCustomChange={(nextCustom) => syncPaper(
+                    {
+                      typeKey: "linerPaperType",
+                      customKey: "linerPaperCustomName",
+                      densityKey: "linerPaperDensity",
+                      legacyKey: "linerType",
+                    },
+                    value.linerPaperType,
+                    value.linerPaperDensity,
+                    nextCustom,
+                  )}
+                  typeFieldName="linerPaperType"
+                  materialFieldName="linerPaperDensity"
+                  customFieldName="linerPaperCustomName"
+                  showValidation={showValidation}
+                  invalidType={isRequired("kashLinerPaperType")}
+                  invalidMaterial={isRequired("kashLinerPaperDensity")}
+                  invalidCustom={isRequired("kashLinerPaperCustomName")}
+                />
+                <PaperFinishField value={value.linerFinish} onChange={(v) => upd("linerFinish", v)} />
+                <Field label="Цветность лайнера"><select value={value.linerColor} className={selectClass} onChange={(e) => upd("linerColor", e.target.value)}><option value="">— выберите —</option>{colors.map((c: string) => <option key={c}>{c}</option>)}</select></Field>
+                <Field label="Тип заворота"><div className="flex gap-2">{["С заворотом", "Без заворота"].map((tt) => <button key={tt} type="button" onClick={() => upd("turnoverType", tt)} className={`flex-1 py-1.5 rounded-lg text-sm border transition-colors ${value.turnoverType === tt ? "bg-violet-600 text-white border-violet-600 shadow" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>{tt}</button>)}</div></Field>
+                <div className="md:col-span-2"><Field label="Размер лайнера (мм)"><input className={inputClass} placeholder="Например: 210×297 мм" value={value.linerSize} onChange={(e) => upd("linerSize", e.target.value)} /></Field></div>
+                <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация лайнера" value={value.linerLamination} onChange={(v: LaminationBlock) => upd("linerLamination", v)} laminationKinds={laminationKinds} laminationThickness={laminationThickness} /></div>
+              </div>
+
+              <div className="pt-2 border-t border-violet-100">
+                <div className="flex items-center gap-3 mb-3"><span className="text-xs font-medium text-slate-600 uppercase">Форзац</span><YesNo value={value.forsacEnabled} onChange={(v) => upd("forsacEnabled", v)} /></div>
+                {value.forsacEnabled && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-2 border-l-2 border-violet-100">
+                    <PaperSelectionField
+                      label="Бумага форзаца"
+                      typeValue={value.forsacPaperType}
+                      materialValue={value.forsacPaperDensity}
+                      customValue={value.forsacPaperCustomName}
+                      library={paperLibrary}
+                      onTypeChange={(nextType) => syncPaper(
+                        {
+                          typeKey: "forsacPaperType",
+                          customKey: "forsacPaperCustomName",
+                          densityKey: "forsacPaperDensity",
+                          legacyKey: "forsacPaper",
+                        },
+                        nextType,
+                        "",
+                        "",
+                      )}
+                      onMaterialChange={(nextDensity) => syncPaper(
+                        {
+                          typeKey: "forsacPaperType",
+                          customKey: "forsacPaperCustomName",
+                          densityKey: "forsacPaperDensity",
+                          legacyKey: "forsacPaper",
+                        },
+                        value.forsacPaperType,
+                        nextDensity,
+                        value.forsacPaperCustomName,
+                      )}
+                      onCustomChange={(nextCustom) => syncPaper(
+                        {
+                          typeKey: "forsacPaperType",
+                          customKey: "forsacPaperCustomName",
+                          densityKey: "forsacPaperDensity",
+                          legacyKey: "forsacPaper",
+                        },
+                        value.forsacPaperType,
+                        value.forsacPaperDensity,
+                        nextCustom,
+                      )}
+                      typeFieldName="forsacPaperType"
+                      materialFieldName="forsacPaperDensity"
+                      customFieldName="forsacPaperCustomName"
+                      showValidation={showValidation}
+                      invalidType={isRequired("kashForsacPaperType")}
+                      invalidMaterial={isRequired("kashForsacPaperDensity")}
+                      invalidCustom={isRequired("kashForsacPaperCustomName")}
+                    />
+                    <PaperFinishField value={value.forsacFinish} onChange={(v) => upd("forsacFinish", v)} />
+                    <Field label="Цветность форзаца"><select value={value.forsacColor} className={selectClass} onChange={(e) => upd("forsacColor", e.target.value)}><option value="">— выберите —</option>{colors.map((c: string) => <option key={c}>{c}</option>)}</select></Field>
+                    <Field label="Печать на форзаце"><select value={value.forsacPrintMode} className={selectClass} onChange={(e) => upd("forsacPrintMode", e.target.value)}><option>Белые</option><option>С печатью</option></select></Field>
+                    <Field label="Размер форзаца (мм)"><input className={inputClass} placeholder="Например: 200×290 мм" value={value.forsacSize} onChange={(e) => upd("forsacSize", e.target.value)} /></Field>
+                    <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация форзаца" value={value.forsacLamination} onChange={(v: LaminationBlock) => upd("forsacLamination", v)} laminationKinds={laminationKinds} laminationThickness={laminationThickness} /></div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {isSlim && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <PaperSelectionField
+                  label="Бумага 1"
+                  typeValue={value.slimPaperTopPaperType}
+                  materialValue={value.slimPaperTopPaperDensity}
+                  customValue={value.slimPaperTopPaperCustomName}
+                  library={paperLibrary}
+                  onTypeChange={(nextType) => syncPaper(
+                    {
+                      typeKey: "slimPaperTopPaperType",
+                      customKey: "slimPaperTopPaperCustomName",
+                      densityKey: "slimPaperTopPaperDensity",
+                      legacyKey: "slimPaperTop",
+                    },
+                    nextType,
+                    "",
+                    "",
+                  )}
+                  onMaterialChange={(nextDensity) => syncPaper(
+                    {
+                      typeKey: "slimPaperTopPaperType",
+                      customKey: "slimPaperTopPaperCustomName",
+                      densityKey: "slimPaperTopPaperDensity",
+                      legacyKey: "slimPaperTop",
+                    },
+                    value.slimPaperTopPaperType,
+                    nextDensity,
+                    value.slimPaperTopPaperCustomName,
+                  )}
+                  onCustomChange={(nextCustom) => syncPaper(
+                    {
+                      typeKey: "slimPaperTopPaperType",
+                      customKey: "slimPaperTopPaperCustomName",
+                      densityKey: "slimPaperTopPaperDensity",
+                      legacyKey: "slimPaperTop",
+                    },
+                    value.slimPaperTopPaperType,
+                    value.slimPaperTopPaperDensity,
+                    nextCustom,
+                  )}
+                  typeFieldName="slimPaperTopPaperType"
+                  materialFieldName="slimPaperTopPaperDensity"
+                  customFieldName="slimPaperTopPaperCustomName"
+                  showValidation={showValidation}
+                  invalidType={isRequired("kashSlimPaperTopPaperType")}
+                  invalidMaterial={isRequired("kashSlimPaperTopPaperDensity")}
+                  invalidCustom={isRequired("kashSlimPaperTopPaperCustomName")}
+                />
+                <PaperFinishField value={value.slimPaperTopFinish} onChange={(v) => upd("slimPaperTopFinish", v)} />
+                <Field label="Цветность бумаги 1"><select value={value.slimPaperTopColor} className={selectClass} onChange={(e) => upd("slimPaperTopColor", e.target.value)}><option value="">— выберите —</option>{colors.map((c: string) => <option key={c}>{c}</option>)}</select></Field>
+                <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация бумаги 1" value={value.slimPaperTopLamination} onChange={(v: LaminationBlock) => upd("slimPaperTopLamination", v)} laminationKinds={laminationKinds} laminationThickness={laminationThickness} /></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <PaperSelectionField
+                  label="Бумага 2"
+                  typeValue={value.slimPaperBottomPaperType}
+                  materialValue={value.slimPaperBottomPaperDensity}
+                  customValue={value.slimPaperBottomPaperCustomName}
+                  library={paperLibrary}
+                  onTypeChange={(nextType) => syncPaper(
+                    {
+                      typeKey: "slimPaperBottomPaperType",
+                      customKey: "slimPaperBottomPaperCustomName",
+                      densityKey: "slimPaperBottomPaperDensity",
+                      legacyKey: "slimPaperBottom",
+                    },
+                    nextType,
+                    "",
+                    "",
+                  )}
+                  onMaterialChange={(nextDensity) => syncPaper(
+                    {
+                      typeKey: "slimPaperBottomPaperType",
+                      customKey: "slimPaperBottomPaperCustomName",
+                      densityKey: "slimPaperBottomPaperDensity",
+                      legacyKey: "slimPaperBottom",
+                    },
+                    value.slimPaperBottomPaperType,
+                    nextDensity,
+                    value.slimPaperBottomPaperCustomName,
+                  )}
+                  onCustomChange={(nextCustom) => syncPaper(
+                    {
+                      typeKey: "slimPaperBottomPaperType",
+                      customKey: "slimPaperBottomPaperCustomName",
+                      densityKey: "slimPaperBottomPaperDensity",
+                      legacyKey: "slimPaperBottom",
+                    },
+                    value.slimPaperBottomPaperType,
+                    value.slimPaperBottomPaperDensity,
+                    nextCustom,
+                  )}
+                  typeFieldName="slimPaperBottomPaperType"
+                  materialFieldName="slimPaperBottomPaperDensity"
+                  customFieldName="slimPaperBottomPaperCustomName"
+                  showValidation={showValidation}
+                  invalidType={isRequired("kashSlimPaperBottomPaperType")}
+                  invalidMaterial={isRequired("kashSlimPaperBottomPaperDensity")}
+                  invalidCustom={isRequired("kashSlimPaperBottomPaperCustomName")}
+                />
+                <PaperFinishField value={value.slimPaperBottomFinish} onChange={(v) => upd("slimPaperBottomFinish", v)} />
+                <Field label="Цветность бумаги 2"><select value={value.slimPaperBottomColor} className={selectClass} onChange={(e) => upd("slimPaperBottomColor", e.target.value)}><option value="">— выберите —</option>{colors.map((c: string) => <option key={c}>{c}</option>)}</select></Field>
+                <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация бумаги 2" value={value.slimPaperBottomLamination} onChange={(v: LaminationBlock) => upd("slimPaperBottomLamination", v)} laminationKinds={laminationKinds} laminationThickness={laminationThickness} /></div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getLaminationShort(value: LaminationBlock): string {
+  return formatLaminationCompact(value);
+}
+
+function getKashShortTZ(form: FormData): string {
+  if (!form.kashurovka.enabled) return "";
+  const value = form.kashurovka;
+  if (value.connectionType === "Слим-каширование") {
+    const paper1 = [normalizeMaterial(value.slimPaperTop), value.slimPaperTopFinish.toLowerCase(), value.slimPaperTopColor.split(/\s/)[0], getLaminationShort(value.slimPaperTopLamination)].filter(Boolean).join(" ");
+    const paper2 = [normalizeMaterial(value.slimPaperBottom), value.slimPaperBottomFinish.toLowerCase(), value.slimPaperBottomColor.split(/\s/)[0], getLaminationShort(value.slimPaperBottomLamination)].filter(Boolean).join(" ");
+    return `слим-каширование: бум.1 ${paper1 || "—"}; бум.2 ${paper2 || "—"}`;
+  }
+
+  const parts = [
+    "каширование",
+    value.baseType ? `осн. ${value.baseType}` : "",
+    value.linerType ? `лайнер ${[normalizeMaterial(value.linerType), value.linerFinish.toLowerCase(), value.linerColor.split(/\s/)[0], getLaminationShort(value.linerLamination)].filter(Boolean).join(" ")}` : "",
+    value.forsacEnabled ? `форзац ${[normalizeMaterial(value.forsacPaper), value.forsacFinish.toLowerCase(), value.forsacColor.split(/\s/)[0], getLaminationShort(value.forsacLamination)].filter(Boolean).join(" ")}` : "",
+    value.turnoverType ? value.turnoverType.toLowerCase() : "",
+  ].filter(Boolean);
+
+  return parts.join(", ");
+}
+
+function ShortTZPanel({ form }: { form: FormData }) {
+  const [copied, setCopied] = useState(false);
+  const shortText = generateShortTZ(form);
+  const [flash, setFlash] = useState(false);
+  const prevShort = useRef(shortText);
+  const shortLines = shortText ? shortText.split("\n") : [];
+
+  useEffect(() => {
+    if (prevShort.current !== shortText && shortText) {
+      setFlash(true);
+      const t = setTimeout(() => setFlash(false), 600);
+      prevShort.current = shortText;
+      return () => clearTimeout(t);
+    }
+    prevShort.current = shortText;
+  }, [shortText]);
+
+  function handleCopy() {
+    if (!shortText) return;
+    navigator.clipboard.writeText(shortText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className={`rounded-xl border shadow-sm overflow-hidden transition-all duration-300 ${shortText ? "border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50" : "border-slate-200 bg-white"}`}>
+      <div className="px-4 py-2.5 flex items-center gap-2 border-b border-emerald-100">
+        <span className="text-lg">⚡</span>
+        <h2 className="text-sm font-semibold text-slate-700">Краткое ТЗ</h2>
+        <span className="text-xs text-slate-400 ml-1">— автоматически формируется из данных формы</span>
+        {shortText && (
+          <button onClick={handleCopy} className={`ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium border transition-all ${copied ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50"}`}>
+            {copied ? "✅ Скопировано!" : "📋 Копировать"}
+          </button>
+        )}
+      </div>
+      <div className="px-4 py-3">
+        {shortText ? (
+          <>
+            <div className={`font-mono text-sm leading-relaxed text-slate-800 select-all rounded-lg px-3 py-2 bg-white border border-emerald-100 transition-all duration-300 whitespace-pre-wrap ${flash ? "ring-2 ring-emerald-400 ring-offset-1" : ""}`}>
+              {shortLines.map((line, lineIndex) => (
+                line === "" ? (
+                  <div key={lineIndex} className="h-3" />
+                ) : (
+                  <div key={lineIndex} className={`${lineIndex > 0 ? "mt-1" : ""} text-slate-700`}>
+                    {lineIndex === 0
+                      ? line.split(" / ").map((segment, i, arr) => (
+                      <span key={i}>
+                        <span className="text-slate-800">{segment}</span>
+                        {i < arr.length - 1 && <span className="text-emerald-400 font-bold mx-1">/</span>}
+                      </span>
+                      ))
+                      : line}
+                  </div>
+                )
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {shortLines[0]?.split(" / ").map((seg, i) => (
+                <span key={`main-${i}`} className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">{seg}</span>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-slate-400 italic px-3 py-2">Заполните поля формы — краткое ТЗ появится здесь автоматически…</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DictEditor({ title, icon, items, locked = [], onChange }: { title: string; icon: string; items: string[]; locked?: string[]; onChange: (items: string[]) => void; }) {
+  const [input, setInput] = useState("");
+  const [editIdx, setEditIdx] = useState<number | null>(null);
+  const [editVal, setEditVal] = useState("");
+
+  function add() { const v = input.trim(); if (!v || items.includes(v)) return; onChange([...items, v]); setInput(""); }
+  function remove(idx: number) { if (locked.includes(items[idx])) return; onChange(items.filter((_, i) => i !== idx)); }
+  function moveUp(idx: number) { if (idx === 0) return; const arr = [...items]; [arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]]; onChange(arr); }
+  function moveDown(idx: number) { if (idx === items.length - 1) return; const arr = [...items]; [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]]; onChange(arr); }
+  function startEdit(idx: number) { setEditIdx(idx); setEditVal(items[idx]); }
+  function commitEdit() { if (editIdx === null) return; const v = editVal.trim(); if (v && !items.some((it, i) => it === v && i !== editIdx)) { const arr = [...items]; arr[editIdx] = v; onChange(arr); } setEditIdx(null); setEditVal(""); }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="px-4 py-2.5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center gap-2">
+        <span>{icon}</span>
+        <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
+        <span className="ml-auto text-xs text-slate-400">{items.length} {"\u044d\u043b\u0435\u043c\u0435\u043d\u0442\u043e\u0432"}</span>
+      </div>
+      <div className="p-4 space-y-3">
+        <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+          {items.map((item, idx) => {
+            return (
+              <div key={`${item}-${idx}`} className="flex items-center gap-1.5 group">
+                <div className="flex flex-col gap-0.5">
+                  <button onClick={() => moveUp(idx)} disabled={idx === 0} className="w-5 h-4 flex items-center justify-center text-slate-300 hover:text-slate-600 disabled:opacity-20 transition-colors text-xs leading-none">▲</button>
+                  <button onClick={() => moveDown(idx)} disabled={idx === items.length - 1} className="w-5 h-4 flex items-center justify-center text-slate-300 hover:text-slate-600 disabled:opacity-20 transition-colors text-xs leading-none">▼</button>
+                </div>
+                {editIdx === idx ? (
+                  <input autoFocus className="flex-1 rounded-lg border border-blue-400 bg-blue-50 px-2 py-1 text-sm focus:outline-none" value={editVal} onChange={(e) => setEditVal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditIdx(null); }} />
+                ) : (
+                  <span className="flex-1 text-sm text-slate-700 px-2 py-1 rounded-lg bg-slate-50 border border-slate-100 truncate">{item}{locked.includes(item) && <span className="ml-2 text-xs text-slate-400 italic">{"\u0444\u0438\u043a\u0441\u0438\u0440\u043e\u0432\u0430\u043d\u043e"}</span>}</span>
+                )}
+                {editIdx === idx ? (
+                  <div className="flex gap-1">
+                    <button onClick={commitEdit} className="px-2 py-1 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors">OK</button>
+                    <button onClick={() => setEditIdx(null)} className="px-2 py-1 rounded-lg bg-slate-200 text-slate-600 text-xs hover:bg-slate-300 transition-colors">{"\u041e\u0442\u043c\u0435\u043d\u0430"}</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => startEdit(idx)} className="px-2 py-1 rounded-lg bg-amber-50 text-amber-600 border border-amber-200 text-xs hover:bg-amber-100 transition-colors" title={"\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u0442\u044c"}>{"\u0420\u0435\u0434."}</button>
+                    {!locked.includes(item) && <button onClick={() => remove(idx)} className="px-2 py-1 rounded-lg bg-red-50 text-red-500 border border-red-200 text-xs hover:bg-red-100 transition-colors" title={"\u0423\u0434\u0430\u043b\u0438\u0442\u044c"}>{"\u0423\u0434\u0430\u043b\u0438\u0442\u044c"}</button>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex gap-2 pt-1 border-t border-slate-100">
+          <input className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none" placeholder={"\u041d\u043e\u0432\u043e\u0435 \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435..."} value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+          <button onClick={add} disabled={!input.trim() || items.includes(input.trim())} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400">{"+ \u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LegacyApp() {
+  const [dicts, setDicts] = useState<Dicts>(() => ({
+    productTypes: ensureProductTypes(loadList(LS_KEYS.productTypes, DEFAULT_PRODUCT_TYPES)),
+    paperSizes: loadList(LS_KEYS.paperSizes, DEFAULT_PAPER_SIZES),
+    pocketCalendarSizes: loadList(LS_KEYS.pocketCalendarSizes, DEFAULT_POCKET_CALENDAR_SIZES),
+    businessCardSizes: loadList(LS_KEYS.businessCardSizes, DEFAULT_BUSINESS_CARD_SIZES),
+    envelopeSizes: loadList(LS_KEYS.envelopeSizes, DEFAULT_ENVELOPE_SIZES),
+    densities: loadList(LS_KEYS.densities, DEFAULT_DENSITIES),
+    colors: loadList(LS_KEYS.colors, DEFAULT_COLORS),
+    postProcessing: loadList(LS_KEYS.postProcessing, DEFAULT_POST_PROCESSING),
+    bindingTypes: loadList(LS_KEYS.bindingTypes, DEFAULT_BINDING_TYPES),
+    laminationKinds: loadList(LS_KEYS.laminationKinds, DEFAULT_LAMINATION_KINDS),
+    laminationThickness: loadList(LS_KEYS.laminationThickness, DEFAULT_LAMINATION_THICKNESS),
+    managers: loadList(LS_KEYS.managers, DEFAULT_MANAGERS),
+    paperProfiles: loadPaperProfiles(),
+    paperLibrary: loadPaperLibrary(),
+  }));
+
+  const [sheetName, setSheetName] = useState(() => localStorage.getItem(LS_KEYS.sheetName) || "Печать_2026");
+
+  useEffect(() => { saveList(LS_KEYS.productTypes, dicts.productTypes); }, [dicts.productTypes]);
+  useEffect(() => { saveList(LS_KEYS.paperSizes, dicts.paperSizes); }, [dicts.paperSizes]);
+  useEffect(() => { saveList(LS_KEYS.pocketCalendarSizes, dicts.pocketCalendarSizes); }, [dicts.pocketCalendarSizes]);
+  useEffect(() => { saveList(LS_KEYS.businessCardSizes, dicts.businessCardSizes); }, [dicts.businessCardSizes]);
+  useEffect(() => { saveList(LS_KEYS.envelopeSizes, dicts.envelopeSizes); }, [dicts.envelopeSizes]);
+  useEffect(() => { saveList(LS_KEYS.densities, dicts.densities); }, [dicts.densities]);
+  useEffect(() => { saveList(LS_KEYS.colors, dicts.colors); }, [dicts.colors]);
+  useEffect(() => { saveList(LS_KEYS.postProcessing, dicts.postProcessing); }, [dicts.postProcessing]);
+  useEffect(() => { saveList(LS_KEYS.bindingTypes, dicts.bindingTypes); }, [dicts.bindingTypes]);
+  useEffect(() => { saveList(LS_KEYS.laminationKinds, dicts.laminationKinds); }, [dicts.laminationKinds]);
+  useEffect(() => { saveList(LS_KEYS.laminationThickness, dicts.laminationThickness); }, [dicts.laminationThickness]);
+  useEffect(() => { saveList(LS_KEYS.managers, dicts.managers); }, [dicts.managers]);
+  useEffect(() => { savePaperProfiles(dicts.paperProfiles); }, [dicts.paperProfiles]);
+  useEffect(() => { savePaperLibrary(dicts.paperLibrary); }, [dicts.paperLibrary]);
+  useEffect(() => { localStorage.setItem(LS_KEYS.sheetName, sheetName); }, [sheetName]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadClientStore() {
+      const result = await (window as any).electronAPI?.loadClientStore?.();
+      if (cancelled) return;
+      if (result?.success && result.store) {
+        setClientStore(result.store);
+      } else {
+        setClientStore(createEmptyClientStore());
+      }
+    }
+
+    loadClientStore();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrapCloudDicts() {
+      setDictSyncBusy("loading");
+      const result = await (window as any).electronAPI?.loadConfigSheet?.();
+      if (cancelled) return;
+
+      if (result?.success && result.hasConfig && result.config) {
+        const mergedDicts = normalizeDictsPayload(result.config, dicts);
+        setDicts(mergedDicts);
+        setDictSource("cloud");
+        setDictSyncMsg(null);
+
+        if (compareVersions(APP_VERSION, result.appVersion) > 0) {
+          const syncResult = await (window as any).electronAPI?.saveConfigSheet?.({
+            config: mergedDicts,
+            appVersion: APP_VERSION,
+          });
+          if (!cancelled && !syncResult?.success) {
+            setDictSyncMsg(`Ошибка автообновления справочников в Google Таблице: ${syncResult?.error || "неизвестная ошибка"}`);
+          }
+        }
+      } else if (result?.success && !result.hasConfig) {
+        setDictSource("local");
+        setDictSyncMsg("На листе __CONFIG__ пока нет сохранённой базы справочников.");
+      } else if (result && !result.success) {
+        setDictSource("local");
+        setDictSyncMsg(`Не удалось загрузить справочники из Google Таблицы: ${result.error}`);
+      }
+
+      setDictSyncBusy("idle");
+    }
+
+    bootstrapCloudDicts();
+    return () => { cancelled = true; };
+  }, []);
+
+  function updateDict<K extends keyof Dicts>(key: K, val: string[]) {
+    setDicts((prev) => ({ ...prev, [key]: val }));
+  }
+
+  function updatePaperLibrary(key: PaperLibraryKey, val: string[]) {
+    setDicts((prev) => ({ ...prev, paperLibrary: { ...prev.paperLibrary, [key]: val } }));
+  }
+
+  async function rememberClientIfNeeded() {
+    const clientName = normalizeClientName(form.clientName);
+    const managerName = normalizeManagerName(form.managerName);
+    if (!clientName || !managerName) return;
+
+    const result = await (window as any).electronAPI?.saveClientEntry?.({ managerName, clientName });
+    if (result?.success && result.store) {
+      setClientStore(result.store);
+    }
+  }
+
+  async function loadDictsFromCloud(manual = false) {
+    setDictSyncBusy("loading");
+    const result = await (window as any).electronAPI?.loadConfigSheet?.();
+
+    if (result?.success && result.hasConfig && result.config) {
+      const mergedDicts = normalizeDictsPayload(result.config, dicts);
+      setDicts(mergedDicts);
+      setDictSource("cloud");
+      setDictSyncMsg(null);
+
+      if (compareVersions(APP_VERSION, result.appVersion) > 0) {
+        const syncResult = await (window as any).electronAPI?.saveConfigSheet?.({
+          config: mergedDicts,
+          appVersion: APP_VERSION,
+        });
+        if (!syncResult?.success) {
+          setDictSyncMsg(`Ошибка автообновления справочников в Google Таблице: ${syncResult?.error || "неизвестная ошибка"}`);
+        }
+      }
+    } else if (result?.success && !result.hasConfig) {
+      setDictSource("local");
+      setDictSyncMsg("На листе __CONFIG__ ещё нет сохранённых справочников.");
+    } else if (result && !result.success) {
+      setDictSource("local");
+      setDictSyncMsg(`Ошибка загрузки справочников: ${result.error}`);
+    } else if (manual) {
+      setDictSource("local");
+      setDictSyncMsg("Не удалось получить данные из Google Таблицы.");
+    }
+
+    setDictSyncBusy("idle");
+  }
+
+  async function saveDictsToCloud() {
+    setDictSyncBusy("saving");
+    const result = await (window as any).electronAPI?.saveConfigSheet?.({ config: dicts, appVersion: APP_VERSION });
+    if (result?.success) {
+      setDictSource("cloud");
+      setDictSyncMsg(`Справочники сохранены в Google Таблицу. Обновлено: ${new Date(result.updatedAt).toLocaleString("ru-RU")}`);
+    } else {
+      setDictSource("local");
+      setDictSyncMsg(`Ошибка сохранения справочников: ${result?.error || "неизвестная ошибка"}`);
+    }
+    setDictSyncBusy("idle");
+  }
+
+  function resetDicts() {
+    if (confirm("Сбросить все справочники к значениям по умолчанию?")) {
+      setDicts({
+        productTypes: DEFAULT_PRODUCT_TYPES,
+        paperSizes: DEFAULT_PAPER_SIZES,
+        pocketCalendarSizes: DEFAULT_POCKET_CALENDAR_SIZES,
+        businessCardSizes: DEFAULT_BUSINESS_CARD_SIZES,
+        envelopeSizes: DEFAULT_ENVELOPE_SIZES,
+        densities: DEFAULT_DENSITIES,
+        colors: DEFAULT_COLORS,
+        postProcessing: DEFAULT_POST_PROCESSING,
+        bindingTypes: DEFAULT_BINDING_TYPES,
+        laminationKinds: DEFAULT_LAMINATION_KINDS,
+        laminationThickness: DEFAULT_LAMINATION_THICKNESS,
+        managers: DEFAULT_MANAGERS,
+        paperProfiles: DEFAULT_PAPER_PROFILES,
+        paperLibrary: DEFAULT_PAPER_LIBRARY,
+      });
+    }
+  }
+
+  const [form, setForm] = useState<FormData>(() => createDefaultForm());
+  const [clientStore, setClientStore] = useState<ClientStore>(() => createEmptyClientStore());
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"form" | "dicts">("form");
+  const [showValidation, setShowValidation] = useState(false);
+  
+  const [isDictLocked, setIsDictLocked] = useState(true);
+  const [dictPassword, setDictPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [dictSectionQuery, setDictSectionQuery] = useState("");
+  const [dictSyncMsg, setDictSyncMsg] = useState<string | null>(null);
+  const [dictSyncBusy, setDictSyncBusy] = useState<"idle" | "loading" | "saving">("idle");
+  const [dictSource, setDictSource] = useState<"unknown" | "cloud" | "local">("unknown");
+
+  const [showPreview, setShowPreview] = useState(false);
+  const [showSend, setShowSend] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [sendState, setSendState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [previewText, setPreviewText] = useState("");
+
+  function update<K extends keyof FormData>(key: K, value: FormData[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function updateSubcontractWork(id: string, patch: Partial<SubcontractWork>) {
+    setForm((prev) => ({
+      ...prev,
+      subcontractWorks: prev.subcontractWorks.map((work) => (work.id === id ? { ...work, ...patch } : work)),
+    }));
+  }
+
+  function addSubcontractWork() {
+    setForm((prev) => ({ ...prev, subcontractWorks: [...prev.subcontractWorks, createSubcontractWork()] }));
+  }
+
+  function removeSubcontractWork(id: string) {
+    setForm((prev) => ({ ...prev, subcontractWorks: prev.subcontractWorks.filter((work) => work.id !== id) }));
+  }
+
+  const required = getRequiredFields(form);
+  const requiredLabels = required.map((field) => {
+    if (field === "deadlineTime" && isDeadlineTimeInPast(form.deadline, form.deadlineTime)) {
+      return "Нельзя указывать прошедшее время сдачи";
+    }
+    if (field === "subcontractTimePast") {
+      return "Нельзя указывать прошедшее время подряда";
+    }
+    return REQUIRED_FIELD_LABELS[field] ?? field;
+  });
+  const todayIso = getTodayLocalIso();
+  const springSuggestion = form.bindingType === "Пружина" ? buildSpringSuggestion(form) : null;
+  const springDiameterIsCustomOrder = springSuggestion ? parseWeight(springSuggestion.diameter) > 16 : false;
+  const dictSections = [
+    { key: "managers", title: "Менеджеры", icon: "👤", element: <DictEditor title="Менеджеры" icon="👤" items={dicts.managers} onChange={(v) => updateDict("managers", v)} /> },
+    { key: "productTypes", title: "Типы изделий", icon: "🖨", element: <DictEditor title="Типы изделий" icon="🖨" items={dicts.productTypes} locked={["Другое..."]} onChange={(v) => updateDict("productTypes", v)} /> },
+    { key: "paperSizes", title: "Форматы бумаги", icon: "📄", element: <DictEditor title="Форматы бумаги" icon="📄" items={dicts.paperSizes} locked={["Нестандартный"]} onChange={(v) => updateDict("paperSizes", v)} /> },
+    { key: "pocketCalendarSizes", title: "Форматы карманных календарей", icon: "📅", element: <DictEditor title="Форматы карманных календарей" icon="📅" items={dicts.pocketCalendarSizes} locked={["70×100", "Нестандартный"]} onChange={(v) => updateDict("pocketCalendarSizes", v)} /> },
+    { key: "businessCardSizes", title: "Форматы визиток", icon: "🪪", element: <DictEditor title="Форматы визиток" icon="🪪" items={dicts.businessCardSizes} locked={["Нестандартный"]} onChange={(v) => updateDict("businessCardSizes", v)} /> },
+    { key: "paperLibrary-coated", title: "Бумага: мелованная", icon: "📄", element: <DictEditor title="Бумага: мелованная" icon="📄" items={dicts.paperLibrary.coated} onChange={(v) => updatePaperLibrary("coated", v)} /> },
+    { key: "paperLibrary-offset", title: "Бумага: офсетная", icon: "📄", element: <DictEditor title="Бумага: офсетная" icon="📄" items={dicts.paperLibrary.offset} onChange={(v) => updatePaperLibrary("offset", v)} /> },
+    { key: "paperLibrary-calender", title: "Бумага: каландр", icon: "📄", element: <DictEditor title="Бумага: каландр" icon="📄" items={dicts.paperLibrary.calender} onChange={(v) => updatePaperLibrary("calender", v)} /> },
+    { key: "paperLibrary-cardboard", title: "Плотность картона", icon: "🟫", element: <DictEditor title="Плотность картона" icon="🟫" items={dicts.paperLibrary.cardboard} locked={["270 г/м²"]} onChange={(v) => updatePaperLibrary("cardboard", v)} /> },
+    { key: "paperLibrary-designer", title: "Бумага: дизайнерская", icon: "✏️", element: <DictEditor title="Бумага: дизайнерская" icon="✏️" items={dicts.paperLibrary.designer} onChange={(v) => updatePaperLibrary("designer", v)} /> },
+    { key: "envelopeSizes", title: "Форматы конвертов", icon: "✉️", element: <DictEditor title="Форматы конвертов" icon="✉️" items={dicts.envelopeSizes} locked={["Нестандартный"]} onChange={(v) => updateDict("envelopeSizes", v)} /> },
+    { key: "colors", title: "Цветность / красочность", icon: "🎨", element: <DictEditor title="Цветность / красочность" icon="🎨" items={dicts.colors} onChange={(v) => updateDict("colors", v)} /> },
+    { key: "postProcessing", title: "Послепечатная обработка", icon: "✂️", element: <DictEditor title="Послепечатная обработка" icon="✂️" items={dicts.postProcessing} onChange={(v) => updateDict("postProcessing", v)} /> },
+    { key: "bindingTypes", title: "Типы сшивки / переплёта", icon: "📚", element: <DictEditor title="Типы сшивки / переплёта" icon="📚" items={dicts.bindingTypes} onChange={(v) => updateDict("bindingTypes", v)} /> },
+    { key: "laminationKinds", title: "Виды ламинации", icon: "✨", element: <DictEditor title="Виды ламинации" icon="✨" items={dicts.laminationKinds} onChange={(v) => updateDict("laminationKinds", v)} /> },
+    { key: "laminationThickness", title: "Толщина ламинации", icon: "📏", element: <DictEditor title="Толщина ламинации" icon="📏" items={dicts.laminationThickness} onChange={(v) => updateDict("laminationThickness", v)} /> },
+    ...(Object.keys(PAPER_PROFILE_LABELS) as PaperProfileKey[]).map((key) => ({
+      key,
+      title: PAPER_PROFILE_LABELS[key],
+      icon: "📚",
+      element: <DictEditor key={key} title={PAPER_PROFILE_LABELS[key]} icon="📚" items={dicts.paperProfiles[key]} onChange={(v) => setDicts((prev) => ({ ...prev, paperProfiles: { ...prev.paperProfiles, [key]: v } }))} />
+    }))
+  ];
+  const filteredDictSections = dictSections.filter((section) => section.title.toLowerCase().includes(dictSectionQuery.trim().toLowerCase()));
+
+  function focusFirstInvalidField(fields: string[]) {
+    const first = fields[0];
+    if (!first) return;
+    const element = document.querySelector(`[data-field="${first}"]`) as HTMLElement | null;
+    if (element) {
+      const top = element.getBoundingClientRect().top + window.scrollY - 140;
+      window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
+      window.setTimeout(() => element.focus(), 180);
+    }
+  }
+
+  useEffect(() => {
+    const suggestion = buildSpringSuggestion(form);
+    if (suggestion && form.bindingType === "Пружина" && form.springDiameter !== suggestion.diameter) {
+      setForm((prev) => ({ ...prev, springDiameter: suggestion.diameter }));
+    }
+  }, [form.productType, form.bindingType, form.pageCount, form.blockPages, form.density, form.densityFinish, form.blockDensity, form.blockFinish, form.coverDensity, form.coverFinish, form.coverUseKash, form.kashurovka.linerType, form.kashurovka.linerFinish, form.springDiameter]);
+
+  useEffect(() => {
+    if (showValidation && required.length === 0) setShowValidation(false);
+  }, [required.length, showValidation]);
+
+  useEffect(() => {
+    const invalidClasses = ["border-red-500", "bg-red-50", "ring-2", "ring-red-200", "shadow-sm", "shadow-red-100"];
+    const marked = Array.from(document.querySelectorAll<HTMLElement>("[data-field]"));
+
+    marked.forEach((element) => {
+      element.classList.remove(...invalidClasses);
+    });
+
+    if (!showValidation) return;
+
+    required.forEach((field) => {
+      const element = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (element) element.classList.add(...invalidClasses);
+    });
+  }, [showValidation, required]);
+
+  function validateThen(action: () => void) {
+    if (required.length > 0) {
+      setShowValidation(true);
+      focusFirstInvalidField(required);
+      return;
+    }
+    action();
+  }
+
+  function togglePostProcessing(item: string) {
+    setForm((prev) => ({
+      ...prev,
+      postProcessing: prev.postProcessing.includes(item)
+        ? prev.postProcessing.filter((x) => x !== item)
+        : [...prev.postProcessing, item],
+    }));
+  }
+
+  function handlePreview() {
+    const n = parseInt(localStorage.getItem("tz_counter") || "0") + 1;
+    const nextText = generateTZ(form, n);
+    setPreviewText(nextText);
+    setShowPreview(false);
+    window.setTimeout(() => setShowPreview(true), 0);
+  }
+
+  async function handleSave() {
+    if (!form.fileLink.trim()) {
+      setSavedMsg("Ошибка сохранения: не введена ссылка на папку заказа");
+      setTimeout(() => setSavedMsg(null), 5000);
+      return;
+    }
+    const n = getTZNumber();
+    const text = generateTZ(form, n);
+    const orderTag = form.orderNumber.trim()
+      ? form.orderNumber.trim()
+      : (form.clientName.trim() || `TZ-${String(n).padStart(4, "0")}`);
+    const safeOrderTag = orderTag.replace(/[/:*?"<>|]/g, "_");
+    const filename = `TZ-${safeOrderTag} от ${getCurrentDateTimeForFilename()}.txt`;
+    const result = await (window as any).electronAPI?.saveTxt?.({
+      text,
+      filename,
+      preferredDir: form.fileLink,
+    });
+    if (!result?.success) {
+      setSavedMsg(result?.error ? `Ошибка сохранения: ${result.error}` : "Не удалось сохранить ТЗ");
+      setTimeout(() => setSavedMsg(null), 5000);
+      return;
+    }
+    await rememberClientIfNeeded();
+    setShowPreview(false);
+    setSavedMsg(result.autoSaved ? `Файл с ТЗ сохранён в папку заказа: ${result.filePath}` : `Файл с ТЗ сохранён: ${result.filePath || filename}`);
+    setTimeout(() => setSavedMsg(null), 4000);
+  }
+
+  function handleReset() {
+    setShowResetConfirm(true);
+  }
+
+  function confirmReset() {
+    setForm(createDefaultForm());
+    setShowValidation(false);
+    setSavedMsg(null);
+    setShowResetConfirm(false);
+  }
+
+  async function handleRealSend() {
+    setSendState("loading");
+    try {
+      const result = await (window as any).electronAPI.sendToSheet({
+        formData: form,
+        shortTz: generateShortTZ(form),
+        sheetName: sheetName
+      });
+      if (result.success) {
+        update("orderNumber", result.orderNumber);
+        await rememberClientIfNeeded();
+        setSendState("done");
+      } else {
+        console.error(result.error);
+        setSendState("error");
+      }
+    } catch (e) {
+      setSendState("error");
+    }
+  }
+
+  const pt = form.productType;
+  const multiBlock = isMultiBlock(pt);
+  const calendar = isCalendar(pt);
+  const notebook = isNotebook(pt);
+  const envelope = isEnvelope(pt);
+  const bag = isBag(pt);
+  const sticker = isSticker(pt);
+  const deskCalendarBigovkaActive = calendar && form.calendarKind === "Настольный" && !!form.calendarBaseBigovkaLines && form.calendarBaseBigovkaLines !== "0";
+  const clientSuggestionItems = getClientSuggestions(clientStore, form.managerName);
+
+  const isFormValid = required.length === 0;
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100 flex flex-col">
+      <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow">
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          </div>
+          <div><h1 className="text-lg font-bold text-slate-800 leading-none">ТЗ Оскар-Принт</h1><p className="text-xs text-slate-500">Формирование технического задания</p></div>
+          <div className="ml-auto flex gap-2"><button onClick={handleReset} className="text-sm px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200">🗑 Очистить</button></div>
+        </div>
+      </header>
+
+      <div className="max-w-5xl mx-auto w-full px-4 mt-4">
+        <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-slate-200 w-fit">
+          <button onClick={() => setActiveTab("form")} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "form" ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}>📋 Форма ТЗ</button>
+          <button onClick={() => setActiveTab("dicts")} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "dicts" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}>⚙️ Справочники</button>
+        </div>
+      </div>
+
+      <main className="max-w-5xl mx-auto w-full px-4 py-4 flex-1">
+        {dictSource === "local" && dictSyncBusy === "idle" && (
+          <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+            Локально
+          </div>
+        )}
+        {showValidation && required.length > 0 && <div className="mb-4 bg-red-50 border border-red-300 text-red-700 rounded-xl px-4 py-3 text-sm font-medium"><div>Заполните обязательные поля.</div><div className="mt-1 text-xs text-red-600">{requiredLabels.join(", ")}</div></div>}
+
+        {activeTab === "form" && (
+          <div className="space-y-4">
+            <Section title="🗂 Реквизиты заказа">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <Field label="Заказчик" required>
+                  <input
+                    data-field="clientName"
+                    type="text"
+                    list="clientNameSuggestions"
+                    autoComplete="off"
+                    className={fieldClass(showValidation && required.includes("clientName"))}
+                    placeholder="ООО «Название» или ФИО"
+                    value={form.clientName}
+                    onChange={(e) => update("clientName", e.target.value)}
+                  />
+                  <datalist id="clientNameSuggestions">
+                    {clientSuggestionItems.map((client) => <option key={client} value={client} />)}
+                  </datalist>
+                  <p className="text-[11px] text-slate-400">Подсказки берутся из локального списка на этом ПК.</p>
+                </Field>
+                <Field label="Менеджер" required>
+                  <select data-field="managerName" className={selectFieldClass(showValidation && required.includes("managerName"))} value={form.managerName} onChange={(e) => update("managerName", e.target.value)}>
+                    <option value="">— выберите —</option>
+                    {dicts.managers.map((m) => <option key={m}>{m}</option>)}
+                  </select>
+                </Field>
+                <Field label="Номер заказа">
+                  <input type="text" className={inputClass + " bg-yellow-50 font-bold"} placeholder="подставится автоматически" value={form.orderNumber} readOnly />
+                </Field>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Тираж (экземпляров)" required>
+                  <input data-field="quantity" type="number" min={1} className={fieldClass(showValidation && required.includes("quantity"))} placeholder="Например: 1000" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} />
+                </Field>
+                <Field label="Срок сдачи" required>
+                  <DateTimeField
+                    dateFieldName="deadline"
+                    timeFieldName="deadlineTime"
+                    dateValue={form.deadline}
+                    timeValue={form.deadlineTime}
+                    invalidDate={showValidation && required.includes("deadline")}
+                    invalidTime={showValidation && required.includes("deadlineTime")}
+                    onDateChange={(value) => update("deadline", value)}
+                    onTimeChange={(value) => update("deadlineTime", value)}
+                  />
+                </Field>
+              </div>
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-700">Подрядные работы</h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Дополнительные пояснения и даты для ячейки со сроком сдачи</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addSubcontractWork}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-sm font-medium hover:bg-blue-100 transition-colors"
+                  >
+                    <span className="text-base leading-none">＋</span> Добавить
+                  </button>
+                </div>
+                {form.subcontractWorks.length === 0 ? (
+                  <p className="text-xs text-slate-400">Добавьте подрядную работу, если нужно указать отдельную дату с пояснением.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {form.subcontractWorks.map((work, index) => {
+                      const hasAnyValue = !!work.note.trim() || !!work.date || !!work.time;
+                      const invalidNote = showValidation && hasAnyValue && !work.note.trim();
+                      const invalidDate = showValidation && hasAnyValue && !work.date;
+                      const invalidTime = showValidation && hasAnyValue && (!work.time || isDateTimeInPast(work.date, work.time));
+                      const isPastTime = showValidation && hasAnyValue && work.date && work.time && isDateTimeInPast(work.date, work.time);
+                      return (
+                        <div key={work.id} className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm">
+                          <div className="flex items-center justify-between gap-2 mb-3">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Подрядная работа {index + 1}</div>
+                            <button
+                              type="button"
+                              onClick={() => removeSubcontractWork(work.id)}
+                              className="px-2.5 py-1.5 rounded-lg border border-red-200 bg-white text-red-500 text-xs font-medium hover:bg-red-50 transition-colors"
+                            >
+                              Удалить
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Field label="Информация" required>
+                              <input
+                                type="text"
+                                className={fieldClass(invalidNote)}
+                                placeholder="Например: Отправить на склейку"
+                                value={work.note}
+                                onChange={(e) => updateSubcontractWork(work.id, { note: e.target.value })}
+                              />
+                            </Field>
+                            <Field label="Дата и время" required>
+                              <DateTimeField
+                                dateFieldName={`subcontractDate-${work.id}`}
+                                timeFieldName={`subcontractTime-${work.id}`}
+                                dateValue={work.date}
+                                timeValue={work.time}
+                                invalidDate={invalidDate}
+                                invalidTime={invalidTime}
+                                onDateChange={(value) => updateSubcontractWork(work.id, { date: value })}
+                                onTimeChange={(value) => updateSubcontractWork(work.id, { time: value })}
+                              />
+                              {isPastTime && <p className="text-xs text-red-500 mt-1">Нельзя указывать прошедшее время.</p>}
+                            </Field>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            <Section title="🖨 Параметры изделия">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Тип изделия" required>
+                  <select data-field="productType" value={form.productType} className={selectFieldClass(showValidation && required.includes("productType"))} onChange={(e) => { setForm((prev) => ({ ...createDefaultForm(), orderNumber: prev.orderNumber, clientName: prev.clientName, managerName: prev.managerName, deadline: prev.deadline, deadlineTime: prev.deadlineTime, quantity: prev.quantity, subcontractWorks: prev.subcontractWorks, productType: e.target.value })); setShowValidation(false); }}>
+                    <option value="">— выберите —</option>{dicts.productTypes.map((t) => <option key={t}>{t}</option>)}
+                  </select>
+                  {pt === "Другое..." && <input data-field="productTypeCustom" className={`${fieldClass(showValidation && required.includes("productTypeCustom"))} mt-2`} placeholder="Укажите тип изделия" value={form.productTypeCustom} onChange={(e) => update("productTypeCustom", e.target.value)} />}
+                </Field>
+                {pt === "Визитки" ? (
+                  <Field label="Формат визиток" required>
+                    <select data-field="businessCardSize" value={form.businessCardSize} className={selectFieldClass(showValidation && required.includes("businessCardSize"))} onChange={(e) => update("businessCardSize", e.target.value)}>
+                      <option value="">— выберите —</option>{dicts.businessCardSizes.map((s) => <option key={s}>{s}</option>)}
+                    </select>
+                    {form.businessCardSize === "Нестандартный" && <input data-field="businessCardSizeCustom" className={`${fieldClass(showValidation && required.includes("businessCardSizeCustom"))} mt-2`} placeholder="Например: 85×55 мм" value={form.businessCardSizeCustom} onChange={(e) => update("businessCardSizeCustom", e.target.value)} />}
+                  </Field>
+                ) : !envelope && !multiBlock && !calendar && !bag && (
+                  <Field label="Формат / размер" required>
+                    <select data-field="paperSize" value={form.paperSize} className={selectFieldClass(showValidation && required.includes("paperSize"))} onChange={(e) => update("paperSize", e.target.value)}>
+                      <option value="">— выберите —</option>{dicts.paperSizes.map((s) => <option key={s}>{s}</option>)}
+                    </select>
+                    {form.paperSize === "Нестандартный" && <input data-field="paperSizeCustom" className={`${fieldClass(showValidation && required.includes("paperSizeCustom"))} mt-2`} placeholder="Например: 150×210 мм" value={form.paperSizeCustom} onChange={(e) => update("paperSizeCustom", e.target.value)} />}
+                  </Field>
+                )}
+                {envelope && (
+                  <Field label="Формат конверта" required>
+                    <select data-field="envelopeSize" value={form.envelopeSize} className={selectFieldClass(showValidation && required.includes("envelopeSize"))} onChange={(e) => update("envelopeSize", e.target.value)}>
+                      <option value="">— выберите —</option>{dicts.envelopeSizes.map((s) => <option key={s}>{s}</option>)}
+                    </select>
+                    {form.envelopeSize === "Нестандартный" && <input data-field="envelopeSizeCustom" className={`${fieldClass(showValidation && required.includes("envelopeSizeCustom"))} mt-2`} placeholder="Например: 160×230 мм" value={form.envelopeSizeCustom} onChange={(e) => update("envelopeSizeCustom", e.target.value)} />}
+                  </Field>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                <Field label="Цветопроба">
+                  <div className="inline-flex flex-wrap rounded-lg border border-slate-200 bg-white p-1 shadow-sm gap-1">
+                    {["Не надо", "Надо", "Есть образец"].map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => update("colorProof", item)}
+                        className={`px-3 py-1.5 text-xs rounded-md transition-all ${form.colorProof === item ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}
+                      >
+                        {item}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+              </div>
+
+              {!envelope && !multiBlock && !notebook && !calendar && !form.kashurovka.enabled && pt && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {bag ? (
+                    <Field label="Материал пакета" required><select data-field="density" value={form.density} className={selectFieldClass(showValidation && required.includes("density"))} onChange={(e) => update("density", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.bag.map((d) => <option key={d}>{d}</option>)}</select></Field>
+                  ) : (
+                    !sticker && (
+                      <PaperSelectionField
+                        label="Бумага / материал"
+                        typeValue={form.paperType}
+                        materialValue={form.density}
+                        customValue={form.paperCustomName}
+                        library={dicts.paperLibrary}
+                        onTypeChange={(value) => {
+                          update("paperType", value);
+                          update("density", "");
+                          update("paperCustomName", "");
+                        }}
+                        onMaterialChange={(value) => update("density", value)}
+                        onCustomChange={(value) => update("paperCustomName", value)}
+                        typeFieldName="paperType"
+                        materialFieldName="density"
+                        customFieldName="paperCustomName"
+                        showValidation={showValidation}
+                        invalidType={showValidation && required.includes("paperType")}
+                        invalidMaterial={showValidation && required.includes("density")}
+                        invalidCustom={showValidation && required.includes("paperCustomName")}
+                      />
+                    )
+                  )}
+                  {sticker && <Field label="Материал" required><select data-field="stickerMaterial" value={form.stickerMaterial} className={selectFieldClass(showValidation && required.includes("stickerMaterial"))} onChange={(e) => update("stickerMaterial", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.sticker.map((d) => <option key={d}>{d}</option>)}</select></Field>}
+                  <PaperFinishField value={sticker ? form.stickerFinish : form.densityFinish} onChange={(value) => update(sticker ? "stickerFinish" : "densityFinish", value as never)} />
+                  <Field label="Цветность" required><select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{(sticker ? STICKER_COLOR_MODES : dicts.colors).map((c) => <option key={c}>{c}</option>)}</select></Field>
+                </div>
+              )}
+
+              {sticker && (
+                <div className="mt-4">
+                  <div className="flex flex-col gap-2 max-w-xs">
+                    <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Плоттерная резка</span>
+                    <YesNo value={form.stickerPlotterCut} onChange={(v) => update("stickerPlotterCut", v)} />
+                  </div>
+                </div>
+              )}
+
+              {(multiBlock || notebook) && (
+                <div className="mt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field label={multiBlock ? "Количество страниц с обложкой" : "Количество страниц в блоке"} required={!multiBlock}>
+                      <input data-field={multiBlock ? "pageCount" : "blockPages"} type="number" min={2} className={`${fieldClass(showValidation && required.includes(multiBlock ? "pageCount" : "blockPages"))} max-w-xs`} value={multiBlock ? form.pageCount : form.blockPages} onChange={(e) => update(multiBlock ? "pageCount" : "blockPages", e.target.value as never)} />
+                      {multiBlock && form.pageCount && <p className="text-xs text-slate-500 mt-1">Это {Number(form.pageCount) / 2} листов в блоке.</p>}
+                      {notebook && form.blockPages && <p className="text-xs text-slate-500 mt-1">Это {Number(form.blockPages) / 2} листов в блоке.</p>}
+                    </Field>
+                    {isCatalog(pt) && (
+                      <Field label="Формат продукции" required>
+                        <select
+                          data-field="catalogFormat"
+                          value={form.catalogFormat}
+                          className={selectFieldClass(showValidation && required.includes("catalogFormat"))}
+                          onChange={(e) => {
+                            update("catalogFormat", e.target.value);
+                            if (e.target.value !== "Нестандартный") update("catalogFormatCustom", "");
+                          }}
+                        >
+                          <option value="">— выберите —</option>
+                          {dicts.paperSizes.map((s) => <option key={s}>{s}</option>)}
+                        </select>
+                        {form.catalogFormat === "Нестандартный" && (
+                          <input
+                            data-field="catalogFormatCustom"
+                            className={`${fieldClass(showValidation && required.includes("catalogFormatCustom"))} mt-2`}
+                            placeholder="Например: 210×297 мм"
+                            value={form.catalogFormatCustom}
+                            onChange={(e) => update("catalogFormatCustom", e.target.value)}
+                          />
+                        )}
+                      </Field>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 space-y-3">
+                      <h3 className="text-sm font-semibold text-blue-700 flex items-center gap-1.5">📗 Обложка</h3>
+                      <Field label="Обложка с кашированием">
+                        <YesNo value={form.coverUseKash} onChange={(value) => {
+                          update("coverUseKash", value);
+                          if (value && !form.kashurovka.enabled) update("kashurovka", { ...form.kashurovka, enabled: true });
+                        }} />
+                      </Field>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="md:col-span-2">
+                          <PaperSelectionField
+                            label="Бумага обложки"
+                            typeValue={form.coverPaperType}
+                            materialValue={form.coverDensity}
+                            customValue={form.coverPaperCustomName}
+                            library={dicts.paperLibrary}
+                            onTypeChange={(value) => {
+                              update("coverPaperType", value);
+                              update("coverDensity", "");
+                              update("coverPaperCustomName", "");
+                            }}
+                            onMaterialChange={(value) => update("coverDensity", value)}
+                            onCustomChange={(value) => update("coverPaperCustomName", value)}
+                            typeFieldName="coverPaperType"
+                            materialFieldName="coverDensity"
+                            customFieldName="coverPaperCustomName"
+                            showValidation={showValidation}
+                            invalidType={showValidation && required.includes("coverPaperType")}
+                            invalidMaterial={showValidation && required.includes("coverDensity")}
+                            invalidCustom={showValidation && required.includes("coverPaperCustomName")}
+                            disabled={form.coverUseKash}
+                          />
+                        </div>
+                        <div className={form.coverUseKash ? "opacity-50 pointer-events-none" : ""}><PaperFinishField label="Поверхность обложки" value={form.coverFinish} onChange={(value) => update("coverFinish", value)} /></div>
+                        <Field label="Цветность обложки" required><select data-field="coverColor" value={form.coverColor} disabled={form.coverUseKash} className={`${selectFieldClass(showValidation && required.includes("coverColor"))} ${form.coverUseKash ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("coverColor", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
+                      </div>
+                      <div className={form.coverUseKash ? "opacity-50 pointer-events-none" : ""}>
+                        <LaminationBlockComponent label="Ламинация обложки" value={form.coverLamination} onChange={(v: any) => update("coverLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                      </div>
+                      {form.coverUseKash && <p className="text-xs text-slate-500">Бумага, цветность и ламинация обложки задаются в блоке кашировки.</p>}
+                    </div>
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
+                      <h3 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5">📘 Блок</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="md:col-span-2">
+                          <PaperSelectionField
+                            label="Бумага блока"
+                            typeValue={form.blockPaperType}
+                            materialValue={form.blockDensity}
+                            customValue={form.blockPaperCustomName}
+                            library={dicts.paperLibrary}
+                            onTypeChange={(value) => {
+                              update("blockPaperType", value);
+                              update("blockDensity", "");
+                              update("blockPaperCustomName", "");
+                            }}
+                            onMaterialChange={(value) => update("blockDensity", value)}
+                            onCustomChange={(value) => update("blockPaperCustomName", value)}
+                            typeFieldName="blockPaperType"
+                            materialFieldName="blockDensity"
+                            customFieldName="blockPaperCustomName"
+                            showValidation={showValidation}
+                            invalidType={showValidation && required.includes("blockPaperType")}
+                            invalidMaterial={showValidation && required.includes("blockDensity")}
+                            invalidCustom={showValidation && required.includes("blockPaperCustomName")}
+                          />
+                        </div>
+                        <PaperFinishField label="Поверхность блока" value={form.blockFinish} onChange={(value) => update("blockFinish", value)} />
+                        <Field label="Цветность блока" required><select data-field="blockColor" value={form.blockColor} className={selectFieldClass(showValidation && required.includes("blockColor"))} onChange={(e) => update("blockColor", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
+                      </div>
+                      <LaminationBlockComponent label="Ламинация блока" value={form.blockLamination} onChange={(v: any) => update("blockLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {calendar && (
+                <div className="mt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field label="Вид календаря" required><select data-field="calendarKind" value={form.calendarKind} className={selectFieldClass(showValidation && required.includes("calendarKind"))} onChange={(e) => update("calendarKind", e.target.value)}><option>Настенный</option><option>Настольный</option><option>Карманный</option></select></Field>
+                    {form.calendarKind === "Настенный" && <Field label="Количество рекламных блоков" required><input data-field="adBlocks" type="number" min={1} className={fieldClass(showValidation && required.includes("adBlocks"))} value={form.adBlocks} onChange={(e) => update("adBlocks", e.target.value)} /></Field>}
+                  </div>
+                  {form.calendarKind === "Настенный" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <PaperSelectionField
+                        label="Бумага шапки"
+                        typeValue={form.calendarHeaderPaperType}
+                        materialValue={form.calendarHeaderPaperDensity}
+                        customValue={form.calendarHeaderPaperCustomName}
+                        library={dicts.paperLibrary}
+                        onTypeChange={(value) => {
+                          update("calendarHeaderPaperType", value);
+                          update("calendarHeaderPaperDensity", "");
+                          update("calendarHeaderPaperCustomName", "");
+                        }}
+                        onMaterialChange={(value) => update("calendarHeaderPaperDensity", value)}
+                        onCustomChange={(value) => update("calendarHeaderPaperCustomName", value)}
+                        typeFieldName="calendarHeaderPaperType"
+                        materialFieldName="calendarHeaderPaperDensity"
+                        customFieldName="calendarHeaderPaperCustomName"
+                        showValidation={showValidation}
+                        invalidType={showValidation && required.includes("calendarHeaderPaperType")}
+                        invalidMaterial={showValidation && required.includes("calendarHeaderPaperDensity")}
+                        invalidCustom={showValidation && required.includes("calendarHeaderPaperCustomName")}
+                      />
+                      <PaperFinishField label="Поверхность шапки" value={form.calendarHeaderPaperFinish} onChange={(value) => update("calendarHeaderPaperFinish", value)} />
+                      <Field label="Тип подвеса"><select value={form.wallMountType} className={selectClass} onChange={(e) => update("wallMountType", e.target.value)}><option>Ригель</option><option>Планка</option></select></Field>
+                      <Field label="Описание ригеля / планки" required><input data-field="wallMountDesc" className={fieldClass(showValidation && required.includes("wallMountDesc"))} value={form.wallMountDesc} onChange={(e) => update("wallMountDesc", e.target.value)} /></Field>
+                    </div>
+                  )}
+                  {form.calendarKind === "Настольный" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Field label="Основание с кашированием">
+                        <YesNo value={form.calendarBaseUseKash} onChange={(value) => {
+                          update("calendarBaseUseKash", value);
+                          if (value && !form.kashurovka.enabled) update("kashurovka", { ...form.kashurovka, enabled: true });
+                        }} />
+                      </Field>
+                      <Field label="Материал основания" required><select data-field="calendarBaseMaterial" value={form.calendarBaseMaterial} disabled={form.calendarBaseUseKash} className={`${selectFieldClass(showValidation && required.includes("calendarBaseMaterial"))} ${form.calendarBaseUseKash ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("calendarBaseMaterial", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.calendarBase.map((d) => <option key={d}>{d}</option>)}</select></Field>
+                      <div className={form.calendarBaseUseKash ? "opacity-50 pointer-events-none" : ""}><PaperFinishField value={form.calendarBaseFinish} onChange={(value) => update("calendarBaseFinish", value)} /></div>
+                      <div className={`md:col-span-2 ${form.calendarBaseUseKash ? "opacity-50 pointer-events-none" : ""}`}>
+                        <LaminationBlockComponent label="Ламинация основания" value={form.calendarBaseLamination} onChange={(value) => update("calendarBaseLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                      </div>
+                      {form.calendarBaseUseKash && <p className="md:col-span-2 text-xs text-slate-500">Основание настольного календаря задаётся через блок кашировки.</p>}
+                      <Field label="Количество биговок основания"><input type="number" min={0} max={20} className={inputClass} value={form.calendarBaseBigovkaLines} onChange={(e) => { update("calendarBaseBigovkaLines", e.target.value); if (e.target.value && e.target.value !== "0" && form.bigkovka) update("bigkovka", false); }} placeholder="0" /></Field>
+                      <Field label="Тип сетки"><select value={form.gridType} className={selectClass} onChange={(e) => update("gridType", e.target.value)}><option>Цифра</option><option>Офсет</option></select></Field>
+                      {form.gridType === "Цифра" ? (
+                        <>
+                          <Field label="Бумага сетки"><select value={form.calendarGridMaterial} className={selectClass} onChange={(e) => update("calendarGridMaterial", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.calendarGridDigital.map((d) => <option key={d}>{d}</option>)}</select></Field>
+                          <PaperFinishField value={form.calendarGridFinish} onChange={(value) => update("calendarGridFinish", value)} />
+                          <Field label="Цветность сетки"><select value={form.calendarGridColorMode} className={selectClass} onChange={(e) => update("calendarGridColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((d) => <option key={d}>{d}</option>)}</select></Field>
+                        </>
+                      ) : (
+                        <>
+                          <Field label="Бумага сетки"><select value={form.calendarGridMaterial} className={selectClass} onChange={(e) => update("calendarGridMaterial", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.calendarGridOffset.map((d) => <option key={d}>{d}</option>)}</select></Field>
+                          <PaperFinishField value={form.calendarGridFinish} onChange={(value) => update("calendarGridFinish", value)} />
+                          <Field label="Цвет офсета"><select value={form.calendarOffsetColor} className={selectClass} onChange={(e) => update("calendarOffsetColor", e.target.value)}>{CALENDAR_OFFSET_COLORS.map((d) => <option key={d}>{d}</option>)}</select></Field>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {form.calendarKind === "Карманный" && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Field label="Формат / размер" required>
+                        <select data-field="paperSize" value={form.paperSize} className={selectFieldClass(showValidation && required.includes("paperSize"))} onChange={(e) => update("paperSize", e.target.value)}>
+                          <option value="">— выберите —</option>{dicts.pocketCalendarSizes.map((s) => <option key={s}>{s}</option>)}
+                        </select>
+                        {form.paperSize === "Нестандартный" && <input data-field="paperSizeCustom" className={`${fieldClass(showValidation && required.includes("paperSizeCustom"))} mt-2`} placeholder="Например: 150×210 мм" value={form.paperSizeCustom} onChange={(e) => update("paperSizeCustom", e.target.value)} />}
+                      </Field>
+                      <PaperSelectionField
+                        label="Бумага / материал"
+                        typeValue={form.paperType}
+                        materialValue={form.density}
+                        customValue={form.paperCustomName}
+                        library={dicts.paperLibrary}
+                        onTypeChange={(value) => {
+                          update("paperType", value);
+                          update("density", "");
+                          update("paperCustomName", "");
+                        }}
+                        onMaterialChange={(value) => update("density", value)}
+                        onCustomChange={(value) => update("paperCustomName", value)}
+                        typeFieldName="paperType"
+                        materialFieldName="density"
+                        customFieldName="paperCustomName"
+                        showValidation={showValidation}
+                        invalidType={showValidation && required.includes("paperType")}
+                        invalidMaterial={showValidation && required.includes("density")}
+                        invalidCustom={showValidation && required.includes("paperCustomName")}
+                      />
+                      <PaperFinishField value={form.densityFinish} onChange={(value) => update("densityFinish", value)} />
+                      <Field label="Цветность" required><select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {bag && (
+                <div className="mt-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Field label="Высота" required><input data-field="bagHeight" type="number" className={fieldClass(showValidation && required.includes("bagHeight"))} value={form.bagHeight} onChange={(e) => update("bagHeight", e.target.value)} /></Field>
+                    <Field label="Ширина" required><input data-field="bagWidth" type="number" className={fieldClass(showValidation && required.includes("bagWidth"))} value={form.bagWidth} onChange={(e) => update("bagWidth", e.target.value)} /></Field>
+                    <Field label="Глубина" required><input data-field="bagDepth" type="number" className={fieldClass(showValidation && required.includes("bagDepth"))} value={form.bagDepth} onChange={(e) => update("bagDepth", e.target.value)} /></Field>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Field label="Цвет люверсов"><select value={form.bagEyeletColor} className={selectClass} onChange={(e) => update("bagEyeletColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagEyeletColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagEyeletColorCustom} onChange={(e) => update("bagEyeletColorCustom", e.target.value)} />}</Field>
+                    <Field label="Цвет ручек"><select value={form.bagHandleColor} className={selectClass} onChange={(e) => update("bagHandleColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagHandleColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagHandleColorCustom} onChange={(e) => update("bagHandleColorCustom", e.target.value)} />}</Field>
+                  </div>
+                </div>
+              )}
+
+              {!multiBlock && !notebook && !calendar && !envelope && !form.kashurovka.enabled && pt && (
+                <div className="mt-4 p-3 rounded-xl border border-slate-100 bg-slate-50"><LaminationBlockComponent label="Ламинация" value={form.lamination} onChange={(v: any) => update("lamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
+              )}
+            </Section>
+
+            <Section title="✂️ Послепечатная обработка">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {dicts.postProcessing.map((item) => (
+                  <label key={item} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${form.postProcessing.includes(item) ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 hover:border-slate-300 text-slate-700"}`}>
+                    <input type="checkbox" checked={form.postProcessing.includes(item)} onChange={() => togglePostProcessing(item)} className="accent-blue-600" />
+                    <span className="text-sm">{item}</span>
+                  </label>
+                ))}
+              </div>
+              {(form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && <div className="mt-3"><Field label="Цвет фольги"><input type="text" className={`${inputClass} max-w-xs`} placeholder="Например: золото, серебро, красная..." value={form.foilColor} onChange={(e) => update("foilColor", e.target.value)} /></Field></div>}
+              {form.postProcessing.includes("УФ-лак") && <div className="mt-3"><Field label="Вид УФ-лака"><div className="flex gap-2">{["Обычный", "Текстурный"].map((t) => (<button key={t} type="button" onClick={() => update("uvType", t)} className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${form.uvType === t ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>{t}</button>))}</div></Field></div>}
+            </Section>
+
+            <Section title="📐 Биговка">
+              <div className={`flex items-center gap-4 flex-wrap ${deskCalendarBigovkaActive ? "opacity-50" : ""}`}><YesNo value={form.bigkovka} onChange={(v) => update("bigkovka", v)} disabled={deskCalendarBigovkaActive} />{form.bigkovka && <div className="flex items-center gap-2"><label className="text-sm text-slate-600">Количество линий:</label><input type="number" min={1} max={20} disabled={deskCalendarBigovkaActive} className={`${inputClass} w-20 ${deskCalendarBigovkaActive ? "opacity-50 cursor-not-allowed" : ""}`} value={form.bigkovkaLines} onChange={(e) => update("bigkovkaLines", e.target.value)} placeholder="1" /></div>}{deskCalendarBigovkaActive && <p className="text-xs text-slate-500">Биговка уже указана в настройках основания настольного календаря.</p>}</div>
+            </Section>
+
+            <Section title="🗂 Кашировка" accent="from-violet-50 to-white">
+              <KashurovkaBlockComponent value={form.kashurovka} onChange={(v: any) => {
+                update("kashurovka", v);
+                if (!v.enabled) {
+                  if (form.coverUseKash) update("coverUseKash", false);
+                  if (form.calendarBaseUseKash) update("calendarBaseUseKash", false);
+                }
+              }} paperProfiles={dicts.paperProfiles} paperLibrary={dicts.paperLibrary} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} colors={dicts.colors} showValidation={showValidation} requiredFields={required} />
+            </Section>
+
+            <Section title="📚 Сшивка / Переплёт">
+              <div className="space-y-4">
+                <YesNo value={form.binding} onChange={(v) => update("binding", v)} />
+                {form.binding && (
+                  <div className="space-y-4">
+                    <Field label="Тип сшивки"><div className="flex flex-wrap gap-2">{dicts.bindingTypes.map((b) => (<button key={b} type="button" onClick={() => update("bindingType", b)} className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${form.bindingType === b ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>{b}</button>))}</div></Field>
+                    {form.bindingType === "Скоба" && (
+                      <div className="pl-3 border-l-2 border-blue-100 space-y-3">
+                        <Field label="Количество скоб"><div className="flex gap-2">{["Одна", "Две"].map((cnt) => (<button key={cnt} type="button" onClick={() => update("stapleCount", cnt)} className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${form.stapleCount === cnt ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>{cnt}</button>))}</div></Field>
+                        {form.stapleCount === "Одна" && <Field label="Расположение скобы"><div className="flex gap-2">{["Лево", "Право"].map((pos) => (<button key={pos} type="button" onClick={() => update("staplePosition", pos)} className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${form.staplePosition === pos ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>{pos}</button>))}</div></Field>}
+                      </div>
+                    )}
+                    {form.bindingType === "Пружина" && (
+                      <div className="pl-3 border-l-2 border-blue-100 space-y-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <Field label="Цвет пружины"><select value={form.springColor} className={selectClass} onChange={(e) => update("springColor", e.target.value)}><option value="">— выберите —</option>{SPRING_COLORS.map((c) => <option key={c}>{c}</option>)}</select>{form.springColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} placeholder="Укажите цвет" value={form.springColorCustom} onChange={(e) => update("springColorCustom", e.target.value)} />}</Field>
+                          <Field label="Диаметр пружины">
+                            <select value={form.springDiameter} className={selectClass} onChange={(e) => update("springDiameter", e.target.value)}><option value="">— выберите —</option>{SPRING_DIAMETERS.map((d) => <option key={d}>{d}</option>)}</select>
+                            {springSuggestion && <p className="text-xs text-slate-500 mt-1">Диаметр подбирается автоматически по толщине блока и обложки, но его можно скорректировать вручную.</p>}
+                            {springDiameterIsCustomOrder && <p className="text-xs font-semibold text-amber-700 mt-1">Внимание, пружина ЗАКАЗНАЯ, перфорация 2:1</p>}
+                          </Field>
+                          <Field label="Расположение">
+                            <select value={form.springPosition} className={selectClass} onChange={(e) => update("springPosition", e.target.value)}>
+                              <option>По широкой стороне</option>
+                              <option>По узкой стороне</option>
+                            </select>
+                          </Field>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <Field label="Скрытая пружина"><YesNo value={form.springHidden} onChange={(v) => update("springHidden", v)} /></Field>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            <Section title="🔗 Ссылка на файлы заказа" accent="from-orange-50 to-amber-50">
+              <input type="text" className={`${inputClass} border-orange-200 bg-orange-50/70 focus:ring-orange-400`} placeholder="Укажите путь к папке заказа, например D:\\Заказы\\2249" value={form.fileLink} onChange={(e) => update("fileLink", e.target.value)} />
+            </Section>
+
+            <Section title="📝 Дополнительные примечания">
+              <textarea rows={3} className={`${inputClass} resize-none`} placeholder="Любые дополнительные требования, пожелания..." value={form.notes} onChange={(e) => update("notes", e.target.value)} />
+            </Section>
+
+            <ShortTZPanel form={form} />
+
+            <div className="flex flex-wrap gap-3 pb-8">
+              <button onClick={() => validateThen(handlePreview)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors shadow-sm"><span>👁</span> Предпросмотр</button>
+              <button onClick={() => validateThen(() => setShowSend(true))} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span>📊</span> Отправить в таблицу</button>
+              <button onClick={() => validateThen(handleSave)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span>💾</span> Сохранить ТЗ в TXT</button>
+              {savedMsg && <div className={`self-center rounded-xl border px-4 py-2 text-sm font-medium ${savedMsg.startsWith("Ошибка") ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"}`}>{savedMsg}</div>}
+              {!isFormValid && <p className="text-xs text-slate-500 self-center">* Заполните обязательные поля</p>}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ СПРАВОЧНИКИ ══════════════════════════════════════════════════════ */}
+        {activeTab === "dicts" && (
+          <div className="space-y-4 pb-6">
+            {isDictLocked ? (
+              <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm">
+                <span className="text-5xl mb-4">{"\ud83d\udd12"}</span>
+                <h2 className="text-xl font-bold text-slate-800 mb-2">{"\u0421\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0438 \u0437\u0430\u0449\u0438\u0449\u0435\u043d\u044b"}</h2>
+                <p className="text-sm text-slate-500 mb-6">{"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c \u0434\u043b\u044f \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f"}</p>
+                <div className="flex flex-col gap-2 items-center">
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      placeholder={"\u041f\u0430\u0440\u043e\u043b\u044c"}
+                      className={inputClass}
+                      style={{ width: '200px' }}
+                      value={dictPassword}
+                      onChange={(e) => {
+                        setDictPassword(e.target.value);
+                        setPasswordError("");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          if (dictPassword === "123321") {
+                            setIsDictLocked(false);
+                            setPasswordError("");
+                          } else {
+                            setPasswordError("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c!");
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        if (dictPassword === "123321") {
+                          setIsDictLocked(false);
+                          setPasswordError("");
+                        } else {
+                          setPasswordError("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c!");
+                        }
+                      }}
+                      className="bg-indigo-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+                    >
+                      {"\u0412\u043e\u0439\u0442\u0438"}
+                    </button>
+                  </div>
+                  {passwordError && <p className="text-sm font-bold text-red-500">{passwordError}</p>}
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                  <span className="text-2xl">{"\u2699\ufe0f"}</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-indigo-800">{"\u0420\u0435\u0434\u0430\u043a\u0442\u043e\u0440 \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u043e\u0432"}</p>
+                    <p className="text-xs text-indigo-600 mt-0.5">{"\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u0445\u0440\u0430\u043d\u044f\u0442\u0441\u044f \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u0438 \u043c\u043e\u0433\u0443\u0442 \u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u0442\u044c\u0441\u044f \u0447\u0435\u0440\u0435\u0437 \u0441\u043a\u0440\u044b\u0442\u044b\u0439 \u043b\u0438\u0441\u0442 __CONFIG__ \u0432 Google \u0422\u0430\u0431\u043b\u0438\u0446\u0435. \u041f\u043e\u0438\u0441\u043a \u043d\u0438\u0436\u0435 \u0444\u0438\u043b\u044c\u0442\u0440\u0443\u0435\u0442 \u0438\u043c\u0435\u043d\u043d\u043e \u0433\u0440\u0443\u043f\u043f\u044b \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u043e\u0432 \u043f\u043e \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044e."}</p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <span className="text-sm font-bold text-indigo-900">{"\u0418\u043c\u044f \u043b\u0438\u0441\u0442\u0430 \u0432 Google \u0422\u0430\u0431\u043b\u0438\u0446\u0435:"}</span>
+                      <input className="px-3 py-1.5 rounded-lg border border-indigo-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" value={sheetName} onChange={(e) => setSheetName(e.target.value)} />
+                    </div>
+                    {dictSyncMsg && <p className={`mt-3 text-xs font-medium ${dictSyncMsg.startsWith("Ошибка") || dictSyncMsg.startsWith("Не удалось") ? "text-red-600" : "text-emerald-700"}`}>{dictSyncMsg}</p>}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button onClick={() => loadDictsFromCloud(true)} disabled={dictSyncBusy !== "idle"} className="text-xs px-3 py-1.5 rounded-lg border border-sky-300 text-sky-700 hover:bg-sky-100 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">{dictSyncBusy === "loading" ? "⟳ Загрузка..." : "☁ Загрузить из Google"}</button>
+                    <button onClick={saveDictsToCloud} disabled={dictSyncBusy !== "idle"} className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">{dictSyncBusy === "saving" ? "⟳ Сохранение..." : "☁ Сохранить в Google"}</button>
+                    <button onClick={() => { setIsDictLocked(true); setDictPassword(""); }} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap">{"\ud83d\udd12 \u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0434\u043e\u0441\u0442\u0443\u043f"}</button>
+                    <button onClick={resetDicts} className="text-xs px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 hover:bg-indigo-100 transition-colors whitespace-nowrap">{"\u21ba \u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0432\u0441\u0451"}</button>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">{"\u041f\u043e\u0438\u0441\u043a \u0433\u0440\u0443\u043f\u043f\u044b \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0430"}</label>
+                  <input
+                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    placeholder={"\u041d\u0430\u043f\u0440\u0438\u043c\u0435\u0440: \u043b\u0430\u043c\u0438\u043d\u0430\u0446\u0438\u044f, \u0431\u0443\u043c\u0430\u0433\u0430, \u043a\u043e\u043d\u0432\u0435\u0440\u0442\u044b..."}
+                    value={dictSectionQuery}
+                    onChange={(e) => setDictSectionQuery(e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredDictSections.map((section) => (
+                    <Fragment key={section.key}>{section.element}</Fragment>
+                  ))}
+                </div>
+                {filteredDictSections.length === 0 && (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center text-slate-500">
+                    {"\u041f\u043e\u0434\u0445\u043e\u0434\u044f\u0449\u0438\u0435 \u0433\u0440\u0443\u043f\u043f\u044b \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u043e\u0432 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b."}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </main>
+
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowPreview(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-slate-200 z-10" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+              <h2 className="font-semibold text-slate-800 flex items-center gap-2"><span>👁</span> Предпросмотр ТЗ</h2>
+              <div className="flex gap-2">
+                <button onClick={async () => { await handleSave(); }} disabled={!isFormValid} className={`text-sm px-4 py-1.5 rounded-lg font-medium transition-colors ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}>💾 Сохранить TXT</button>
+                <button onClick={() => setShowPreview(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors text-lg">✕</button>
+              </div>
+            </div>
+            <pre className="p-5 text-xs font-mono text-slate-700 whitespace-pre-wrap leading-relaxed overflow-auto flex-1">{previewText}</pre>
+          </div>
+        </div>
+      )}
+
+      {/* МОДАЛКА ОТПРАВКИ */}
+      {showSend && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { if(sendState === "idle" || sendState === "done" || sendState === "error") setShowSend(false); }}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 z-10 p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 className="font-semibold text-slate-800 text-lg mb-4 flex items-center gap-2"><span>📊</span> Отправить в таблицу</h2>
+            
+            {sendState === "idle" && (
+              <>
+                <p className="text-sm text-slate-600 mb-4">Данные заказа будут отправлены в Google Таблицу. Проверьте ключевые поля:</p>
+                <div className="space-y-2 text-sm mb-6">
+                  <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">№ заказа</span><span className="font-medium text-slate-800">{form.orderNumber || "—"}</span></div>
+                  <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Заказчик</span><span className="font-medium text-slate-800">{form.clientName || "—"}</span></div>
+                  <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Изделие</span><span className="font-medium text-slate-800">{form.productType === "Другое..." ? form.productTypeCustom : form.productType || "—"}</span></div>
+                  <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Тираж</span><span className="font-medium text-slate-800">{form.quantity ? `${formatQuantityText(form.quantity)} шт.` : "—"}</span></div>
+                  <div className="flex justify-between py-1"><span className="text-slate-500">Срок</span><span className="font-medium text-slate-800">{form.deadline ? `${form.deadline.split("-").reverse().join(".")}${form.deadlineTime ? " " + form.deadlineTime : ""}` : "—"}</span></div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={handleRealSend} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition-colors shadow">Отправить</button>
+                  <button onClick={() => setShowSend(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">Отмена</button>
+                </div>
+              </>
+            )}
+
+            {sendState === "loading" && (
+              <div className="flex flex-col items-center py-8 gap-4">
+                <div className="relative w-14 h-14"><div className="absolute inset-0 rounded-full border-4 border-indigo-100" /><div className="absolute inset-0 rounded-full border-4 border-indigo-600 border-t-transparent animate-spin" /></div>
+                <p className="text-sm text-slate-600 font-medium">Отправка данных…</p>
+              </div>
+            )}
+
+            {sendState === "done" && (
+              <div className="flex flex-col items-center py-8 gap-4">
+                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-3xl">✅</div>
+                <p className="text-sm text-emerald-700 font-semibold">Данные успешно отправлены!</p>
+                <button onClick={() => { setSendState("idle"); setShowSend(false); }} className="px-6 py-2 w-full rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Отлично</button>
+              </div>
+            )}
+
+            {sendState === "error" && (
+              <div className="flex flex-col items-center py-8 gap-4">
+                <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center text-3xl">❌</div>
+                <p className="text-sm text-red-600 font-semibold">Ошибка отправки. Попробуйте снова.</p>
+                <div className="flex gap-2 w-full">
+                  <button onClick={handleRealSend} className="flex-1 py-2 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors">Повторить</button>
+                  <button onClick={() => { setSendState("idle"); setShowSend(false); }} className="px-6 py-2 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">Закрыть</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowResetConfirm(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 z-10 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-white">
+              <h2 className="font-semibold text-slate-800 text-lg">Очистить форму?</h2>
+              <p className="text-sm text-slate-500 mt-1">Все введённые данные будут удалены.</p>
+            </div>
+            <div className="px-5 py-4 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowResetConfirm(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">Отмена</button>
+              <button type="button" onClick={confirmReset} className="px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors">Очистить</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getRequiredFields(form: FormData): string[] {
+  const errors: string[] = [];
+  const product = resolveProductName(form);
+  const pocketCalendar = isPocketCalendar(form);
+  if (!form.clientName.trim()) errors.push("clientName");
+  if (!form.managerName) errors.push("managerName");
+  if (!form.deadline || form.deadline < getTodayLocalIso()) errors.push("deadline");
+  if (isDeadlineTimeInPast(form.deadline, form.deadlineTime)) errors.push("deadlineTime");
+  form.subcontractWorks.forEach((work) => {
+    const hasAnyValue = !!work.note.trim() || !!work.date || !!work.time;
+    if (!hasAnyValue) return;
+    if (!work.note.trim()) errors.push("subcontractNote");
+    if (!work.date) errors.push("subcontractDate");
+    if (!work.time) errors.push("subcontractTime");
+    else if (isDateTimeInPast(work.date, work.time)) errors.push("subcontractTimePast");
+  });
+  if (!form.productType) errors.push("productType");
+  if (form.productType === "Другое..." && !product) errors.push("productTypeCustom");
+  if (!form.quantity) errors.push("quantity");
+  if (pocketCalendar) {
+    if (!form.paperSize) errors.push("paperSize");
+    if (form.paperSize === "Нестандартный" && !form.paperSizeCustom.trim()) errors.push("paperSizeCustom");
+    if (!form.kashurovka.enabled) {
+      if (!form.paperType) errors.push("paperType");
+      else if (form.paperType === "Дизайнерская" ? !form.paperCustomName.trim() : !form.density) {
+        errors.push(form.paperType === "Дизайнерская" ? "paperCustomName" : "density");
+      }
+      if (!form.colorMode) errors.push("colorMode");
+    }
+  } else if (isEnvelope(form.productType)) {
+    if (!form.envelopeSize) errors.push("envelopeSize");
+    if (form.envelopeSize === "Нестандартный" && !form.envelopeSizeCustom.trim()) errors.push("envelopeSizeCustom");
+  } else if (isBusinessCard(form.productType)) {
+    if (!form.businessCardSize) errors.push("businessCardSize");
+    if (form.businessCardSize === "Нестандартный" && !form.businessCardSizeCustom.trim()) errors.push("businessCardSizeCustom");
+  } else if (isCatalog(form.productType)) {
+    if (!form.catalogFormat) errors.push("catalogFormat");
+    if (form.catalogFormat === "Нестандартный" && !form.catalogFormatCustom.trim()) errors.push("catalogFormatCustom");
+  } else if (!isMultiBlock(form.productType) && !isCalendar(form.productType) && !isBag(form.productType) && !isSticker(form.productType)) {
+    if (!form.paperSize) errors.push("paperSize");
+    if (form.paperSize === "Нестандартный" && !form.paperSizeCustom.trim()) errors.push("paperSizeCustom");
+  }
+  if (isMultiBlock(form.productType) || isNotebook(form.productType)) {
+    if (isNotebook(form.productType) && !form.blockPages) errors.push("blockPages");
+    if (!form.coverUseKash) {
+      if (!form.coverPaperType) errors.push("coverPaperType");
+      else if (form.coverPaperType === "Дизайнерская" ? !form.coverPaperCustomName.trim() : !form.coverDensity) {
+        errors.push(form.coverPaperType === "Дизайнерская" ? "coverPaperCustomName" : "coverDensity");
+      }
+    }
+    if (!form.coverUseKash && !form.coverColor) errors.push("coverColor");
+    if (!form.blockPaperType) errors.push("blockPaperType");
+    else if (form.blockPaperType === "Дизайнерская" ? !form.blockPaperCustomName.trim() : !form.blockDensity) {
+      errors.push(form.blockPaperType === "Дизайнерская" ? "blockPaperCustomName" : "blockDensity");
+    }
+    if (!form.blockColor) errors.push("blockColor");
+  } else if (isCalendar(form.productType)) {
+    if (!form.calendarKind) errors.push("calendarKind");
+    if (form.calendarKind === "Настенный" && !form.adBlocks) errors.push("adBlocks");
+    if (form.calendarKind === "Настенный") {
+      if (!form.calendarHeaderPaperType) errors.push("calendarHeaderPaperType");
+      else if (form.calendarHeaderPaperType === "Дизайнерская" ? !form.calendarHeaderPaperCustomName.trim() : !form.calendarHeaderPaperDensity) {
+        errors.push(form.calendarHeaderPaperType === "Дизайнерская" ? "calendarHeaderPaperCustomName" : "calendarHeaderPaperDensity");
+      }
+    }
+    if (form.calendarKind === "Настенный" && !form.wallMountDesc.trim()) errors.push("wallMountDesc");
+    if (form.calendarKind === "Настольный" && !form.calendarBaseUseKash && !form.calendarBaseMaterial) errors.push("calendarBaseMaterial");
+  } else if (isBag(form.productType)) {
+    if (!form.density) errors.push("density");
+    if (!form.colorMode) errors.push("colorMode");
+    if (!form.bagHeight) errors.push("bagHeight");
+    if (!form.bagWidth) errors.push("bagWidth");
+    if (!form.bagDepth) errors.push("bagDepth");
+  } else if (isSticker(form.productType)) {
+    if (!form.stickerMaterial) errors.push("stickerMaterial");
+    if (!form.colorMode) errors.push("colorMode");
+  } else if (!isEnvelope(form.productType) && !isCalendar(form.productType) && !form.kashurovka.enabled) {
+    if (!form.paperType) errors.push("paperType");
+    else if (form.paperType === "Дизайнерская" ? !form.paperCustomName.trim() : !form.density) {
+      errors.push(form.paperType === "Дизайнерская" ? "paperCustomName" : "density");
+    }
+    if (!form.colorMode) errors.push("colorMode");
+  }
+  if (form.kashurovka.enabled) {
+    if (form.kashurovka.connectionType === "Слим-каширование") {
+      if (!form.kashurovka.slimPaperTopPaperType) errors.push("kashSlimPaperTopPaperType");
+      else if (form.kashurovka.slimPaperTopPaperType === "Дизайнерская" ? !form.kashurovka.slimPaperTopPaperCustomName.trim() : !form.kashurovka.slimPaperTopPaperDensity) {
+        errors.push(form.kashurovka.slimPaperTopPaperType === "Дизайнерская" ? "kashSlimPaperTopPaperCustomName" : "kashSlimPaperTopPaperDensity");
+      }
+      if (!form.kashurovka.slimPaperBottomPaperType) errors.push("kashSlimPaperBottomPaperType");
+      else if (form.kashurovka.slimPaperBottomPaperType === "Дизайнерская" ? !form.kashurovka.slimPaperBottomPaperCustomName.trim() : !form.kashurovka.slimPaperBottomPaperDensity) {
+        errors.push(form.kashurovka.slimPaperBottomPaperType === "Дизайнерская" ? "kashSlimPaperBottomPaperCustomName" : "kashSlimPaperBottomPaperDensity");
+      }
+    } else {
+      if (!form.kashurovka.baseType) errors.push("kashBaseType");
+      if (!form.kashurovka.linerPaperType) errors.push("kashLinerPaperType");
+      else if (form.kashurovka.linerPaperType === "Дизайнерская" ? !form.kashurovka.linerPaperCustomName.trim() : !form.kashurovka.linerPaperDensity) {
+        errors.push(form.kashurovka.linerPaperType === "Дизайнерская" ? "kashLinerPaperCustomName" : "kashLinerPaperDensity");
+      }
+      if (form.kashurovka.forsacEnabled) {
+        if (!form.kashurovka.forsacPaperType) errors.push("kashForsacPaperType");
+        else if (form.kashurovka.forsacPaperType === "Дизайнерская" ? !form.kashurovka.forsacPaperCustomName.trim() : !form.kashurovka.forsacPaperDensity) {
+          errors.push(form.kashurovka.forsacPaperType === "Дизайнерская" ? "kashForsacPaperCustomName" : "kashForsacPaperDensity");
+        }
+      }
+    }
+  }
+  if (form.binding && form.bindingType === "Пружина" && !form.springDiameter) errors.push("springDiameter");
+  if ((form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && !form.foilColor.trim()) errors.push("foilColor");
+  return Array.from(new Set(errors));
+}
+
+const REQUIRED_FIELD_LABELS: Record<string, string> = {
+  clientName: "Заказчик",
+  managerName: "Менеджер",
+  deadline: "Дата сдачи",
+  subcontractNote: "Информация подряда",
+  subcontractDate: "Дата подряда",
+  subcontractTime: "Время подряда",
+  subcontractTimePast: "Нельзя указывать прошедшее время подряда",
+  productType: "Тип изделия",
+  productTypeCustom: "Свой тип изделия",
+  quantity: "Тираж",
+  paperSize: "Формат / размер",
+  paperSizeCustom: "Нестандартный формат",
+  businessCardSize: "Формат визиток",
+  businessCardSizeCustom: "Нестандартный формат визиток",
+  envelopeSize: "Формат конверта",
+  envelopeSizeCustom: "Нестандартный формат конверта",
+  paperType: "Тип бумаги",
+  paperCustomName: "Название дизайнерской бумаги",
+  density: "Материал / бумага",
+  colorMode: "Цветность",
+  colorProof: "Цветопроба",
+  pageCount: "Количество страниц",
+  catalogFormat: "Формат продукции",
+  catalogFormatCustom: "Нестандартный формат продукции",
+  blockPages: "Страницы в блоке",
+  coverDensity: "Плотность бумаги обложки",
+  coverPaperType: "Тип бумаги обложки",
+  coverPaperCustomName: "Название дизайнерской бумаги обложки",
+  coverColor: "Цветность обложки",
+  blockDensity: "Плотность бумаги блока",
+  blockPaperType: "Тип бумаги блока",
+  blockPaperCustomName: "Название дизайнерской бумаги блока",
+  blockColor: "Цветность блока",
+  calendarKind: "Вид календаря",
+  adBlocks: "Рекламные блоки",
+  calendarHeaderPaperType: "Бумага шапки",
+  calendarHeaderPaperDensity: "Плотность шапки",
+  calendarHeaderPaperCustomName: "Название дизайнерской бумаги шапки",
+  wallMountDesc: "Описание ригеля / планки",
+  calendarBaseMaterial: "Материал основания",
+  bagHeight: "Высота пакета",
+  bagWidth: "Ширина пакета",
+  bagDepth: "Глубина пакета",
+  stickerMaterial: "Материал наклейки",
+  kashBaseType: "Основа кашировки",
+  kashLinerPaperType: "Тип бумаги лайнера",
+  kashLinerPaperDensity: "Плотность лайнера",
+  kashLinerPaperCustomName: "Название дизайнерской бумаги лайнера",
+  kashForsacPaperType: "Тип бумаги форзаца",
+  kashForsacPaperDensity: "Плотность форзаца",
+  kashForsacPaperCustomName: "Название дизайнерской бумаги форзаца",
+  kashSlimPaperTopPaperType: "Тип бумаги 1 в слим-кашировке",
+  kashSlimPaperTopPaperDensity: "Плотность бумаги 1 в слим-кашировке",
+  kashSlimPaperTopPaperCustomName: "Название дизайнерской бумаги 1 в слим-кашировке",
+  kashSlimPaperBottomPaperType: "Тип бумаги 2 в слим-кашировке",
+  kashSlimPaperBottomPaperDensity: "Плотность бумаги 2 в слим-кашировке",
+  kashSlimPaperBottomPaperCustomName: "Название дизайнерской бумаги 2 в слим-кашировке",
+  springDiameter: "Диаметр пружины",
+  foilColor: "Цвет фольги",
+  deadlineTime: "Время сдачи",
+};
+
+function CompactApp() {
+  return null;
+}
+
+export default LegacyApp;
+
