@@ -28,6 +28,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Restore Google service account key
+        shell: pwsh
+        env:
+          GOOGLE_KEY_JSON: ${{ secrets.GOOGLE_KEY_JSON }}
+        run: |
+          if (-not $env:GOOGLE_KEY_JSON) {
+            throw "Missing GOOGLE_KEY_JSON secret."
+          }
+          Set-Content -Path electron-app/google-key.json -Value $env:GOOGLE_KEY_JSON -Encoding utf8
+
       - name: Build and publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
