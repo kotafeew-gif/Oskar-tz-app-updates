@@ -144,6 +144,7 @@ function buildOrangeRuns(text) {
 }
 
 let mainWindow;
+let latestUpdateState = null;
 let updatePromptOpen = false;
 let updateRestartPromptOpen = false;
 
@@ -237,6 +238,96 @@ async function checkForAppUpdates() {
   } catch (error) {
     console.error('Ошибка проверки обновлений:', error);
   }
+}
+
+function normalizeReleaseNotes(notes) {
+  if (Array.isArray(notes)) {
+    return notes
+      .map((item) => (typeof item === 'string' ? item : item?.note || ''))
+      .filter(Boolean)
+      .join('\n\n')
+      .trim();
+  }
+
+  if (typeof notes === 'string') {
+    return notes.trim();
+  }
+
+  return '';
+}
+
+function sendUpdateState(payload) {
+  latestUpdateState = payload ? { ...payload } : null;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update-status', latestUpdateState);
+  }
+}
+
+function clearUpdateProgress() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setProgressBar(-1);
+  }
+}
+
+function setupVisualAutoUpdater() {
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowPrerelease = false;
+
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateState({ status: 'checking' });
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    sendUpdateState({ status: 'idle' });
+    clearUpdateProgress();
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    sendUpdateState({
+      status: 'available',
+      version: info.version,
+      releaseName: info.releaseName || '',
+      notes: normalizeReleaseNotes(info.releaseNotes),
+    });
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    clearUpdateProgress();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const progressValue = progress.percent > 0 && progress.percent < 100 ? progress.percent / 100 : 0;
+      mainWindow.setProgressBar(progressValue);
+    }
+
+    sendUpdateState({
+      status: 'downloading',
+      percent: progress.percent,
+      transferred: progress.transferred,
+      total: progress.total,
+      bytesPerSecond: progress.bytesPerSecond,
+    });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    clearUpdateProgress();
+    sendUpdateState({
+      status: 'downloaded',
+      version: info.version,
+      releaseName: info.releaseName || '',
+      notes: normalizeReleaseNotes(info.releaseNotes),
+    });
+  });
+
+  autoUpdater.on('error', (error) => {
+    clearUpdateProgress();
+    sendUpdateState({
+      status: 'error',
+      error: error?.message || String(error),
+    });
+    console.error('AutoUpdater error:', error);
+  });
 }
 
 function createSheetsClient() {
@@ -334,11 +425,16 @@ function createWindow() {
     // В режиме разработки грузим с локального сервера Vite
     mainWindow.loadURL('http://localhost:5173');
   }
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (latestUpdateState) {
+      mainWindow.webContents.send('update-status', latestUpdateState);
+    }
+  });
 }
 
 app.whenReady().then(() => {
   createWindow();
-  setupAutoUpdater();
+  setupVisualAutoUpdater();
   if (app.isPackaged) {
     setTimeout(() => {
       checkForAppUpdates();
@@ -346,6 +442,24 @@ app.whenReady().then(() => {
   }
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+ipcMain.handle('download-update', async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('install-update', async () => {
+  try {
+    autoUpdater.quitAndInstall();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
 
 ipcMain.handle('save-txt', async (event, { text, filename, preferredDir }) => {
   try {

@@ -63,31 +63,4 @@ jobs:
         if: steps.version_check.outputs.release == 'True' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run dist -- --publish never
-
-      - name: Create GitHub release
-        if: steps.version_check.outputs.release == 'True' || github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APP_VERSION: ${{ steps.version_check.outputs.version }}
-        run: |
-          $tag = "v$env:APP_VERSION"
-          $exe = Join-Path "release" "Оскар-Принт ТЗ Setup $env:APP_VERSION.exe"
-          $blockmap = "$exe.blockmap"
-          $latest = Join-Path "release" "latest.yml"
-
-          if (-not (Test-Path $exe)) { throw "Missing installer: $exe" }
-          if (-not (Test-Path $blockmap)) { throw "Missing blockmap: $blockmap" }
-          if (-not (Test-Path $latest)) { throw "Missing latest.yml: $latest" }
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git rev-parse --verify --quiet $tag *> $null
-          if ($LASTEXITCODE -ne 0) {
-            git tag "$tag"
-            git push origin "$tag"
-          }
-
-          gh release create "$tag" "$exe" "$blockmap" "$latest" --title "$tag" --notes "Автоматический релиз $tag"
+        run: npm run dist -- --publish always

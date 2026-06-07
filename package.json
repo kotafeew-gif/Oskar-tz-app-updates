@@ -1,7 +1,7 @@
 {
   "name": "oscar-print-app",
   "private": true,
-  "version": "2.4.4",
+  "version": "2.4.5",
   "author": "YourName",
   "description": "TZ Oscar-Print",
   "main": "electron-app/main.mjs",
@@ -37,6 +37,7 @@
   },
   "build": {
     "appId": "com.oskarprint.tz",
+    "artifactName": "oscar-print-app-setup-${version}.${ext}",
     "productName": "Оскар-Принт ТЗ",
     "directories": {
       "output": "release"
