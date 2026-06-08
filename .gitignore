@@ -5,3 +5,4 @@ release/
 electron-app/google-key.json
 .DS_Store
 *.log
+.ssh/

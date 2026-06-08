@@ -11,6 +11,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "electron .",
+    "release": "powershell -ExecutionPolicy Bypass -File .\\scripts\\release.ps1",
     "clean:release": "node -e \"const fs=require('fs'); const path=require('path'); const dir='release'; if (!fs.existsSync(dir)) process.exit(0); for (const name of fs.readdirSync(dir)) { if (name === 'latest.yml' || name.endsWith('.exe') || name.endsWith('.exe.blockmap')) fs.rmSync(path.join(dir, name), { force: true, recursive: true }); }\"",
     "pack": "npm run clean:release && vite build && electron-builder --dir",
     "dist": "npm run clean:release && vite build && electron-builder"

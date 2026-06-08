@@ -1,8 +1,9 @@
 ﻿import { Fragment, useEffect, useRef, useState } from "react";
+import packageJson from "../package.json";
 
 // ─── Константы справочников ─────────────────────────────────────────────────
 
-const APP_VERSION = "2.4.6";
+const APP_VERSION = packageJson.version;
 
 const DEFAULT_PRODUCT_TYPES = [
   "Визитки", "Листовки", "Буклеты", "Флаеры", "Брошюры", "Каталоги",
@@ -3382,4 +3383,6 @@ function CompactApp() {
 }
 
 export default LegacyApp;
+
+
 
