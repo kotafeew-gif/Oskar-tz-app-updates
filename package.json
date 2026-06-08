@@ -1,7 +1,7 @@
 {
   "name": "oscar-print-app",
   "private": true,
-  "version": "2.4.5",
+  "version": "2.4.6",
   "author": "YourName",
   "description": "TZ Oscar-Print",
   "main": "electron-app/main.mjs",
@@ -11,8 +11,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "electron .",
-    "pack": "vite build && electron-builder --dir",
-    "dist": "vite build && electron-builder"
+    "clean:release": "node -e \"const fs=require('fs'); const path=require('path'); const dir='release'; if (!fs.existsSync(dir)) process.exit(0); for (const name of fs.readdirSync(dir)) { if (name === 'latest.yml' || name.endsWith('.exe') || name.endsWith('.exe.blockmap')) fs.rmSync(path.join(dir, name), { force: true, recursive: true }); }\"",
+    "pack": "npm run clean:release && vite build && electron-builder --dir",
+    "dist": "npm run clean:release && vite build && electron-builder"
   },
   "dependencies": {
     "clsx": "2.1.1",

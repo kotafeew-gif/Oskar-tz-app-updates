@@ -2,11 +2,11 @@
 
 // ─── Константы справочников ─────────────────────────────────────────────────
 
-const APP_VERSION = "2.4.5";
+const APP_VERSION = "2.4.6";
 
 const DEFAULT_PRODUCT_TYPES = [
   "Визитки", "Листовки", "Буклеты", "Флаеры", "Брошюры", "Каталоги",
-  "Календари", "Плакаты", "Наклейки", "Открытка", "Конверты", "Бланки",
+  "Воблеры", "Бейджи", "Календари", "Плакаты", "Наклейки", "Открытка", "Конверты", "Бланки",
   "Папки", "Блокноты", "Бумажные Пакеты", "Другое...",
 ];
 
@@ -66,6 +66,7 @@ const DEFAULT_COLORS = [
   "4+0 (полноцвет, одна сторона)", "4+4 (полноцвет, две стороны)",
   "4+1 (полноцвет + чб)", "Пантон (Pantone)",
 ];
+const AUTO_REVERSE_COLOR = "4+4 (полноцвет, две стороны)";
 
 const STICKER_COLOR_MODES = ["1+0", "4+0", "5+0"];
 
@@ -246,80 +247,45 @@ function mergeUniqueStrings(primary: string[], fallback: string[]): string[] {
   return result;
 }
 
-function compareVersions(a?: string | null, b?: string | null): number {
-  const left = String(a || "").split(".").map((part) => parseInt(part, 10) || 0);
-  const right = String(b || "").split(".").map((part) => parseInt(part, 10) || 0);
-  const maxLength = Math.max(left.length, right.length);
+function normalizeStringList(items: unknown[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
 
-  for (let i = 0; i < maxLength; i += 1) {
-    const diff = (left[i] || 0) - (right[i] || 0);
-    if (diff !== 0) return diff > 0 ? 1 : -1;
-  }
+  items.forEach((item) => {
+    const value = typeof item === "string" ? item.trim() : "";
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    result.push(value);
+  });
 
-  return 0;
+  return result;
 }
 
-function normalizeDictsPayload(payload: any, fallback?: Partial<Dicts>): Dicts {
-  const fallbackPaperProfiles = fallback?.paperProfiles || DEFAULT_PAPER_PROFILES;
-  const fallbackPaperLibrary = fallback?.paperLibrary || DEFAULT_PAPER_LIBRARY;
-  const normalizedPaperProfiles = { ...DEFAULT_PAPER_PROFILES };
-  const normalizedPaperLibrary = { ...DEFAULT_PAPER_LIBRARY };
-
-  if (payload?.paperProfiles && typeof payload.paperProfiles === "object") {
-    (Object.keys(DEFAULT_PAPER_PROFILES) as PaperProfileKey[]).forEach((key) => {
-      const cloudItems = Array.isArray(payload.paperProfiles[key]) ? payload.paperProfiles[key] : [];
-      normalizedPaperProfiles[key] = mergeUniqueStrings(
-        cloudItems,
-        fallbackPaperProfiles[key] || DEFAULT_PAPER_PROFILES[key],
-      );
-    });
-  } else {
-    (Object.keys(DEFAULT_PAPER_PROFILES) as PaperProfileKey[]).forEach((key) => {
-      normalizedPaperProfiles[key] = mergeUniqueStrings(
-        fallbackPaperProfiles[key] || DEFAULT_PAPER_PROFILES[key],
-        DEFAULT_PAPER_PROFILES[key],
-      );
-    });
-  }
-
-  if (payload?.paperLibrary && typeof payload.paperLibrary === "object") {
-    (Object.keys(DEFAULT_PAPER_LIBRARY) as PaperLibraryKey[]).forEach((key) => {
-      const cloudItems = Array.isArray(payload.paperLibrary[key]) ? payload.paperLibrary[key] : [];
-      normalizedPaperLibrary[key] = mergeUniqueStrings(
-        cloudItems,
-        fallbackPaperLibrary[key] || DEFAULT_PAPER_LIBRARY[key],
-      );
-    });
-  } else {
-    (Object.keys(DEFAULT_PAPER_LIBRARY) as PaperLibraryKey[]).forEach((key) => {
-      normalizedPaperLibrary[key] = mergeUniqueStrings(
-        fallbackPaperLibrary[key] || DEFAULT_PAPER_LIBRARY[key],
-        DEFAULT_PAPER_LIBRARY[key],
-      );
-    });
-  }
+function normalizeDictsPayload(payload: any): Dicts {
+  const normalizeList = (value: unknown) => (Array.isArray(value) ? normalizeStringList(value) : []);
+  const normalizeObject = (value: unknown, keys: string[]) => {
+    const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+    return keys.reduce((acc, key) => {
+      acc[key] = normalizeList(source[key]);
+      return acc;
+    }, {} as Record<string, string[]>);
+  };
 
   return {
-    productTypes: ensureProductTypes(mergeUniqueStrings(
-      Array.isArray(payload?.productTypes) ? payload.productTypes : [],
-      fallback?.productTypes || DEFAULT_PRODUCT_TYPES,
-    )),
-    paperSizes: mergeUniqueStrings(Array.isArray(payload?.paperSizes) ? payload.paperSizes : [], fallback?.paperSizes || DEFAULT_PAPER_SIZES),
-    pocketCalendarSizes: mergeUniqueStrings(
-      Array.isArray(payload?.pocketCalendarSizes) ? payload.pocketCalendarSizes : [],
-      fallback?.pocketCalendarSizes || DEFAULT_POCKET_CALENDAR_SIZES,
-    ),
-    businessCardSizes: mergeUniqueStrings(Array.isArray(payload?.businessCardSizes) ? payload.businessCardSizes : [], fallback?.businessCardSizes || DEFAULT_BUSINESS_CARD_SIZES),
-    envelopeSizes: mergeUniqueStrings(Array.isArray(payload?.envelopeSizes) ? payload.envelopeSizes : [], fallback?.envelopeSizes || DEFAULT_ENVELOPE_SIZES),
-    densities: mergeUniqueStrings(Array.isArray(payload?.densities) ? payload.densities : [], fallback?.densities || DEFAULT_DENSITIES),
-    colors: mergeUniqueStrings(Array.isArray(payload?.colors) ? payload.colors : [], fallback?.colors || DEFAULT_COLORS),
-    postProcessing: mergeUniqueStrings(Array.isArray(payload?.postProcessing) ? payload.postProcessing : [], fallback?.postProcessing || DEFAULT_POST_PROCESSING),
-    bindingTypes: mergeUniqueStrings(Array.isArray(payload?.bindingTypes) ? payload.bindingTypes : [], fallback?.bindingTypes || DEFAULT_BINDING_TYPES),
-    laminationKinds: mergeUniqueStrings(Array.isArray(payload?.laminationKinds) ? payload.laminationKinds : [], fallback?.laminationKinds || DEFAULT_LAMINATION_KINDS),
-    laminationThickness: mergeUniqueStrings(Array.isArray(payload?.laminationThickness) ? payload.laminationThickness : [], fallback?.laminationThickness || DEFAULT_LAMINATION_THICKNESS),
-    managers: mergeUniqueStrings(Array.isArray(payload?.managers) ? payload.managers : [], fallback?.managers || DEFAULT_MANAGERS),
-    paperProfiles: normalizedPaperProfiles,
-    paperLibrary: normalizedPaperLibrary,
+    productTypes: ensureProductTypes(normalizeList(payload?.productTypes)),
+    paperSizes: normalizeList(payload?.paperSizes),
+    pocketCalendarSizes: normalizeList(payload?.pocketCalendarSizes),
+    businessCardSizes: normalizeList(payload?.businessCardSizes),
+    envelopeSizes: normalizeList(payload?.envelopeSizes),
+    densities: normalizeList(payload?.densities),
+    colors: normalizeList(payload?.colors),
+    postProcessing: normalizeList(payload?.postProcessing),
+    bindingTypes: normalizeList(payload?.bindingTypes),
+    laminationKinds: normalizeList(payload?.laminationKinds),
+    laminationThickness: normalizeList(payload?.laminationThickness),
+    managers: normalizeList(payload?.managers),
+    paperProfiles: normalizeObject(payload?.paperProfiles, Object.keys(DEFAULT_PAPER_PROFILES)),
+    paperLibrary: normalizeObject(payload?.paperLibrary, Object.keys(DEFAULT_PAPER_LIBRARY)),
   };
 }
 
@@ -369,6 +335,7 @@ interface FormData {
   businessCardSize: string; businessCardSizeCustom: string;
   paperType: PaperTypeOption | ""; paperCustomName: string; density: string; densityFinish: PaperFinish; colorProof: string; colorMode: string; pageCount: string; coverUseKash: boolean; coverPaperType: PaperTypeOption | ""; coverPaperCustomName: string; coverDensity: string; coverFinish: PaperFinish; coverColor: string; coverLamination: LaminationBlock;
   catalogFormat: string; catalogFormatCustom: string;
+  brochureFormat: string; brochureFormatCustom: string;
   blockPaperType: PaperTypeOption | ""; blockPaperCustomName: string; blockDensity: string; blockFinish: PaperFinish; blockColor: string; blockLamination: LaminationBlock; blockPages: string;
   adBlocks: string; calendarKind: string; wallMountType: string; wallMountDesc: string; gridType: string; hasPlanka: boolean; plankaDesc: string; hasRigel: boolean;
   calendarBaseUseKash: boolean; calendarBaseMaterial: string; calendarBaseFinish: PaperFinish; calendarBaseLamination: LaminationBlock; calendarBaseBigovkaLines: string; calendarGridMaterial: string; calendarGridFinish: PaperFinish; calendarGridColorMode: string; calendarOffsetColor: string;
@@ -379,6 +346,10 @@ interface FormData {
   subcontractWorks: SubcontractWork[];
   bagHeight: string; bagWidth: string; bagDepth: string; bagEyeletColor: string; bagEyeletColorCustom: string; bagHandleColor: string; bagHandleColorCustom: string;
   stickerMaterial: string; stickerFinish: PaperFinish; stickerPlotterCut: boolean;
+  ownReverse: boolean;
+  wobblerPlotterCut: boolean; wobblerFootGlue: boolean;
+  badgeHoleType: string;
+  badgeHoleCount: string;
   fileLink: string; notes: string;
 }
 
@@ -413,6 +384,7 @@ function createDefaultForm(): FormData {
     businessCardSize: "", businessCardSizeCustom: "",
     paperType: "", paperCustomName: "", density: "", densityFinish: "Матовая", colorProof: "Не надо", colorMode: "", pageCount: "", coverUseKash: false, coverPaperType: "", coverPaperCustomName: "", coverDensity: "", coverFinish: "Матовая", coverColor: "", coverLamination: defaultLaminationBlock(),
     catalogFormat: "", catalogFormatCustom: "",
+    brochureFormat: "", brochureFormatCustom: "",
     blockPaperType: "", blockPaperCustomName: "", blockDensity: "", blockFinish: "Матовая", blockColor: "", blockLamination: defaultLaminationBlock(), blockPages: "",
     adBlocks: "3", calendarKind: "Настенный", wallMountType: "Ригель", wallMountDesc: "", gridType: "Цифра", hasPlanka: false, plankaDesc: "", hasRigel: false,
     calendarBaseUseKash: false, calendarBaseMaterial: "", calendarBaseFinish: "Матовая", calendarBaseLamination: defaultLaminationBlock(), calendarBaseBigovkaLines: "", calendarGridMaterial: "", calendarGridFinish: "Матовая", calendarGridColorMode: "", calendarOffsetColor: "Серый",
@@ -423,6 +395,10 @@ function createDefaultForm(): FormData {
     subcontractWorks: [],
     bagHeight: "", bagWidth: "", bagDepth: "", bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleColor: "Белый", bagHandleColorCustom: "",
     stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false,
+    ownReverse: false,
+    wobblerPlotterCut: false, wobblerFootGlue: false,
+    badgeHoleType: "",
+    badgeHoleCount: "1",
     fileLink: "", notes: "",
   };
 }
@@ -434,6 +410,7 @@ const defaultForm: FormData = createDefaultForm();
 const MULTIBLOCK_TYPES = ["Каталоги", "Брошюры"];
 const isMultiBlock = (pt: string) => MULTIBLOCK_TYPES.includes(pt);
 const isCatalog = (pt: string) => pt === "Каталоги";
+const isBrochure = (pt: string) => pt === "Брошюры";
 const isCalendar = (pt: string) => pt === "Календари";
 const isNotebook = (pt: string) => pt === "Блокноты";
 const isEnvelope = (pt: string) => pt === "Конверты";
@@ -447,7 +424,12 @@ function isPocketCalendar(form: FormData): boolean {
 }
 
 function ensureProductTypes(list: string[]): string[] {
-  return list.includes("Бумажные Пакеты") ? list : [...list.filter((item) => item !== "Пакеты"), "Бумажные Пакеты"];
+  const normalized = list.filter((item) => item !== "Пакеты");
+  const additions = ["Бумажные Пакеты", "Воблеры", "Бейджи"];
+  additions.forEach((item) => {
+    if (!normalized.includes(item)) normalized.push(item);
+  });
+  return normalized;
 }
 
 function resolveProductName(form: FormData): string {
@@ -733,11 +715,23 @@ function formatMaterialWithFinish(material: string, finish: PaperFinish): string
   return material ? `${material}, ${finish.toLowerCase()}` : material;
 }
 
+function formatColorWithReverse(value: string, ownReverse: boolean): string {
+  const color = normalizeColorMode(value) || "—";
+  return ownReverse ? `${color} (свой оборот)` : color;
+}
+
+function formatShortColor(value: string, ownReverse = false): string {
+  const base = (normalizeColorMode(value).split(/\s+/)[0] || "").trim();
+  if (!base) return "";
+  return ownReverse ? `${base} (свой оборот)` : base;
+}
+
 function getDisplaySize(form: FormData): string {
   if (isEnvelope(form.productType)) return form.envelopeSize === "Нестандартный" ? form.envelopeSizeCustom : form.envelopeSize;
   if (form.productType === "Визитки") return form.businessCardSize === "Нестандартный" ? form.businessCardSizeCustom : form.businessCardSize;
   if (isBag(form.productType)) return form.bagHeight || form.bagWidth || form.bagDepth ? `${form.bagHeight || "?"}×${form.bagWidth || "?"}×${form.bagDepth || "?"} мм` : "";
   if (isCatalog(form.productType)) return form.catalogFormat === "Нестандартный" ? form.catalogFormatCustom : form.catalogFormat;
+  if (isBrochure(form.productType)) return form.brochureFormat === "Нестандартный" ? form.brochureFormatCustom : form.brochureFormat;
   if (isPocketCalendar(form)) return form.paperSize === "Нестандартный" ? form.paperSizeCustom : form.paperSize;
   if (!isMultiBlock(form.productType) && !isCalendar(form.productType)) return form.paperSize === "Нестандартный" ? form.paperSizeCustom : form.paperSize;
   return "";
@@ -814,10 +808,26 @@ function generateShortTZ(form: FormData): string {
   } else if (isSticker(form.productType)) {
     if (form.stickerMaterial) parts.push(`${normalizeMaterial(form.stickerMaterial)} ${form.stickerFinish.toLowerCase()}`.toLowerCase());
     if (form.stickerPlotterCut) parts.push("плоттерная резка");
-  } else if (!isEnvelope(form.productType)) {
+  } else if (form.productType === "Воблеры") {
     const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
     if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
-    if (form.colorMode) parts.push(form.colorMode.split(/\s/)[0]);
+    if (form.colorMode) parts.push(formatShortColor(form.colorMode));
+    if (form.wobblerPlotterCut) parts.push("плоттерная резка");
+    if (form.wobblerFootGlue) parts.push("приклейка ножки");
+  } else if (form.productType === "Бейджи") {
+    const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+    if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
+    if (form.colorMode) parts.push(formatShortColor(form.colorMode, form.ownReverse));
+    if (form.badgeHoleType) {
+      const holeText = form.badgeHoleType === "Круглое"
+        ? `круглое отверстие${form.badgeHoleCount === "2" ? " 2шт" : ""}`
+        : `${form.badgeHoleType.toLowerCase()} отверстие`;
+      parts.push(holeText);
+    }
+  } else {
+    const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+    if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
+    if (form.colorMode) parts.push(formatShortColor(form.colorMode, form.ownReverse && pt === "Листовки"));
   }
 
   if (form.postProcessing.length > 0) {
@@ -984,7 +994,29 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     lines.push(` Материал : ${formatMaterialWithFinish(form.stickerMaterial, form.stickerFinish) || "—"}`);
     lines.push(` Плоттерная резка : ${form.stickerPlotterCut ? "Да" : "Нет"}`);
     lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
-  } else if (!isEnvelope(form.productType)) {
+  } else if (form.productType === "Воблеры") {
+    const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+    const paperLine = paperText
+      ? `${paperText}${form.paperType === "Дизайнерская" ? "" : `, ${form.densityFinish.toLowerCase()}`}`
+      : "—";
+    lines.push(` Материал : ${paperLine}`);
+    lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
+    if (form.wobblerPlotterCut) lines.push(" Плоттерная резка");
+    if (form.wobblerFootGlue) lines.push(" Приклейка ножки");
+  } else if (form.productType === "Бейджи") {
+    const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+    const paperLine = paperText
+      ? `${paperText}${form.paperType === "Дизайнерская" ? "" : `, ${form.densityFinish.toLowerCase()}`}`
+      : "—";
+    lines.push(` Материал : ${paperLine}`);
+    lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse)}`);
+    if (form.badgeHoleType) {
+      const holeText = form.badgeHoleType === "Круглое"
+        ? `круглое отверстие${form.badgeHoleCount === "2" ? " 2шт" : ""}`
+        : `${form.badgeHoleType.toLowerCase()} отверстие`;
+      lines.push(` Отверстие : ${holeText}`);
+    } else lines.push(" Отверстие : —");
+  } else {
     if (form.kashurovka.enabled) lines.push(" Базовые материалы задаются в блоке кашировки");
     else {
       const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
@@ -993,7 +1025,7 @@ function generateTZ(form: FormData, _tzNumber: number): string {
         : "—";
       lines.push(` Материал : ${paperLine}`);
     }
-    if (!form.kashurovka.enabled) lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
+    if (!form.kashurovka.enabled) lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки")}`);
   }
   lines.push("");
 
@@ -2020,20 +2052,10 @@ function LegacyApp() {
       if (cancelled) return;
 
       if (result?.success && result.hasConfig && result.config) {
-        const mergedDicts = normalizeDictsPayload(result.config, dicts);
-        setDicts(mergedDicts);
+        const cloudDicts = normalizeDictsPayload(result.config);
+        setDicts(cloudDicts);
         setDictSource("cloud");
         setDictSyncMsg(null);
-
-        if (compareVersions(APP_VERSION, result.appVersion) > 0) {
-          const syncResult = await (window as any).electronAPI?.saveConfigSheet?.({
-            config: mergedDicts,
-            appVersion: APP_VERSION,
-          });
-          if (!cancelled && !syncResult?.success) {
-            setDictSyncMsg(`Ошибка автообновления справочников в Google Таблице: ${syncResult?.error || "неизвестная ошибка"}`);
-          }
-        }
       } else if (result?.success && !result.hasConfig) {
         setDictSource("local");
         setDictSyncMsg("На листе __CONFIG__ пока нет сохранённой базы справочников.");
@@ -2073,20 +2095,10 @@ function LegacyApp() {
     const result = await (window as any).electronAPI?.loadConfigSheet?.();
 
     if (result?.success && result.hasConfig && result.config) {
-      const mergedDicts = normalizeDictsPayload(result.config, dicts);
-      setDicts(mergedDicts);
+      const cloudDicts = normalizeDictsPayload(result.config);
+      setDicts(cloudDicts);
       setDictSource("cloud");
       setDictSyncMsg(null);
-
-      if (compareVersions(APP_VERSION, result.appVersion) > 0) {
-        const syncResult = await (window as any).electronAPI?.saveConfigSheet?.({
-          config: mergedDicts,
-          appVersion: APP_VERSION,
-        });
-        if (!syncResult?.success) {
-          setDictSyncMsg(`Ошибка автообновления справочников в Google Таблице: ${syncResult?.error || "неизвестная ошибка"}`);
-        }
-      }
     } else if (result?.success && !result.hasConfig) {
       setDictSource("local");
       setDictSyncMsg("На листе __CONFIG__ ещё нет сохранённых справочников.");
@@ -2188,6 +2200,7 @@ function LegacyApp() {
   const todayIso = getTodayLocalIso();
   const springSuggestion = form.bindingType === "Пружина" ? buildSpringSuggestion(form) : null;
   const springDiameterIsCustomOrder = springSuggestion ? parseWeight(springSuggestion.diameter) > 16 : false;
+  const missingFileLink = !form.fileLink.trim();
   const dictSections = [
     { key: "managers", title: "Менеджеры", icon: "👤", element: <DictEditor title="Менеджеры" icon="👤" items={dicts.managers} onChange={(v) => updateDict("managers", v)} /> },
     { key: "productTypes", title: "Типы изделий", icon: "🖨", element: <DictEditor title="Типы изделий" icon="🖨" items={dicts.productTypes} locked={["Другое..."]} onChange={(v) => updateDict("productTypes", v)} /> },
@@ -2279,11 +2292,6 @@ function LegacyApp() {
   }
 
   async function handleSave() {
-    if (!form.fileLink.trim()) {
-      setSavedMsg("Ошибка сохранения: не введена ссылка на папку заказа");
-      setTimeout(() => setSavedMsg(null), 5000);
-      return;
-    }
     const n = getTZNumber();
     const text = generateTZ(form, n);
     const orderTag = form.orderNumber.trim()
@@ -2362,6 +2370,9 @@ function LegacyApp() {
   const envelope = isEnvelope(pt);
   const bag = isBag(pt);
   const sticker = isSticker(pt);
+  const brochure = isBrochure(pt);
+  const wobbler = pt === "Воблеры";
+  const badge = pt === "Бейджи";
   const deskCalendarBigovkaActive = calendar && form.calendarKind === "Настольный" && !!form.calendarBaseBigovkaLines && form.calendarBaseBigovkaLines !== "0";
   const clientSuggestionItems = getClientSuggestions(clientStore, form.managerName);
 
@@ -2571,7 +2582,7 @@ function LegacyApp() {
                 </Field>
               </div>
 
-              {!envelope && !multiBlock && !notebook && !calendar && !form.kashurovka.enabled && pt && (
+              {!multiBlock && !notebook && !calendar && !bag && !form.kashurovka.enabled && pt && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                   {bag ? (
                     <Field label="Материал пакета" required><select data-field="density" value={form.density} className={selectFieldClass(showValidation && required.includes("density"))} onChange={(e) => update("density", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.bag.map((d) => <option key={d}>{d}</option>)}</select></Field>
@@ -2602,7 +2613,12 @@ function LegacyApp() {
                   )}
                   {sticker && <Field label="Материал" required><select data-field="stickerMaterial" value={form.stickerMaterial} className={selectFieldClass(showValidation && required.includes("stickerMaterial"))} onChange={(e) => update("stickerMaterial", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.sticker.map((d) => <option key={d}>{d}</option>)}</select></Field>}
                   <PaperFinishField value={sticker ? form.stickerFinish : form.densityFinish} onChange={(value) => update(sticker ? "stickerFinish" : "densityFinish", value as never)} />
-                  <Field label="Цветность" required><select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{(sticker ? STICKER_COLOR_MODES : dicts.colors).map((c) => <option key={c}>{c}</option>)}</select></Field>
+                  <Field label="Цветность" required><select data-field="colorMode" value={form.colorMode} disabled={(pt === "Листовки" || badge) && form.ownReverse} className={`${selectFieldClass(showValidation && required.includes("colorMode"))} ${(pt === "Листовки" || badge) && form.ownReverse ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{(sticker ? STICKER_COLOR_MODES : dicts.colors).map((c) => <option key={c}>{c}</option>)}</select></Field>
+                  {(pt === "Листовки" || badge) && (
+                    <Field label="Свой оборот">
+                      <YesNo value={form.ownReverse} onChange={(value) => { update("ownReverse", value); if (value) update("colorMode", AUTO_REVERSE_COLOR); }} />
+                    </Field>
+                  )}
                 </div>
               )}
 
@@ -2615,6 +2631,50 @@ function LegacyApp() {
                 </div>
               )}
 
+              {wobbler && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Плоттерная резка">
+                    <YesNo value={form.wobblerPlotterCut} onChange={(value) => update("wobblerPlotterCut", value)} />
+                  </Field>
+                  <Field label="Ножка приклеивается">
+                    <YesNo value={form.wobblerFootGlue} onChange={(value) => update("wobblerFootGlue", value)} />
+                  </Field>
+                </div>
+              )}
+
+              {badge && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Field label="Отверстие для бейджа" required>
+                    <select
+                      data-field="badgeHoleType"
+                      value={form.badgeHoleType}
+                      className={selectFieldClass(showValidation && required.includes("badgeHoleType"))}
+                      onChange={(e) => {
+                        update("badgeHoleType", e.target.value);
+                        if (e.target.value !== "Круглое") update("badgeHoleCount", "");
+                        else if (!form.badgeHoleCount) update("badgeHoleCount", "1");
+                      }}
+                    >
+                      <option value="">— выберите —</option>
+                      {["Круглое", "Овальное", "Евро"].map((item) => <option key={item}>{item}</option>)}
+                    </select>
+                  </Field>
+                  {form.badgeHoleType === "Круглое" && (
+                    <Field label="Количество отверстий" required>
+                      <select
+                        data-field="badgeHoleCount"
+                        value={form.badgeHoleCount}
+                        className={selectFieldClass(showValidation && required.includes("badgeHoleCount"))}
+                        onChange={(e) => update("badgeHoleCount", e.target.value)}
+                      >
+                        <option value="">— выберите —</option>
+                        {["1", "2"].map((item) => <option key={item}>{item}</option>)}
+                      </select>
+                    </Field>
+                  )}
+                </div>
+              )}
+
               {(multiBlock || notebook) && (
                 <div className="mt-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2623,27 +2683,32 @@ function LegacyApp() {
                       {multiBlock && form.pageCount && <p className="text-xs text-slate-500 mt-1">Это {Number(form.pageCount) / 2} листов в блоке.</p>}
                       {notebook && form.blockPages && <p className="text-xs text-slate-500 mt-1">Это {Number(form.blockPages) / 2} листов в блоке.</p>}
                     </Field>
-                    {isCatalog(pt) && (
-                      <Field label="Формат продукции" required>
+                    {(isCatalog(pt) || brochure) && (
+                      <Field label={brochure ? "Формат брошюры" : "Формат продукции"} required>
                         <select
-                          data-field="catalogFormat"
-                          value={form.catalogFormat}
-                          className={selectFieldClass(showValidation && required.includes("catalogFormat"))}
+                          data-field={brochure ? "brochureFormat" : "catalogFormat"}
+                          value={brochure ? form.brochureFormat : form.catalogFormat}
+                          className={selectFieldClass(showValidation && required.includes(brochure ? "brochureFormat" : "catalogFormat"))}
                           onChange={(e) => {
-                            update("catalogFormat", e.target.value);
-                            if (e.target.value !== "Нестандартный") update("catalogFormatCustom", "");
+                            if (brochure) {
+                              update("brochureFormat", e.target.value);
+                              if (e.target.value !== "Нестандартный") update("brochureFormatCustom", "");
+                            } else {
+                              update("catalogFormat", e.target.value);
+                              if (e.target.value !== "Нестандартный") update("catalogFormatCustom", "");
+                            }
                           }}
                         >
                           <option value="">— выберите —</option>
                           {dicts.paperSizes.map((s) => <option key={s}>{s}</option>)}
                         </select>
-                        {form.catalogFormat === "Нестандартный" && (
+                        {(brochure ? form.brochureFormat : form.catalogFormat) === "Нестандартный" && (
                           <input
-                            data-field="catalogFormatCustom"
-                            className={`${fieldClass(showValidation && required.includes("catalogFormatCustom"))} mt-2`}
+                            data-field={brochure ? "brochureFormatCustom" : "catalogFormatCustom"}
+                            className={`${fieldClass(showValidation && required.includes(brochure ? "brochureFormatCustom" : "catalogFormatCustom"))} mt-2`}
                             placeholder="Например: 210×297 мм"
-                            value={form.catalogFormatCustom}
-                            onChange={(e) => update("catalogFormatCustom", e.target.value)}
+                            value={brochure ? form.brochureFormatCustom : form.catalogFormatCustom}
+                            onChange={(e) => update(brochure ? "brochureFormatCustom" : "catalogFormatCustom", e.target.value)}
                           />
                         )}
                       </Field>
@@ -3050,6 +3115,12 @@ function LegacyApp() {
             {sendState === "idle" && (
               <>
                 <p className="text-sm text-slate-600 mb-4">Данные заказа будут отправлены в Google Таблицу. Проверьте ключевые поля:</p>
+                {missingFileLink && (
+                  <div className="mb-4 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+                    <div className="font-semibold">Внимание: ссылка на файлы заказа не указана.</div>
+                    <div className="mt-1 text-amber-800">Задание можно отправить в работу, но папка файлов не будет проставлена автоматически.</div>
+                  </div>
+                )}
                 <div className="space-y-2 text-sm mb-6">
                   <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">№ заказа</span><span className="font-medium text-slate-800">{form.orderNumber || "—"}</span></div>
                   <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Заказчик</span><span className="font-medium text-slate-800">{form.clientName || "—"}</span></div>
@@ -3058,8 +3129,8 @@ function LegacyApp() {
                   <div className="flex justify-between py-1"><span className="text-slate-500">Срок</span><span className="font-medium text-slate-800">{form.deadline ? `${form.deadline.split("-").reverse().join(".")}${form.deadlineTime ? " " + form.deadlineTime : ""}` : "—"}</span></div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleRealSend} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition-colors shadow">Отправить</button>
-                  <button onClick={() => setShowSend(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">Отмена</button>
+                  <button onClick={handleRealSend} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition-colors shadow">{missingFileLink ? "Продолжить" : "Отправить"}</button>
+                  <button onClick={() => setShowSend(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">{missingFileLink ? "Вернуться" : "Отмена"}</button>
                 </div>
               </>
             )}
@@ -3144,12 +3215,22 @@ function getRequiredFields(form: FormData): string[] {
   } else if (isEnvelope(form.productType)) {
     if (!form.envelopeSize) errors.push("envelopeSize");
     if (form.envelopeSize === "Нестандартный" && !form.envelopeSizeCustom.trim()) errors.push("envelopeSizeCustom");
+    if (!form.kashurovka.enabled) {
+      if (!form.paperType) errors.push("paperType");
+      else if (form.paperType === "Дизайнерская" ? !form.paperCustomName.trim() : !form.density) {
+        errors.push(form.paperType === "Дизайнерская" ? "paperCustomName" : "density");
+      }
+      if (!form.colorMode) errors.push("colorMode");
+    }
   } else if (isBusinessCard(form.productType)) {
     if (!form.businessCardSize) errors.push("businessCardSize");
     if (form.businessCardSize === "Нестандартный" && !form.businessCardSizeCustom.trim()) errors.push("businessCardSizeCustom");
   } else if (isCatalog(form.productType)) {
     if (!form.catalogFormat) errors.push("catalogFormat");
     if (form.catalogFormat === "Нестандартный" && !form.catalogFormatCustom.trim()) errors.push("catalogFormatCustom");
+  } else if (isBrochure(form.productType)) {
+    if (!form.brochureFormat) errors.push("brochureFormat");
+    if (form.brochureFormat === "Нестандартный" && !form.brochureFormatCustom.trim()) errors.push("brochureFormatCustom");
   } else if (!isMultiBlock(form.productType) && !isCalendar(form.productType) && !isBag(form.productType) && !isSticker(form.productType)) {
     if (!form.paperSize) errors.push("paperSize");
     if (form.paperSize === "Нестандартный" && !form.paperSizeCustom.trim()) errors.push("paperSizeCustom");
@@ -3188,6 +3269,11 @@ function getRequiredFields(form: FormData): string[] {
   } else if (isSticker(form.productType)) {
     if (!form.stickerMaterial) errors.push("stickerMaterial");
     if (!form.colorMode) errors.push("colorMode");
+  } else if (form.productType === "Воблеры") {
+    // No extra required fields beyond the base material/color block.
+  } else if (form.productType === "Бейджи") {
+    if (!form.badgeHoleType) errors.push("badgeHoleType");
+    if (form.badgeHoleType === "Круглое" && !form.badgeHoleCount) errors.push("badgeHoleCount");
   } else if (!isEnvelope(form.productType) && !isCalendar(form.productType) && !form.kashurovka.enabled) {
     if (!form.paperType) errors.push("paperType");
     else if (form.paperType === "Дизайнерская" ? !form.paperCustomName.trim() : !form.density) {
@@ -3249,6 +3335,8 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   pageCount: "Количество страниц",
   catalogFormat: "Формат продукции",
   catalogFormatCustom: "Нестандартный формат продукции",
+  brochureFormat: "Формат брошюры",
+  brochureFormatCustom: "Нестандартный формат брошюры",
   blockPages: "Страницы в блоке",
   coverDensity: "Плотность бумаги обложки",
   coverPaperType: "Тип бумаги обложки",
@@ -3269,6 +3357,8 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   bagWidth: "Ширина пакета",
   bagDepth: "Глубина пакета",
   stickerMaterial: "Материал наклейки",
+  badgeHoleType: "Отверстие бейджа",
+  badgeHoleCount: "Количество отверстий бейджа",
   kashBaseType: "Основа кашировки",
   kashLinerPaperType: "Тип бумаги лайнера",
   kashLinerPaperDensity: "Плотность лайнера",
