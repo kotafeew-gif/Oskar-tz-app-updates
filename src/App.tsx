@@ -171,6 +171,7 @@ const LS_KEYS = {
   laminationKinds: "dict_laminationKinds",
   laminationThickness: "dict_laminationThickness",
   managers: "dict_managers",
+  managerMarkerState: "dict_managerMarkerState",
   paperProfiles: "dict_paperProfiles",
   sheetName: "config_sheetName",
 };
@@ -234,6 +235,108 @@ function savePaperProfiles(profiles: typeof DEFAULT_PAPER_PROFILES) {
   localStorage.setItem(LS_KEYS.paperProfiles, JSON.stringify(profiles));
 }
 
+type ManagerMarkerState = {
+  managerMarkers: Record<string, string>;
+  managerMarkerCounter: number;
+};
+
+function loadManagerMarkerState(): ManagerMarkerState {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.managerMarkerState);
+    if (!raw) return { managerMarkers: {}, managerMarkerCounter: 0 };
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return { managerMarkers: {}, managerMarkerCounter: 0 };
+
+    const managerMarkers = parsed.managerMarkers && typeof parsed.managerMarkers === "object"
+      ? Object.entries(parsed.managerMarkers).reduce((acc, [key, value]) => {
+        const name = normalizeManagerName(key);
+        const marker = typeof value === "string" ? value.trim() : "";
+        if (name && marker) acc[name] = marker;
+        return acc;
+      }, {} as Record<string, string>)
+      : {};
+
+    const managerMarkerCounter = Number.isFinite(Number(parsed.managerMarkerCounter))
+      ? Math.max(0, Number(parsed.managerMarkerCounter))
+      : 0;
+
+    return { managerMarkers, managerMarkerCounter };
+  } catch {
+    return { managerMarkers: {}, managerMarkerCounter: 0 };
+  }
+}
+
+function saveManagerMarkerState(state: ManagerMarkerState) {
+  localStorage.setItem(LS_KEYS.managerMarkerState, JSON.stringify(state));
+}
+
+function parseManagerMarkerIndex(marker: string): number {
+  const match = /^#(\d+)$/.exec(String(marker || "").trim());
+  return match ? Number(match[1]) : 0;
+}
+
+function normalizeManagerMarkerState(
+  nextManagers: string[],
+  previousManagers: string[] = [],
+  previousMarkers: Record<string, string> = {},
+  previousCounter = 0,
+): ManagerMarkerState {
+  const normalizedNext = normalizeStringList(nextManagers);
+  const normalizedPrev = normalizeStringList(previousManagers);
+  const nextSet = new Set(normalizedNext);
+  const prevSet = new Set(normalizedPrev);
+  const prevMarkerMap = Object.entries(previousMarkers || {}).reduce((acc, [key, value]) => {
+    const name = normalizeManagerName(key);
+    const marker = typeof value === "string" ? value.trim() : "";
+    if (name && marker) acc[name] = marker;
+    return acc;
+  }, {} as Record<string, string>);
+
+  const result: Record<string, string> = {};
+  const usedMarkers = new Set<string>();
+  let counter = Math.max(0, previousCounter || 0);
+
+  normalizedNext.forEach((name) => {
+    const marker = prevMarkerMap[name];
+    if (marker) {
+      result[name] = marker;
+      usedMarkers.add(marker);
+      counter = Math.max(counter, parseManagerMarkerIndex(marker));
+    }
+  });
+
+  const removed = normalizedPrev.filter((name) => !nextSet.has(name));
+  const added = normalizedNext.filter((name) => !prevSet.has(name));
+
+  if (removed.length === added.length && removed.length > 0) {
+    removed.forEach((oldName, index) => {
+      const newName = added[index];
+      if (!newName || result[newName]) return;
+      const marker = prevMarkerMap[oldName];
+      if (marker && !usedMarkers.has(marker)) {
+        result[newName] = marker;
+        usedMarkers.add(marker);
+        counter = Math.max(counter, parseManagerMarkerIndex(marker));
+      }
+    });
+  }
+
+  normalizedNext.forEach((name) => {
+    if (result[name]) return;
+    let nextIndex = Math.max(counter + 1, 1);
+    let marker = `#${nextIndex}`;
+    while (usedMarkers.has(marker)) {
+      nextIndex += 1;
+      marker = `#${nextIndex}`;
+    }
+    result[name] = marker;
+    usedMarkers.add(marker);
+    counter = nextIndex;
+  });
+
+  return { managerMarkers: result, managerMarkerCounter: counter };
+}
+
 function mergeUniqueStrings(primary: string[], fallback: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -262,6 +365,10 @@ function normalizeStringList(items: unknown[]): string[] {
   return result;
 }
 
+function createDefaultManagerMarkers(managers: string[]): ManagerMarkerState {
+  return normalizeManagerMarkerState(managers, [], {}, 0);
+}
+
 function normalizeDictsPayload(payload: any): Dicts {
   const normalizeList = (value: unknown) => (Array.isArray(value) ? normalizeStringList(value) : []);
   const normalizeObject = (value: unknown, keys: string[]) => {
@@ -285,6 +392,12 @@ function normalizeDictsPayload(payload: any): Dicts {
     laminationKinds: normalizeList(payload?.laminationKinds),
     laminationThickness: normalizeList(payload?.laminationThickness),
     managers: normalizeList(payload?.managers),
+    ...normalizeManagerMarkerState(
+      normalizeList(payload?.managers),
+      normalizeList(payload?.managers),
+      payload?.managerMarkers && typeof payload.managerMarkers === "object" ? payload.managerMarkers as Record<string, string> : {},
+      Number(payload?.managerMarkerCounter) || 0,
+    ),
     paperProfiles: normalizeObject(payload?.paperProfiles, Object.keys(DEFAULT_PAPER_PROFILES)),
     paperLibrary: normalizeObject(payload?.paperLibrary, Object.keys(DEFAULT_PAPER_LIBRARY)),
   };
@@ -299,8 +412,57 @@ interface Dicts {
   densities: string[]; colors: string[]; postProcessing: string[];
   bindingTypes: string[]; laminationKinds: string[]; laminationThickness: string[];
   managers: string[];
+  managerMarkers: Record<string, string>;
+  managerMarkerCounter: number;
   paperProfiles: typeof DEFAULT_PAPER_PROFILES;
   paperLibrary: typeof DEFAULT_PAPER_LIBRARY;
+}
+
+function createInitialDicts(): Dicts {
+  const managerState = loadManagerMarkerState();
+  const managers = loadList(LS_KEYS.managers, DEFAULT_MANAGERS);
+  const normalizedManagers = normalizeManagerMarkerState(managers, managers, managerState.managerMarkers, managerState.managerMarkerCounter);
+
+  return {
+    productTypes: ensureProductTypes(loadList(LS_KEYS.productTypes, DEFAULT_PRODUCT_TYPES)),
+    paperSizes: loadList(LS_KEYS.paperSizes, DEFAULT_PAPER_SIZES),
+    pocketCalendarSizes: loadList(LS_KEYS.pocketCalendarSizes, DEFAULT_POCKET_CALENDAR_SIZES),
+    businessCardSizes: loadList(LS_KEYS.businessCardSizes, DEFAULT_BUSINESS_CARD_SIZES),
+    envelopeSizes: loadList(LS_KEYS.envelopeSizes, DEFAULT_ENVELOPE_SIZES),
+    densities: loadList(LS_KEYS.densities, DEFAULT_DENSITIES),
+    colors: loadList(LS_KEYS.colors, DEFAULT_COLORS),
+    postProcessing: loadList(LS_KEYS.postProcessing, DEFAULT_POST_PROCESSING),
+    bindingTypes: loadList(LS_KEYS.bindingTypes, DEFAULT_BINDING_TYPES),
+    laminationKinds: loadList(LS_KEYS.laminationKinds, DEFAULT_LAMINATION_KINDS),
+    laminationThickness: loadList(LS_KEYS.laminationThickness, DEFAULT_LAMINATION_THICKNESS),
+    managers: normalizeStringList(managers),
+    managerMarkers: normalizedManagers.managerMarkers,
+    managerMarkerCounter: normalizedManagers.managerMarkerCounter,
+    paperProfiles: loadPaperProfiles(),
+    paperLibrary: loadPaperLibrary(),
+  };
+}
+
+function createResetDicts(): Dicts {
+  const managerState = createDefaultManagerMarkers(DEFAULT_MANAGERS);
+  return {
+    productTypes: ensureProductTypes([...DEFAULT_PRODUCT_TYPES]),
+    paperSizes: [...DEFAULT_PAPER_SIZES],
+    pocketCalendarSizes: [...DEFAULT_POCKET_CALENDAR_SIZES],
+    businessCardSizes: [...DEFAULT_BUSINESS_CARD_SIZES],
+    envelopeSizes: [...DEFAULT_ENVELOPE_SIZES],
+    densities: [...DEFAULT_DENSITIES],
+    colors: [...DEFAULT_COLORS],
+    postProcessing: [...DEFAULT_POST_PROCESSING],
+    bindingTypes: [...DEFAULT_BINDING_TYPES],
+    laminationKinds: [...DEFAULT_LAMINATION_KINDS],
+    laminationThickness: [...DEFAULT_LAMINATION_THICKNESS],
+    managers: [...DEFAULT_MANAGERS],
+    managerMarkers: managerState.managerMarkers,
+    managerMarkerCounter: managerState.managerMarkerCounter,
+    paperProfiles: { ...DEFAULT_PAPER_PROFILES },
+    paperLibrary: { ...DEFAULT_PAPER_LIBRARY },
+  };
 }
 
 type PaperFinish = "Матовая" | "Глянцевая";
@@ -332,6 +494,7 @@ const defaultKashurovkaBlock = (): KashurovkaBlock => ({
 
 interface FormData {
   orderNumber: string; clientName: string; managerName: string; deadline: string; deadlineTime: string; quantity: string;
+  cellBooking: string;
   productType: string; productTypeCustom: string; paperSize: string; paperSizeCustom: string; envelopeSize: string; envelopeSizeCustom: string;
   businessCardSize: string; businessCardSizeCustom: string;
   paperType: PaperTypeOption | ""; paperCustomName: string; density: string; densityFinish: PaperFinish; colorProof: string; colorMode: string; pageCount: string; coverUseKash: boolean; coverPaperType: PaperTypeOption | ""; coverPaperCustomName: string; coverDensity: string; coverFinish: PaperFinish; coverColor: string; coverLamination: LaminationBlock;
@@ -365,6 +528,18 @@ interface ClientStore {
   byManager: Record<string, string[]>;
 }
 
+interface PresetEntry {
+  id: string;
+  name: string;
+  data: Partial<FormData>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface PresetStore {
+  byManager: Record<string, PresetEntry[]>;
+}
+
 function createSubcontractWork(): SubcontractWork {
   return {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -378,9 +553,14 @@ function createEmptyClientStore(): ClientStore {
   return { byManager: {} };
 }
 
+function createEmptyPresetStore(): PresetStore {
+  return { byManager: {} };
+}
+
 function createDefaultForm(): FormData {
   return {
     orderNumber: "", clientName: "", managerName: "", deadline: "", deadlineTime: "", quantity: "",
+    cellBooking: "",
     productType: "", productTypeCustom: "", paperSize: "", paperSizeCustom: "", envelopeSize: "", envelopeSizeCustom: "",
     businessCardSize: "", businessCardSizeCustom: "",
     paperType: "", paperCustomName: "", density: "", densityFinish: "Матовая", colorProof: "Не надо", colorMode: "", pageCount: "", coverUseKash: false, coverPaperType: "", coverPaperCustomName: "", coverDensity: "", coverFinish: "Матовая", coverColor: "", coverLamination: defaultLaminationBlock(),
@@ -405,6 +585,102 @@ function createDefaultForm(): FormData {
 }
 
 const defaultForm: FormData = createDefaultForm();
+
+const PRESET_EXCLUDED_FIELDS = new Set<keyof FormData>([
+  "orderNumber",
+  "clientName",
+  "managerName",
+  "deadline",
+  "deadlineTime",
+  "cellBooking",
+  "fileLink",
+  "subcontractWorks",
+]);
+
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function buildPresetPayload(form: FormData): Partial<FormData> {
+  const defaults = createDefaultForm();
+
+  function cleanValue(value: any, defaultValue: any, path: string[]): any {
+    const topKey = path[0] as keyof FormData | undefined;
+    if (path.length === 1 && topKey && PRESET_EXCLUDED_FIELDS.has(topKey)) return undefined;
+
+    if (value === undefined || value === null) return undefined;
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (!trimmed) return undefined;
+      if (typeof defaultValue === "string" && trimmed === defaultValue) return undefined;
+      return trimmed;
+    }
+
+    if (typeof value === "boolean") {
+      return value === defaultValue ? undefined : value;
+    }
+
+    if (typeof value === "number") {
+      return value === defaultValue ? undefined : value;
+    }
+
+    if (Array.isArray(value)) {
+      if (topKey === "subcontractWorks") return undefined;
+      const cleanedItems = value
+        .map((item) => {
+          if (typeof item === "string") return item.trim();
+          if (isPlainObject(item)) {
+            const cleanedItem = cleanValue(item, {}, path.concat("[]"));
+            return cleanedItem;
+          }
+          return item;
+        })
+        .filter((item) => {
+          if (typeof item === "string") return !!item;
+          if (Array.isArray(item)) return item.length > 0;
+          if (isPlainObject(item)) return Object.keys(item).length > 0;
+          return item !== undefined && item !== null && item !== false;
+        });
+
+      if (!cleanedItems.length) return undefined;
+      if (Array.isArray(defaultValue) && JSON.stringify(cleanedItems) === JSON.stringify(defaultValue)) return undefined;
+      return cleanedItems;
+    }
+
+    if (isPlainObject(value)) {
+      const result: Record<string, any> = {};
+      const keys = new Set([...Object.keys(value), ...Object.keys(isPlainObject(defaultValue) ? defaultValue : {})]);
+      keys.forEach((key) => {
+        const child = cleanValue(value[key], isPlainObject(defaultValue) ? defaultValue[key] : undefined, path.concat(key));
+        if (child !== undefined) result[key] = child;
+      });
+      return Object.keys(result).length > 0 ? result : undefined;
+    }
+
+    return value === defaultValue ? undefined : value;
+  }
+
+  return cleanValue(form, defaults, []) || {};
+}
+
+function mergePresetIntoForm(base: FormData, presetData: Partial<FormData>): FormData {
+  const mergeValue = (current: any, patch: any): any => {
+    if (patch === undefined) return current;
+    if (Array.isArray(patch)) return patch.map((item) => (isPlainObject(item) ? mergeValue({}, item) : item));
+    if (isPlainObject(patch)) {
+      const currentObject = isPlainObject(current) ? current : {};
+      const result: Record<string, any> = { ...currentObject };
+      Object.entries(patch).forEach(([key, value]) => {
+        result[key] = mergeValue(currentObject[key], value);
+      });
+      return result;
+    }
+    return patch;
+  };
+
+  return mergeValue(base, presetData) as FormData;
+}
 
 // ─── Вспомогательные функции ────────────────────────────────────────────────
 
@@ -441,8 +717,8 @@ function normalizeMaterial(material: string): string {
   return material.replace(/\s*\(.*\)/, "").trim();
 }
 
-function normalizeColorMode(value: string): string {
-  return value.replace(/\s*\(.*\)/, "").trim();
+function normalizeColorMode(value: string | null | undefined): string {
+  return String(value || "").replace(/\s*\(.*\)/, "").trim();
 }
 
 function stripParentheticalNote(value: string): string {
@@ -722,7 +998,8 @@ function formatColorWithReverse(value: string, ownReverse: boolean): string {
 }
 
 function formatShortColor(value: string, ownReverse = false): string {
-  const base = (normalizeColorMode(value).split(/\s+/)[0] || "").trim();
+  const normalized = normalizeColorMode(value);
+  const base = (normalized.split(/\s+/)[0] || "").trim();
   if (!base) return "";
   return ownReverse ? `${base} (свой оборот)` : base;
 }
@@ -828,7 +1105,7 @@ function generateShortTZ(form: FormData): string {
   } else {
     const paperText = formatPaperSelection(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
     if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
-    if (form.colorMode) parts.push(formatShortColor(form.colorMode, form.ownReverse && pt === "Листовки"));
+    if (form.colorMode) parts.push(formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки"));
   }
 
   if (form.postProcessing.length > 0) {
@@ -1141,6 +1418,10 @@ function fieldClass(invalid: boolean) {
 
 function selectFieldClass(invalid: boolean) {
   return `${selectClass} ${invalid ? "border-red-500 bg-red-50 ring-2 ring-red-200 shadow-sm shadow-red-100" : ""}`;
+}
+
+function actionFieldClass(invalid: boolean) {
+  return `${inputClass} flex items-center justify-between gap-3 text-left shadow-sm hover:bg-slate-50 ${invalid ? "border-red-500 bg-red-50 ring-2 ring-red-200 shadow-sm shadow-red-100" : ""}`;
 }
 
 function Section({ title, children, accent }: { title: string; children: React.ReactNode; accent?: string }) {
@@ -1918,7 +2199,21 @@ function ShortTZPanel({ form }: { form: FormData }) {
   );
 }
 
-function DictEditor({ title, icon, items, locked = [], onChange }: { title: string; icon: string; items: string[]; locked?: string[]; onChange: (items: string[]) => void; }) {
+function DictEditor({
+  title,
+  icon,
+  items,
+  locked = [],
+  onChange,
+  renderSuffix,
+}: {
+  title: string;
+  icon: string;
+  items: string[];
+  locked?: string[];
+  onChange: (items: string[]) => void;
+  renderSuffix?: (item: string) => React.ReactNode;
+}) {
   const [input, setInput] = useState("");
   const [editIdx, setEditIdx] = useState<number | null>(null);
   const [editVal, setEditVal] = useState("");
@@ -1949,7 +2244,11 @@ function DictEditor({ title, icon, items, locked = [], onChange }: { title: stri
                 {editIdx === idx ? (
                   <input autoFocus className="flex-1 rounded-lg border border-blue-400 bg-blue-50 px-2 py-1 text-sm focus:outline-none" value={editVal} onChange={(e) => setEditVal(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditIdx(null); }} />
                 ) : (
-                  <span className="flex-1 text-sm text-slate-700 px-2 py-1 rounded-lg bg-slate-50 border border-slate-100 truncate">{item}{locked.includes(item) && <span className="ml-2 text-xs text-slate-400 italic">{"\u0444\u0438\u043a\u0441\u0438\u0440\u043e\u0432\u0430\u043d\u043e"}</span>}</span>
+                  <span className="flex-1 text-sm text-slate-700 px-2 py-1 rounded-lg bg-slate-50 border border-slate-100 truncate flex items-center gap-2 min-w-0">
+                    <span className="truncate">{item}</span>
+                    {renderSuffix && renderSuffix(item)}
+                    {locked.includes(item) && <span className="ml-auto text-xs text-slate-400 italic">{"\u0444\u0438\u043a\u0441\u0438\u0440\u043e\u0432\u0430\u043d\u043e"}</span>}
+                  </span>
                 )}
                 {editIdx === idx ? (
                   <div className="flex gap-1">
@@ -1976,22 +2275,7 @@ function DictEditor({ title, icon, items, locked = [], onChange }: { title: stri
 }
 
 function LegacyApp() {
-  const [dicts, setDicts] = useState<Dicts>(() => ({
-    productTypes: ensureProductTypes(loadList(LS_KEYS.productTypes, DEFAULT_PRODUCT_TYPES)),
-    paperSizes: loadList(LS_KEYS.paperSizes, DEFAULT_PAPER_SIZES),
-    pocketCalendarSizes: loadList(LS_KEYS.pocketCalendarSizes, DEFAULT_POCKET_CALENDAR_SIZES),
-    businessCardSizes: loadList(LS_KEYS.businessCardSizes, DEFAULT_BUSINESS_CARD_SIZES),
-    envelopeSizes: loadList(LS_KEYS.envelopeSizes, DEFAULT_ENVELOPE_SIZES),
-    densities: loadList(LS_KEYS.densities, DEFAULT_DENSITIES),
-    colors: loadList(LS_KEYS.colors, DEFAULT_COLORS),
-    postProcessing: loadList(LS_KEYS.postProcessing, DEFAULT_POST_PROCESSING),
-    bindingTypes: loadList(LS_KEYS.bindingTypes, DEFAULT_BINDING_TYPES),
-    laminationKinds: loadList(LS_KEYS.laminationKinds, DEFAULT_LAMINATION_KINDS),
-    laminationThickness: loadList(LS_KEYS.laminationThickness, DEFAULT_LAMINATION_THICKNESS),
-    managers: loadList(LS_KEYS.managers, DEFAULT_MANAGERS),
-    paperProfiles: loadPaperProfiles(),
-    paperLibrary: loadPaperLibrary(),
-  }));
+  const [dicts, setDicts] = useState<Dicts>(() => createInitialDicts());
 
   const [sheetName, setSheetName] = useState(() => localStorage.getItem(LS_KEYS.sheetName) || "Печать_2026");
 
@@ -2007,6 +2291,7 @@ function LegacyApp() {
   useEffect(() => { saveList(LS_KEYS.laminationKinds, dicts.laminationKinds); }, [dicts.laminationKinds]);
   useEffect(() => { saveList(LS_KEYS.laminationThickness, dicts.laminationThickness); }, [dicts.laminationThickness]);
   useEffect(() => { saveList(LS_KEYS.managers, dicts.managers); }, [dicts.managers]);
+  useEffect(() => { saveManagerMarkerState({ managerMarkers: dicts.managerMarkers, managerMarkerCounter: dicts.managerMarkerCounter }); }, [dicts.managerMarkers, dicts.managerMarkerCounter]);
   useEffect(() => { savePaperProfiles(dicts.paperProfiles); }, [dicts.paperProfiles]);
   useEffect(() => { savePaperLibrary(dicts.paperLibrary); }, [dicts.paperLibrary]);
   useEffect(() => { localStorage.setItem(LS_KEYS.sheetName, sheetName); }, [sheetName]);
@@ -2025,6 +2310,25 @@ function LegacyApp() {
     }
 
     loadClientStore();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPresetStore() {
+      const result = await (window as any).electronAPI?.loadPresetStore?.();
+      if (cancelled) return;
+      if (result?.success && result.store) {
+        setPresetStore(result.store);
+      } else {
+        setPresetStore(createEmptyPresetStore());
+      }
+    }
+
+    loadPresetStore();
     return () => {
       cancelled = true;
     };
@@ -2076,6 +2380,19 @@ function LegacyApp() {
     setDicts((prev) => ({ ...prev, [key]: val }));
   }
 
+  function updateManagers(nextManagers: string[]) {
+    setDicts((prev) => {
+      const normalizedManagers = normalizeStringList(nextManagers);
+      const nextState = normalizeManagerMarkerState(normalizedManagers, prev.managers, prev.managerMarkers, prev.managerMarkerCounter);
+      return {
+        ...prev,
+        managers: normalizedManagers,
+        managerMarkers: nextState.managerMarkers,
+        managerMarkerCounter: nextState.managerMarkerCounter,
+      };
+    });
+  }
+
   function updatePaperLibrary(key: PaperLibraryKey, val: string[]) {
     setDicts((prev) => ({ ...prev, paperLibrary: { ...prev.paperLibrary, [key]: val } }));
   }
@@ -2089,6 +2406,78 @@ function LegacyApp() {
     if (result?.success && result.store) {
       setClientStore(result.store);
     }
+  }
+
+  function buildPresetDefaultName() {
+    const quantity = form.quantity.trim() ? formatQuantityCell(form.quantity) : "";
+    const product = resolveProductName(form);
+    const parts = [quantity, product].filter(Boolean);
+    return parts.join(" ").trim() || "Новый пресет";
+  }
+
+  function openPresetSaveModal() {
+    setPresetNameDraft(buildPresetDefaultName());
+    setPresetMsg(null);
+    setPresetSaveStatus("idle");
+    setShowPresetSaveModal(true);
+  }
+
+  async function saveCurrentPreset() {
+    try {
+      const presetName = presetNameDraft.trim();
+      if (!presetName) {
+        setPresetMsg("Введите название пресета.");
+        setPresetSaveStatus("error");
+        return;
+      }
+
+      setPresetSaveStatus("saving");
+      const presetData = buildPresetPayload(form);
+      const result = await (window as any).electronAPI?.savePresetEntry?.({
+        managerName: form.managerName,
+        presetName,
+        presetData,
+      });
+
+      if (!result?.success || !result.store) {
+        setPresetMsg(result?.error ? `Не удалось сохранить пресет: ${result.error}` : "Не удалось сохранить пресет.");
+        setPresetSaveStatus("error");
+        return;
+      }
+
+      setPresetStore(result.store);
+      const savedPreset = Object.values(result.store.byManager || {})
+        .flat()
+        .find((preset: PresetEntry) => preset.name.toLowerCase() === presetName.toLowerCase());
+      setSelectedPresetId(savedPreset?.id || "");
+      setPresetNameDraft("");
+      setPresetMsg(`Пресет "${presetName}" сохранён.`);
+      setPresetSaveStatus("success");
+    } catch (error) {
+      setPresetMsg(error instanceof Error ? `Не удалось сохранить пресет: ${error.message}` : "Не удалось сохранить пресет.");
+      setPresetSaveStatus("error");
+    }
+  }
+
+  function applyPreset(presetId: string) {
+    setSelectedPresetId(presetId);
+    if (!presetId) return;
+
+    const preset = availablePresets.find((item) => item.id === presetId);
+    if (!preset) return;
+
+    setForm((prev) => ({
+      ...mergePresetIntoForm(createDefaultForm(), preset.data),
+      orderNumber: prev.orderNumber,
+      clientName: prev.clientName,
+      managerName: prev.managerName,
+      deadline: prev.deadline,
+      deadlineTime: prev.deadlineTime,
+      cellBooking: prev.cellBooking,
+      fileLink: prev.fileLink,
+    }));
+    setShowValidation(false);
+    setSavedMsg(null);
   }
 
   async function loadDictsFromCloud(manual = false) {
@@ -2129,28 +2518,15 @@ function LegacyApp() {
 
   function resetDicts() {
     if (confirm("Сбросить все справочники к значениям по умолчанию?")) {
-      setDicts({
-        productTypes: DEFAULT_PRODUCT_TYPES,
-        paperSizes: DEFAULT_PAPER_SIZES,
-        pocketCalendarSizes: DEFAULT_POCKET_CALENDAR_SIZES,
-        businessCardSizes: DEFAULT_BUSINESS_CARD_SIZES,
-        envelopeSizes: DEFAULT_ENVELOPE_SIZES,
-        densities: DEFAULT_DENSITIES,
-        colors: DEFAULT_COLORS,
-        postProcessing: DEFAULT_POST_PROCESSING,
-        bindingTypes: DEFAULT_BINDING_TYPES,
-        laminationKinds: DEFAULT_LAMINATION_KINDS,
-        laminationThickness: DEFAULT_LAMINATION_THICKNESS,
-        managers: DEFAULT_MANAGERS,
-        paperProfiles: DEFAULT_PAPER_PROFILES,
-        paperLibrary: DEFAULT_PAPER_LIBRARY,
-      });
+      setDicts(createResetDicts());
     }
   }
 
   const [form, setForm] = useState<FormData>(() => createDefaultForm());
   const [clientStore, setClientStore] = useState<ClientStore>(() => createEmptyClientStore());
+  const [presetStore, setPresetStore] = useState<PresetStore>(() => createEmptyPresetStore());
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [presetMsg, setPresetMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"form" | "dicts">("form");
   const [showValidation, setShowValidation] = useState(false);
   
@@ -2165,9 +2541,15 @@ function LegacyApp() {
   const [showPreview, setShowPreview] = useState(false);
   const [showSend, setShowSend] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showCellBookingModal, setShowCellBookingModal] = useState(false);
+  const [showPresetSaveModal, setShowPresetSaveModal] = useState(false);
   const [sendState, setSendState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [previewText, setPreviewText] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
+  const [cellBookingDraftCount, setCellBookingDraftCount] = useState("");
+  const [presetNameDraft, setPresetNameDraft] = useState("");
+  const [selectedPresetId, setSelectedPresetId] = useState("");
+  const [presetSaveStatus, setPresetSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
 
   function update<K extends keyof FormData>(key: K, value: FormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -2188,6 +2570,26 @@ function LegacyApp() {
     setForm((prev) => ({ ...prev, subcontractWorks: prev.subcontractWorks.filter((work) => work.id !== id) }));
   }
 
+  function openCellBookingModal() {
+    setCellBookingDraftCount(form.cellBooking);
+    setShowCellBookingModal(true);
+  }
+
+  function saveCellBookingModal() {
+    setForm((prev) => ({ ...prev, cellBooking: cellBookingDraftCount.replace(/[^\d]/g, "") }));
+    setShowCellBookingModal(false);
+  }
+
+  const availablePresets = Object.values(presetStore.byManager || {}).flat();
+  const selectedPreset = availablePresets.find((preset) => preset.id === selectedPresetId) || null;
+
+  useEffect(() => {
+    if (!selectedPresetId) return;
+    if (!availablePresets.some((preset) => preset.id === selectedPresetId)) {
+      setSelectedPresetId("");
+    }
+  }, [availablePresets, selectedPresetId]);
+
   const required = getRequiredFields(form);
   const requiredLabels = required.map((field) => {
     if (field === "deadlineTime" && isDeadlineTimeInPast(form.deadline, form.deadlineTime)) {
@@ -2203,7 +2605,23 @@ function LegacyApp() {
   const springDiameterIsCustomOrder = springSuggestion ? parseWeight(springSuggestion.diameter) > 16 : false;
   const missingFileLink = !form.fileLink.trim();
   const dictSections = [
-    { key: "managers", title: "Менеджеры", icon: "👤", element: <DictEditor title="Менеджеры" icon="👤" items={dicts.managers} onChange={(v) => updateDict("managers", v)} /> },
+    {
+      key: "managers",
+      title: "Менеджеры",
+      icon: "👤",
+      element: (
+        <DictEditor
+          title="Менеджеры"
+          icon="👤"
+          items={dicts.managers}
+          renderSuffix={(item) => {
+            const marker = dicts.managerMarkers[normalizeManagerName(item)] || "";
+            return marker ? <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">{marker}</span> : null;
+          }}
+          onChange={updateManagers}
+        />
+      ),
+    },
     { key: "productTypes", title: "Типы изделий", icon: "🖨", element: <DictEditor title="Типы изделий" icon="🖨" items={dicts.productTypes} locked={["Другое..."]} onChange={(v) => updateDict("productTypes", v)} /> },
     { key: "paperSizes", title: "Форматы бумаги", icon: "📄", element: <DictEditor title="Форматы бумаги" icon="📄" items={dicts.paperSizes} locked={["Нестандартный"]} onChange={(v) => updateDict("paperSizes", v)} /> },
     { key: "pocketCalendarSizes", title: "Форматы карманных календарей", icon: "📅", element: <DictEditor title="Форматы карманных календарей" icon="📅" items={dicts.pocketCalendarSizes} locked={["70×100", "Нестандартный"]} onChange={(v) => updateDict("pocketCalendarSizes", v)} /> },
@@ -2324,6 +2742,8 @@ function LegacyApp() {
     setForm(createDefaultForm());
     setShowValidation(false);
     setSavedMsg(null);
+    setPresetMsg(null);
+    setSelectedPresetId("");
     setShowResetConfirm(false);
   }
 
@@ -2346,10 +2766,12 @@ function LegacyApp() {
   async function handleRealSend() {
     setSendState("loading");
     try {
+      const managerMarker = dicts.managerMarkers[normalizeManagerName(form.managerName)] || "";
       const result = await (window as any).electronAPI.sendToSheet({
         formData: form,
         shortTz: generateShortTZ(form),
-        sheetName: sheetName
+        sheetName: sheetName,
+        managerMarker,
       });
       if (result.success) {
         update("orderNumber", result.orderNumber);
@@ -2404,9 +2826,29 @@ function LegacyApp() {
       </header>
 
       <div className="max-w-5xl mx-auto w-full px-4 mt-4">
-        <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-slate-200 w-fit">
-          <button onClick={() => setActiveTab("form")} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "form" ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}>📋 Форма ТЗ</button>
-          <button onClick={() => setActiveTab("dicts")} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "dicts" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}>⚙️ Справочники</button>
+        <div className="flex flex-col lg:flex-row lg:items-stretch gap-3">
+          <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-slate-200 w-fit">
+            <button onClick={() => setActiveTab("form")} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "form" ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}>📋 Форма ТЗ</button>
+            <button onClick={() => setActiveTab("dicts")} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "dicts" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}>⚙️ Справочники</button>
+          </div>
+          {activeTab === "form" && (
+            <div className="w-full lg:flex-1 bg-white rounded-xl px-3 py-2.5 shadow-sm border border-slate-200 min-w-0">
+              <div className="flex items-center gap-3 w-full">
+                <label className="text-xs font-medium text-slate-600 uppercase tracking-wide whitespace-nowrap">Пресет</label>
+                <select
+                  value={selectedPresetId}
+                  className={`${selectFieldClass(false)} min-w-0 flex-1 w-full`}
+                  onChange={(e) => applyPreset(e.target.value)}
+                  disabled={availablePresets.length === 0}
+                >
+                  <option value="">{availablePresets.length > 0 ? "— выберите пресет —" : "Пока нет сохранённых пресетов"}</option>
+                  {availablePresets.map((preset) => (
+                    <option key={preset.id} value={preset.id}>{preset.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2448,7 +2890,7 @@ function LegacyApp() {
                   <input type="text" className={inputClass + " bg-yellow-50 font-bold"} placeholder="подставится автоматически" value={form.orderNumber} readOnly />
                 </Field>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.15fr_0.95fr] gap-4 items-start">
                 <Field label="Тираж (экземпляров)" required>
                   <input data-field="quantity" type="number" min={1} className={fieldClass(showValidation && required.includes("quantity"))} placeholder="Например: 1000" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} />
                 </Field>
@@ -2463,6 +2905,18 @@ function LegacyApp() {
                     onDateChange={(value) => update("deadline", value)}
                     onTimeChange={(value) => update("deadlineTime", value)}
                   />
+                </Field>
+                <Field label="Бронь ячеек">
+                  <button
+                    type="button"
+                    onClick={openCellBookingModal}
+                    className={actionFieldClass(false)}
+                  >
+                    <span className={`${form.cellBooking ? "text-slate-800 font-medium" : "text-slate-400"}`}>
+                      {form.cellBooking ? `Зарезервировано: ${form.cellBooking} ${Number(form.cellBooking) === 1 ? "ячейка" : "ячеек"}` : "Бронь ячеек"}
+                    </span>
+                    <span className="text-slate-400 shrink-0">＋</span>
+                  </button>
                 </Field>
               </div>
               <div className="mt-4 pt-4 border-t border-slate-100">
@@ -2536,7 +2990,7 @@ function LegacyApp() {
             <Section title="🖨 Параметры изделия">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Field label="Тип изделия" required>
-                  <select data-field="productType" value={form.productType} className={selectFieldClass(showValidation && required.includes("productType"))} onChange={(e) => { setForm((prev) => ({ ...createDefaultForm(), orderNumber: prev.orderNumber, clientName: prev.clientName, managerName: prev.managerName, deadline: prev.deadline, deadlineTime: prev.deadlineTime, quantity: prev.quantity, subcontractWorks: prev.subcontractWorks, productType: e.target.value })); setShowValidation(false); }}>
+                  <select data-field="productType" value={form.productType} className={selectFieldClass(showValidation && required.includes("productType"))} onChange={(e) => { setForm((prev) => ({ ...createDefaultForm(), orderNumber: prev.orderNumber, clientName: prev.clientName, managerName: prev.managerName, deadline: prev.deadline, deadlineTime: prev.deadlineTime, quantity: prev.quantity, cellBooking: prev.cellBooking, subcontractWorks: prev.subcontractWorks, productType: e.target.value })); setShowValidation(false); }}>
                     <option value="">— выберите —</option>{dicts.productTypes.map((t) => <option key={t}>{t}</option>)}
                   </select>
                   {pt === "Другое..." && <input data-field="productTypeCustom" className={`${fieldClass(showValidation && required.includes("productTypeCustom"))} mt-2`} placeholder="Укажите тип изделия" value={form.productTypeCustom} onChange={(e) => update("productTypeCustom", e.target.value)} />}
@@ -2991,6 +3445,7 @@ function LegacyApp() {
               <button onClick={() => validateThen(handlePreview)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors shadow-sm"><span>👁</span> Предпросмотр</button>
               <button onClick={() => validateThen(() => setShowSend(true))} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span>📊</span> Отправить в таблицу</button>
               <button onClick={() => validateThen(handleSave)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span>💾</span> Сохранить ТЗ в TXT</button>
+              <button onClick={openPresetSaveModal} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"><span>💽</span> Сохранить пресет</button>
               {savedMsg && <div className={`self-center rounded-xl border px-4 py-2 text-sm font-medium ${savedMsg.startsWith("Ошибка") ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"}`}>{savedMsg}</div>}
               {!isFormValid && <p className="text-xs text-slate-500 self-center">* Заполните обязательные поля</p>}
             </div>
@@ -3176,6 +3631,89 @@ function LegacyApp() {
             <div className="px-5 py-4 flex justify-end gap-3">
               <button type="button" onClick={() => setShowResetConfirm(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">Отмена</button>
               <button type="button" onClick={confirmReset} className="px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 transition-colors">Очистить</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCellBookingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowCellBookingModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 z-10 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-white">
+              <h2 className="font-semibold text-slate-800 text-lg">Бронь ячеек</h2>
+              <p className="text-sm text-slate-500 mt-1">Укажите, сколько строк нужно зарезервировать.</p>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-600 uppercase tracking-wide">Количество ячеек</label>
+                <input
+                  type="number"
+                  min={0}
+                  className={inputClass}
+                  placeholder="Например: 4"
+                  value={cellBookingDraftCount}
+                  onChange={(e) => setCellBookingDraftCount(e.target.value)}
+                />
+              </div>
+              <p className="text-xs text-slate-400">Позже эта информация будет помогать резервировать строки в таблице.</p>
+            </div>
+            <div className="px-5 pb-5 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowCellBookingModal(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">Отмена</button>
+              <button type="button" onClick={saveCellBookingModal} className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">Сохранить</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPresetSaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowPresetSaveModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 z-10 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-emerald-50 to-white">
+              <h2 className="font-semibold text-slate-800 text-lg">Сохранить пресет</h2>
+              <p className="text-sm text-slate-500 mt-1">Будут сохранены только заполненные поля, кроме заказчика, даты, ссылки и брони.</p>
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              {presetMsg && (
+                <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+                  presetSaveStatus === "success"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                    : "border-red-200 bg-red-50 text-red-700"
+                }`}>
+                  {presetMsg}
+                </div>
+              )}
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-slate-600 uppercase tracking-wide">Название пресета</label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  placeholder="Например: 100 визиток"
+                  value={presetNameDraft}
+                  onChange={(e) => {
+                    setPresetNameDraft(e.target.value);
+                    setPresetMsg(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      saveCurrentPreset();
+                    }
+                  }}
+                />
+              </div>
+              <p className="text-xs text-slate-400">Пресет сохранится локально на этом компьютере и будет доступен только для этого менеджера.</p>
+            </div>
+            <div className="px-5 pb-5 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowPresetSaveModal(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">Отмена</button>
+              {presetSaveStatus === "success" ? (
+                <button type="button" onClick={() => setShowPresetSaveModal(false)} className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Закрыть</button>
+              ) : (
+                <button type="button" onClick={saveCurrentPreset} className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors" disabled={presetSaveStatus === "saving"}>
+                  {presetSaveStatus === "saving" ? "Сохранение..." : "Сохранить"}
+                </button>
+              )}
             </div>
           </div>
         </div>

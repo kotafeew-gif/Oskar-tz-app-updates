@@ -18,7 +18,15 @@ function getClientStorePath() {
   return path.join(app.getPath('userData'), 'clients.json');
 }
 
+function getPresetStorePath() {
+  return path.join(app.getPath('userData'), 'presets.json');
+}
+
 function createEmptyClientStore() {
+  return { byManager: {} };
+}
+
+function createEmptyPresetStore() {
   return { byManager: {} };
 }
 
@@ -64,6 +72,53 @@ async function saveClientStoreToDisk(store) {
   await writeFile(filePath, JSON.stringify(store, null, 2), 'utf8');
 }
 
+function normalizePresetName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+async function loadPresetStoreFromDisk() {
+  try {
+    const raw = await readFile(getPresetStorePath(), 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return createEmptyPresetStore();
+    const byManager = parsed.byManager && typeof parsed.byManager === 'object' ? parsed.byManager : {};
+    const next = createEmptyPresetStore();
+
+    Object.entries(byManager).forEach(([manager, list]) => {
+      if (!Array.isArray(list)) return;
+      const managerKey = normalizeManagerName(manager);
+      next.byManager[managerKey] = [];
+      const seen = new Set();
+
+      list.forEach((item) => {
+        const name = normalizePresetName(item?.name ?? item);
+        if (!name) return;
+        const key = name.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+
+        next.byManager[managerKey].push({
+          id: normalizePresetName(item?.id) || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name,
+          data: item?.data && typeof item.data === 'object' ? item.data : {},
+          createdAt: item?.createdAt || new Date().toISOString(),
+          updatedAt: item?.updatedAt || item?.createdAt || new Date().toISOString(),
+        });
+      });
+    });
+
+    return next;
+  } catch {
+    return createEmptyPresetStore();
+  }
+}
+
+async function savePresetStoreToDisk(store) {
+  const filePath = getPresetStorePath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, JSON.stringify(store, null, 2), 'utf8');
+}
+
 async function upsertClientEntry(managerName, clientName) {
   const managerKey = normalizeManagerName(managerName);
   const name = normalizeClientName(clientName);
@@ -81,6 +136,44 @@ async function upsertClientEntry(managerName, clientName) {
   }
 
   return { success: true, store, added: false };
+}
+
+function clonePresetData(data) {
+  return JSON.parse(JSON.stringify(data || {}));
+}
+
+async function upsertPresetEntry(managerName, presetName, presetData) {
+  const managerKey = normalizeManagerName(managerName);
+  const name = normalizePresetName(presetName);
+  if (!name) return { success: false, error: 'empty_name' };
+
+  const store = await loadPresetStoreFromDisk();
+  const list = Array.isArray(store.byManager[managerKey]) ? [...store.byManager[managerKey]] : [];
+  const now = new Date().toISOString();
+  const payload = clonePresetData(presetData);
+  const existingIndex = list.findIndex((item) => normalizePresetName(item.name).toLowerCase() === name.toLowerCase());
+
+  if (existingIndex >= 0) {
+    const existing = list[existingIndex];
+    list[existingIndex] = {
+      ...existing,
+      name,
+      data: payload,
+      updatedAt: now,
+    };
+  } else {
+    list.push({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      data: payload,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  store.byManager[managerKey] = list;
+  await savePresetStoreToDisk(store);
+  return { success: true, store };
 }
 
 function formatDateTimeCell(date, time) {
@@ -126,6 +219,63 @@ const CONFIG_SHEET_TITLE = '__CONFIG__';
 const KEY_PATH = app.isPackaged 
   ? path.join(process.resourcesPath, 'google-key.json') 
   : path.join(__dirname, 'google-key.json');
+
+function normalizeSheetCell(value) {
+  return String(value ?? '').trim();
+}
+
+function getRowCell(row, index) {
+  return normalizeSheetCell(Array.isArray(row) ? row[index] : '');
+}
+
+function isRowAvailable(row, managerMarker) {
+  const clientCell = getRowCell(row, 1);
+  if (clientCell) return false;
+
+  const markerCell = getRowCell(row, 25);
+  if (!markerCell) return true;
+
+  return !!managerMarker && markerCell === managerMarker;
+}
+
+function findAvailableBlock(rows, managerMarker, blockSize, maxRows) {
+  const upperBound = Math.max(Number(maxRows) || 0, rows.length, blockSize);
+  const lastStart = Math.max(2, upperBound - blockSize + 1);
+
+  for (let startRow = 2; startRow <= lastStart; startRow += 1) {
+    let available = true;
+
+    for (let offset = 0; offset < blockSize; offset += 1) {
+      if (!isRowAvailable(rows[startRow - 1 + offset], managerMarker)) {
+        available = false;
+        break;
+      }
+    }
+
+    if (available) return startRow;
+  }
+
+  return -1;
+}
+
+async function ensureSheetRowCount(sheets, sheetId, currentRowCount, requiredRowCount) {
+  if (!sheetId || requiredRowCount <= currentRowCount) return;
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: SPREADSHEET_ID,
+    requestBody: {
+      requests: [
+        {
+          appendDimension: {
+            sheetId,
+            dimension: 'ROWS',
+            length: requiredRowCount - currentRowCount,
+          },
+        },
+      ],
+    },
+  });
+}
 
 function buildOrangeRuns(text) {
   const needle = 'УФ-лак';
@@ -430,6 +580,15 @@ function createWindow() {
       mainWindow.webContents.send('update-status', latestUpdateState);
     }
   });
+  mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
+  });
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    console.error('Renderer load failed:', errorCode, errorDescription, validatedURL);
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('Renderer process gone:', details);
+  });
 }
 
 app.whenReady().then(() => {
@@ -565,26 +724,51 @@ ipcMain.handle('save-client-entry', async (event, { managerName, clientName }) =
   }
 });
 
-ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName }) => {
+ipcMain.handle('load-preset-store', async () => {
+  try {
+    const store = await loadPresetStoreFromDisk();
+    return { success: true, store };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('save-preset-entry', async (event, { managerName, presetName, presetData }) => {
+  try {
+    return await upsertPresetEntry(managerName, presetName, presetData);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName, managerMarker }) => {
   try {
     const sheets = createSheetsClient();
     const targetSheet = sheetName || 'Печать_2026';
+    const normalizedManagerMarker = normalizeSheetCell(managerMarker);
 
     const [metaResponse, readResponse] = await Promise.all([
       sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID }),
       sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `'${targetSheet}'!A:B`,
+        range: `'${targetSheet}'!A:Z`,
       }),
     ]);
     const sheetMeta = metaResponse.data.sheets?.find((sheet) => sheet.properties?.title === targetSheet);
+    const sheetId = sheetMeta?.properties?.sheetId;
+    const sheetRowCount = sheetMeta?.properties?.gridProperties?.rowCount || readResponse.data.values?.length || 0;
 
     const rows = readResponse.data.values || [];
-    let emptyRowIndex = rows.findIndex((row, index) => index > 0 && (!row[1] || row[1].trim() === ''));
-    if (emptyRowIndex === -1) emptyRowIndex = rows.length;
+    const reservationCount = Math.max(0, Number.parseInt(String(formData?.cellBooking || '').replace(/[^\d]/g, ''), 10) || 0);
+    const blockSize = reservationCount + 1;
+    const foundRowNumber = findAvailableBlock(rows, normalizedManagerMarker, blockSize, sheetRowCount);
+    const rowNumber = foundRowNumber > 0 ? foundRowNumber : Math.max(sheetRowCount + 1, 2);
+    const requiredRowCount = rowNumber + blockSize - 1;
+    const existingMarker = getRowCell(rows[rowNumber - 1], 25);
 
-    const rowNumber = emptyRowIndex + 1;
-    const orderNumberFromA = rows[emptyRowIndex] ? rows[emptyRowIndex][0] : "???";
+    await ensureSheetRowCount(sheets, sheetId, sheetRowCount, requiredRowCount);
+
+    const orderNumberFromA = rows[rowNumber - 1] ? rows[rowNumber - 1][0] : "???";
 
     const now = new Date();
     const creationCell = `${now.toLocaleDateString('ru-RU')}\n${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
@@ -613,13 +797,33 @@ ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName }) 
       requestBody: { values: [values] },
     });
 
+    if (normalizedManagerMarker && reservationCount > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${targetSheet}'!Z${rowNumber + 1}:Z${rowNumber + reservationCount}`,
+        valueInputOption: 'RAW',
+        requestBody: {
+          values: Array.from({ length: reservationCount }, () => [normalizedManagerMarker]),
+        },
+      });
+    }
+
+    if (normalizedManagerMarker && existingMarker === normalizedManagerMarker) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${targetSheet}'!Z${rowNumber}`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [['']] },
+      });
+    }
+
     const requests = [];
 
-    if (sheetMeta?.properties?.sheetId && formData.deadline && formData.deadline === getLocalIsoDate(now)) {
+    if (sheetId && formData.deadline && formData.deadline === getLocalIsoDate(now)) {
       requests.push({
         repeatCell: {
           range: {
-            sheetId: sheetMeta.properties.sheetId,
+            sheetId,
             startRowIndex: rowNumber - 1,
             endRowIndex: rowNumber,
             startColumnIndex: 3,
@@ -638,11 +842,11 @@ ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName }) 
       });
     }
 
-    if (sheetMeta?.properties?.sheetId && columnE.includes('УФ-лак')) {
+    if (sheetId && columnE.includes('УФ-лак')) {
       requests.push({
         updateCells: {
           range: {
-            sheetId: sheetMeta.properties.sheetId,
+            sheetId,
             startRowIndex: rowNumber - 1,
             endRowIndex: rowNumber,
             startColumnIndex: 4,
