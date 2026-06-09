@@ -174,7 +174,15 @@ const LS_KEYS = {
   managerMarkerState: "dict_managerMarkerState",
   paperProfiles: "dict_paperProfiles",
   sheetName: "config_sheetName",
+  updateSummaryVersion: "update_summary_version",
 };
+
+const UPDATE_SUMMARY_POINTS = [
+  "Добавлена функция пресетов для быстрого повторного заполнения заказа.",
+  "Добавлена бронь строк в таблице для резервирования заказов.",
+  "Исправлен белый экран при выборе «Свой оборот».",
+  "Исправлены мелкие баги и недоработки.",
+];
 
 function loadList(key: string, defaults: string[]): string[] {
   try {
@@ -1702,6 +1710,62 @@ function UpdateNotice({
   );
 }
 
+function UpdateSummaryModal({
+  version,
+  onClose,
+}: {
+  version: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm" />
+      <div
+        className="relative z-10 w-full max-w-lg overflow-hidden rounded-3xl border border-emerald-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.24)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-6 py-5 text-white">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-2xl ring-1 ring-white/20">
+              ✅
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-lg font-semibold">Обновление прошло успешно</div>
+              <div className="mt-1 text-sm text-white/80">
+                Версия {version}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 px-6 py-5">
+          <p className="text-sm text-slate-600">
+            Вот что нового в этой сборке:
+          </p>
+          <ul className="space-y-2">
+            {UPDATE_SUMMARY_POINTS.map((item) => (
+              <li key={item} className="flex gap-3 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <span className="mt-0.5 text-emerald-500">•</span>
+                <span className="leading-6">{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50/60 px-6 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
+          >
+            Понятно
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Компоненты-Блоки ────────────────────────────────────────────────────────
 
 function LaminationBlockComponent({ label, value, onChange, laminationKinds, laminationThickness }: any) {
@@ -2349,6 +2413,13 @@ function LegacyApp() {
   }, []);
 
   useEffect(() => {
+    const shownVersion = localStorage.getItem(LS_KEYS.updateSummaryVersion) || "";
+    if (shownVersion !== APP_VERSION) {
+      setShowUpdateSummaryModal(true);
+    }
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function bootstrapCloudDicts() {
@@ -2543,6 +2614,7 @@ function LegacyApp() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showCellBookingModal, setShowCellBookingModal] = useState(false);
   const [showPresetSaveModal, setShowPresetSaveModal] = useState(false);
+  const [showUpdateSummaryModal, setShowUpdateSummaryModal] = useState(false);
   const [sendState, setSendState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [previewText, setPreviewText] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
@@ -2763,6 +2835,11 @@ function LegacyApp() {
     setUpdateState(null);
   }
 
+  function closeUpdateSummaryModal() {
+    localStorage.setItem(LS_KEYS.updateSummaryVersion, APP_VERSION);
+    setShowUpdateSummaryModal(false);
+  }
+
   async function handleRealSend() {
     setSendState("loading");
     try {
@@ -2809,6 +2886,9 @@ function LegacyApp() {
         onInstall={handleInstallUpdate}
         onClose={closeUpdateNotice}
       />
+      {showUpdateSummaryModal && (
+        <UpdateSummaryModal version={APP_VERSION} onClose={closeUpdateSummaryModal} />
+      )}
       <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow">
