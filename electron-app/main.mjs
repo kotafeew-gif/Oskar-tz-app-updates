@@ -759,8 +759,9 @@ ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName, ma
     const sheetRowCount = sheetMeta?.properties?.gridProperties?.rowCount || readResponse.data.values?.length || 0;
 
     const rows = readResponse.data.values || [];
-    const reservationCount = Math.max(0, Number.parseInt(String(formData?.cellBooking || '').replace(/[^\d]/g, ''), 10) || 0);
-    const blockSize = reservationCount + 1;
+    const totalRowsRequested = Math.max(0, Number.parseInt(String(formData?.cellBooking || '').replace(/[^\d]/g, ''), 10) || 0);
+    const reservationCount = totalRowsRequested > 0 ? Math.max(0, totalRowsRequested - 1) : 0;
+    const blockSize = totalRowsRequested > 0 ? totalRowsRequested : 1;
     const foundRowNumber = findAvailableBlock(rows, normalizedManagerMarker, blockSize, sheetRowCount);
     const rowNumber = foundRowNumber > 0 ? foundRowNumber : Math.max(sheetRowCount + 1, 2);
     const requiredRowCount = rowNumber + blockSize - 1;
