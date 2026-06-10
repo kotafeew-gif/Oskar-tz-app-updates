@@ -1,7 +1,7 @@
 {
   "name": "oscar-print-app",
   "private": true,
-  "version": "2.4.9",
+  "version": "2.4.8",
   "author": "YourName",
   "description": "TZ Oscar-Print",
   "main": "electron-app/main.mjs",
