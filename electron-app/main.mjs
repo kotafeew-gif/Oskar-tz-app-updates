@@ -390,17 +390,44 @@ async function checkForAppUpdates() {
   }
 }
 
+function decodeHtmlEntities(text) {
+  return text
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+function htmlToPlainText(text) {
+  if (!text) return '';
+  return decodeHtmlEntities(
+    String(text)
+      .replace(/<\s*br\s*\/?\s*>/gi, '\n')
+      .replace(/<\/\s*p\s*>/gi, '\n\n')
+      .replace(/<\/\s*li\s*>/gi, '\n')
+      .replace(/<\s*li[^>]*>/gi, '• ')
+      .replace(/<\/?[^>]+>/g, '')
+  )
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function normalizeReleaseNotes(notes) {
   if (Array.isArray(notes)) {
     return notes
       .map((item) => (typeof item === 'string' ? item : item?.note || ''))
+      .map((item) => htmlToPlainText(item))
       .filter(Boolean)
       .join('\n\n')
       .trim();
   }
 
   if (typeof notes === 'string') {
-    return notes.trim();
+    return htmlToPlainText(notes);
   }
 
   return '';
