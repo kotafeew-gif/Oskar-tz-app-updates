@@ -43,6 +43,8 @@ const DEFAULT_DENSITIES = [
 
 const PAPER_TYPE_OPTIONS = ["Мелованная", "Офсетная", "Каландр", "Картон", "Без бумаги", "Давальческая", "Дизайнерская"] as const;
 type PaperTypeOption = typeof PAPER_TYPE_OPTIONS[number];
+const BAG_PAPER_TYPE_OPTIONS = PAPER_TYPE_OPTIONS;
+type BagPaperTypeOption = PaperTypeOption;
 
 const DEFAULT_PAPER_LIBRARY = {
   coated: ["115 г/м²", "130 г/м²", "150 г/м²", "170 г/м²", "200 г/м²", "250 г/м²", "300 г/м²", "350 г/м²"],
@@ -180,11 +182,8 @@ const LS_KEYS = {
 };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Исправлена логика работы брони, теперь бронь автоматически скидывается при публикации первой заявки.",
-  "Исправлена ошибка сохранения пресетов.",
-  "Добавлены новые типы бумаги «Без бумаги» и «Давальческая».",
-  "Добавлена фальцовка.",
-  "Исправлены мелкие баги и недоработки.",
+  "Для конвертов тип «Готовые конверты» больше не попадает в ТЗ.",
+  "Исправлено отображение конвертов в форме.",
 ];
 
 function loadList(key: string, defaults: string[]): string[] {
@@ -520,7 +519,7 @@ interface FormData {
   lamination: LaminationBlock; kashurovka: KashurovkaBlock;
   binding: boolean; bindingType: string; stapleCount: string; staplePosition: string; springColor: string; springColorCustom: string; springDiameter: string; springPosition: string; springHidden: boolean;
   subcontractWorks: SubcontractWork[];
-  bagHeight: string; bagWidth: string; bagDepth: string; bagEyeletColor: string; bagEyeletColorCustom: string; bagHandleColor: string; bagHandleColorCustom: string;
+  bagPaperType: BagPaperTypeOption | ""; bagHeight: string; bagWidth: string; bagDepth: string; bagPartsCount: string; bagExternalSheets: boolean; bagEyeletColor: string; bagEyeletColorCustom: string; bagHandleColor: string; bagHandleColorCustom: string; bagHandlePipsik: string;
   stickerMaterial: string; stickerFinish: PaperFinish; stickerPlotterCut: boolean;
   ownReverse: boolean;
   wobblerPlotterCut: boolean; wobblerFootGlue: boolean;
@@ -586,7 +585,7 @@ function createDefaultForm(): FormData {
     lamination: defaultLaminationBlock(), kashurovka: defaultKashurovkaBlock(),
     binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springDiameter: "8 мм", springPosition: "По широкой стороне", springHidden: false,
     subcontractWorks: [],
-    bagHeight: "", bagWidth: "", bagDepth: "", bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleColor: "Белый", bagHandleColorCustom: "",
+    bagPaperType: "", bagHeight: "", bagWidth: "", bagDepth: "", bagPartsCount: "Из 2-х частей", bagExternalSheets: false, bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleColor: "Белый", bagHandleColorCustom: "", bagHandlePipsik: "Без пипсика",
     stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false,
     ownReverse: false,
     wobblerPlotterCut: false, wobblerFootGlue: false,
@@ -781,32 +780,33 @@ function formatLaminationCompact(value: LaminationBlock): string {
   return `лам. ${getLaminationSideNotation(value.side)} ${kind} ${value.thickness}`;
 }
 
-function formatPaperSelection(type: PaperTypeOption | "", value: string, customName = ""): string {
+function formatPaperSelection(type: PaperTypeOption | "", value: string, customName = "", envelopeLabel = false): string {
   const trimmedValue = normalizeMaterial(value);
   const trimmedCustom = customName.trim();
   if (!type) return trimmedCustom || trimmedValue;
-  if (type === "Без бумаги" || type === "Давальческая") return type;
+  if (type === "Без бумаги") return envelopeLabel ? "Готовые конверты" : type;
+  if (type === "Давальческая") return type;
   if (type === "Дизайнерская") {
     return trimmedCustom ? `Дизайнерская бумага ${trimmedCustom}` : "Дизайнерская бумага";
   }
   return trimmedValue ? `${type} ${trimmedValue}` : type;
 }
 
-function formatPaperSelectionWithFinish(type: PaperTypeOption | "", value: string, customName: string, finish: PaperFinish): string {
-  const paper = formatPaperSelection(type, value, customName);
+function formatPaperSelectionWithFinish(type: PaperTypeOption | "", value: string, customName: string, finish: PaperFinish, envelopeLabel = false): string {
+  const paper = formatPaperSelection(type, value, customName, envelopeLabel);
   if (!paper) return "";
   if (type === "Без бумаги" || type === "Давальческая") return paper;
   return `${paper}, ${finish.toLowerCase()}`;
 }
 
-function formatPaperSelectionForTZ(type: PaperTypeOption | "", value: string, customName = ""): string {
+function formatPaperSelectionForTZ(type: PaperTypeOption | "", value: string, customName = "", envelopeLabel = false): string {
   if (type === "Без бумаги") return "";
-  return formatPaperSelection(type, value, customName);
+  return formatPaperSelection(type, value, customName, envelopeLabel);
 }
 
-function formatPaperSelectionWithFinishForTZ(type: PaperTypeOption | "", value: string, customName: string, finish: PaperFinish): string {
+function formatPaperSelectionWithFinishForTZ(type: PaperTypeOption | "", value: string, customName: string, finish: PaperFinish, envelopeLabel = false): string {
   if (type === "Без бумаги") return "";
-  return formatPaperSelectionWithFinish(type, value, customName, finish);
+  return formatPaperSelectionWithFinish(type, value, customName, finish, envelopeLabel);
 }
 
 function isPaperlessPaperType(type: PaperTypeOption | ""): boolean {
@@ -999,16 +999,29 @@ function getBagColor(value: string, custom: string): string {
   return value === "Другой цвет..." ? custom.trim() : value;
 }
 
+function getBagHandleText(form: FormData): string {
+  const color = getBagColor(form.bagHandleColor, form.bagHandleColorCustom);
+  const pipsik = form.bagHandlePipsik.trim().toLowerCase();
+  if (!color) return pipsik;
+  return pipsik ? `${color}, ${pipsik}` : color;
+}
+
+function formatBagPaperSelection(form: FormData): string {
+  const density = normalizeMaterial(form.density);
+  if (!form.bagPaperType) return density;
+  return density ? `${form.bagPaperType} ${density}` : form.bagPaperType;
+}
+
 function buildSpringSuggestion(form: FormData): { thickness: number; diameter: string } | null {
   if (form.bindingType !== "Пружина") return null;
 
-  const pageCount = isNotebook(form.productType)
+  const sheetCount = isNotebook(form.productType)
     ? Number(form.blockPages)
     : isMultiBlock(form.productType)
-      ? Number(form.pageCount)
+      ? Number(form.pageCount) / 2
       : 0;
 
-  if (!pageCount) return null;
+  if (!sheetCount) return null;
 
   const bodyThickness = estimateThicknessMm(
     isNotebook(form.productType) ? form.blockDensity : isMultiBlock(form.productType) ? form.blockDensity : form.density,
@@ -1022,7 +1035,7 @@ function buildSpringSuggestion(form: FormData): { thickness: number; diameter: s
     ? estimateThicknessMm(coverMaterial, coverFinish)
     : 0;
 
-  const thickness = (pageCount / 2) * bodyThickness + (coverThickness ? 2 * coverThickness : 0);
+  const thickness = sheetCount * bodyThickness + (coverThickness ? 2 * coverThickness : 0);
   const target = Math.ceil(thickness + 2);
   const nearest = SPRING_DIAMETERS.find((item) => parseWeight(item) >= target) ?? SPRING_DIAMETERS[SPRING_DIAMETERS.length - 1];
   return { thickness, diameter: nearest };
@@ -1047,7 +1060,7 @@ function formatShortColor(value: string, ownReverse = false): string {
 function getDisplaySize(form: FormData): string {
   if (isEnvelope(form.productType)) return form.envelopeSize === "Нестандартный" ? form.envelopeSizeCustom : form.envelopeSize;
   if (form.productType === "Визитки") return form.businessCardSize === "Нестандартный" ? form.businessCardSizeCustom : form.businessCardSize;
-  if (isBag(form.productType)) return form.bagHeight || form.bagWidth || form.bagDepth ? `${form.bagHeight || "?"}×${form.bagWidth || "?"}×${form.bagDepth || "?"} мм` : "";
+  if (isBag(form.productType)) return form.bagWidth || form.bagHeight || form.bagDepth ? `${form.bagWidth || "?"}×${form.bagHeight || "?"}×${form.bagDepth || "?"} мм` : "";
   if (isCatalog(form.productType)) return form.catalogFormat === "Нестандартный" ? form.catalogFormatCustom : form.catalogFormat;
   if (isBrochure(form.productType)) return form.brochureFormat === "Нестандартный" ? form.brochureFormatCustom : form.brochureFormat;
   if (isPocketCalendar(form)) return form.paperSize === "Нестандартный" ? form.paperSizeCustom : form.paperSize;
@@ -1080,7 +1093,7 @@ function generateShortTZ(form: FormData): string {
     if (covParts.length) parts.push(samePaper ? covParts.join(" ") : `обложка: ${covParts.join(" ")}`);
     if (blkParts.length) parts.push(samePaper ? blkParts.join(" ") : `блок: ${blkParts.join(" ")}`);
   } else if (isNotebook(form.productType)) {
-    if (form.blockPages) parts.push(`${form.blockPages} стр. в блоке`);
+    if (form.blockPages) parts.push(`${form.blockPages} листов в блоке`);
     const coverSelection = { type: form.coverPaperType, value: form.coverDensity, customName: form.coverPaperCustomName, finish: form.coverFinish };
     const blockSelection = { type: form.blockPaperType, value: form.blockDensity, customName: form.blockPaperCustomName, finish: form.blockFinish };
     const samePaper = isSamePaperSelection(coverSelection, blockSelection);
@@ -1121,8 +1134,17 @@ function generateShortTZ(form: FormData): string {
       parts.push(`Основание: ${normalizeMaterial(form.calendarBaseMaterial)} ${form.calendarBaseFinish.toLowerCase()}`);
     }
   } else if (isBag(form.productType)) {
-    if (form.density) parts.push(`${normalizeMaterial(form.density)} ${form.densityFinish.toLowerCase()}`);
-    if (form.colorMode) parts.push(form.colorMode.split(/\s/)[0]);
+    if (!form.bagExternalSheets) {
+      const bagPaper = formatBagPaperSelection(form);
+      if (bagPaper) parts.push(`${bagPaper} ${form.densityFinish.toLowerCase()}`);
+      if (form.colorMode) parts.push(form.colorMode.split(/\s/)[0]);
+    }
+    if (form.bagPartsCount) parts.push(form.bagPartsCount.toLowerCase());
+    if (form.bagExternalSheets) parts.push("сборка из сторонних листов");
+    const eyeletColor = getBagColor(form.bagEyeletColor, form.bagEyeletColorCustom);
+    if (eyeletColor) parts.push(`люверсы: ${eyeletColor.toLowerCase()}`);
+    const handleText = getBagHandleText(form);
+    if (handleText) parts.push(`ручки: ${handleText.toLowerCase()}`);
   } else if (isSticker(form.productType)) {
     if (form.stickerMaterial) parts.push(`${normalizeMaterial(form.stickerMaterial)} ${form.stickerFinish.toLowerCase()}`.toLowerCase());
     if (form.stickerPlotterCut) parts.push("плоттерная резка");
@@ -1143,9 +1165,12 @@ function generateShortTZ(form: FormData): string {
       parts.push(holeText);
     }
   } else {
-    const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-    if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
-    if (form.colorMode) parts.push(formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки"));
+    const envelopePaperless = isEnvelope(form.productType) && form.paperType === "Без бумаги";
+    if (!envelopePaperless) {
+      const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+      if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
+      if (form.colorMode) parts.push(formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки"));
+    }
   }
 
   if (form.postProcessing.length > 0) {
@@ -1238,7 +1263,7 @@ function generateTZ(form: FormData, _tzNumber: number): string {
   lines.push(" -----------------");
   lines.push(` Тип изделия : ${product || "—"}`);
 
-  if (cleanSize) lines.push(` Формат : ${cleanSize}`);
+  if (cleanSize && !isBag(form.productType)) lines.push(` Формат : ${cleanSize}`);
 
   if (isMultiBlock(form.productType)) {
     lines.push(` Страниц (с обложкой) : ${form.pageCount || "—"}`);
@@ -1257,7 +1282,7 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     lines.push(` Цветность : ${normalizeColorMode(form.blockColor) || "—"}`);
     if (form.blockLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.blockLamination)}`);
   } else if (isNotebook(form.productType)) {
-    lines.push(` Страниц в блоке : ${form.blockPages || "—"}`);
+    lines.push(` Листов в блоке : ${form.blockPages || "—"}`);
     lines.push("");
     lines.push(" ОБЛОЖКА");
     if (form.coverUseKash) lines.push(" Обложка задаётся в блоке кашировки");
@@ -1306,11 +1331,16 @@ function generateTZ(form: FormData, _tzNumber: number): string {
       if (form.lamination.enabled) lines.push(` Ламинация : ${formatLamination(form.lamination)}`);
     }
   } else if (isBag(form.productType)) {
-    lines.push(` Материал : ${formatMaterialWithFinish(form.density, form.densityFinish) || "—"}`);
-    lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
-    lines.push(` Размер В×Ш×Г : ${size || "—"}`);
+    if (!form.bagExternalSheets) {
+      const bagPaper = formatBagPaperSelection(form);
+      lines.push(` Бумага : ${bagPaper ? `${bagPaper}, ${form.densityFinish.toLowerCase()}` : "—"}`);
+      lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
+    }
+    lines.push(` Размер Ш×В×Г : ${size || "—"}`);
+    lines.push(` Количество частей : ${form.bagPartsCount || "—"}`);
+    if (form.bagExternalSheets) lines.push(" Сборка из сторонних листов : Да");
     lines.push(` Цвет люверсов : ${getBagColor(form.bagEyeletColor, form.bagEyeletColorCustom) || "—"}`);
-    lines.push(` Цвет ручек : ${getBagColor(form.bagHandleColor, form.bagHandleColorCustom) || "—"}`);
+    lines.push(` Цвет ручек : ${getBagHandleText(form) || "—"}`);
   } else if (isSticker(form.productType)) {
     lines.push(` Материал : ${formatMaterialWithFinish(form.stickerMaterial, form.stickerFinish) || "—"}`);
     lines.push(` Плоттерная резка : ${form.stickerPlotterCut ? "Да" : "Нет"}`);
@@ -1340,13 +1370,18 @@ function generateTZ(form: FormData, _tzNumber: number): string {
   } else {
     if (form.kashurovka.enabled) lines.push(" Базовые материалы задаются в блоке кашировки");
     else {
-      const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-      const paperLine = paperText
-        ? `${paperText}${form.paperType === "Дизайнерская" ? "" : `, ${form.densityFinish.toLowerCase()}`}`
-        : "—";
-      lines.push(` Материал : ${paperLine}`);
+      const envelopePaperless = isEnvelope(form.productType) && form.paperType === "Без бумаги";
+      if (!envelopePaperless) {
+        const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
+        const paperLine = paperText
+          ? `${paperText}${form.paperType === "Дизайнерская" ? "" : `, ${form.densityFinish.toLowerCase()}`}`
+          : "—";
+        lines.push(` Материал : ${paperLine}`);
+      }
     }
-    if (!form.kashurovka.enabled) lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки")}`);
+    if (!form.kashurovka.enabled && !(isEnvelope(form.productType) && form.paperType === "Без бумаги")) {
+      lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки")}`);
+    }
   }
   lines.push("");
 
@@ -1473,11 +1508,183 @@ function actionFieldClass(invalid: boolean) {
   return `${inputClass} flex items-center justify-between gap-3 text-left shadow-sm hover:bg-slate-50 ${invalid ? "border-red-500 bg-red-50 ring-2 ring-red-200 shadow-sm shadow-red-100" : ""}`;
 }
 
+type UiIconName =
+  | "folder"
+  | "printer"
+  | "file"
+  | "calendar"
+  | "badge"
+  | "palette"
+  | "scissors"
+  | "book"
+  | "sparkles"
+  | "ruler"
+  | "clipboard"
+  | "settings"
+  | "save"
+  | "copy"
+  | "warning"
+  | "download"
+  | "check"
+  | "close"
+  | "clock"
+  | "note"
+  | "package"
+  | "gear";
+
+function UiIcon({ name, className = "h-4 w-4" }: { name: UiIconName; className?: string }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      {name === "folder" && <>
+        <path {...common} d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5V17A2 2 0 0 1 19 19H5a2 2 0 0 1-2-2V7.5Z" />
+      </>}
+      {name === "printer" && <>
+        <rect {...common} x="6" y="4" width="12" height="6" rx="1.5" />
+        <path {...common} d="M6 10H5a2 2 0 0 0-2 2v4h4" />
+        <path {...common} d="M18 10h1a2 2 0 0 1 2 2v4h-4" />
+        <rect {...common} x="7" y="13" width="10" height="7" rx="1.5" />
+      </>}
+      {name === "file" && <>
+        <path {...common} d="M7 3.75h6l4 4V20.25A1.75 1.75 0 0 1 15.25 22h-8.5A1.75 1.75 0 0 1 5 20.25V5.5A1.75 1.75 0 0 1 6.75 3.75Z" />
+        <path {...common} d="M13 3.75V7a1 1 0 0 0 1 1h3" />
+      </>}
+      {name === "calendar" && <>
+        <rect {...common} x="4" y="5.5" width="16" height="14.5" rx="2" />
+        <path {...common} d="M4 9h16" />
+        <path {...common} d="M8 3.5v4M16 3.5v4" />
+      </>}
+      {name === "badge" && <>
+        <rect {...common} x="4" y="4" width="16" height="16" rx="3" />
+        <path {...common} d="M8 10h8M8 14h5" />
+      </>}
+      {name === "palette" && <>
+        <path {...common} d="M12 4a8 8 0 1 0 0 16h1a2 2 0 0 0 0-4h-1a2 2 0 0 1 0-4h1a3 3 0 0 0 0-6Z" />
+        <circle cx="8" cy="9" r="1" fill="currentColor" />
+        <circle cx="7.5" cy="13" r="1" fill="currentColor" />
+        <circle cx="10.8" cy="16" r="1" fill="currentColor" />
+      </>}
+      {name === "scissors" && <>
+        <circle {...common} cx="7" cy="7" r="2" />
+        <circle {...common} cx="7" cy="17" r="2" />
+        <path {...common} d="M8.4 8.4 20 4M8.4 15.6 20 20M8.2 7.8 15 12" />
+      </>}
+      {name === "book" && <>
+        <path {...common} d="M6 4.5h8a3 3 0 0 1 3 3V20H9a3 3 0 0 0-3 3V4.5Z" />
+        <path {...common} d="M6 4.5h8a3 3 0 0 1 3 3V20" />
+        <path {...common} d="M9 8h5M9 12h5" />
+      </>}
+      {name === "sparkles" && <>
+        <path {...common} d="M12 3.5 13.8 8l4.7 1.8-4.7 1.8L12 16l-1.8-4.4-4.7-1.8L10.2 8 12 3.5Z" />
+        <path {...common} d="M18 12.5 18.7 14.3 20.5 15l-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" />
+      </>}
+      {name === "ruler" && <>
+        <rect {...common} x="4.5" y="7" width="15" height="10" rx="2" transform="rotate(-15 12 12)" />
+        <path {...common} d="M8 9.5v2M10.5 8.8v2M13 8v2M15.5 7.3v2" />
+      </>}
+      {name === "clipboard" && <>
+        <rect {...common} x="7" y="5" width="10" height="16" rx="2" />
+        <path {...common} d="M9 5.5V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5v1" />
+        <path {...common} d="M9 10h6M9 13h6M9 16h4" />
+      </>}
+      {name === "settings" && <>
+        <circle {...common} cx="12" cy="12" r="3.5" />
+        <path {...common} d="M12 4.5v2M12 17.5v2M4.5 12h2M17.5 12h2M6.2 6.2l1.4 1.4M16.4 16.4l1.4 1.4M16.4 7.6l1.4-1.4M6.2 17.8l1.4-1.4" />
+      </>}
+      {name === "save" && <>
+        <path {...common} d="M5 4.5h11l3 3V19.5A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-15Z" />
+        <path {...common} d="M8 4.5V10h8V4.5" />
+        <path {...common} d="M8 15h8" />
+      </>}
+      {name === "copy" && <>
+        <rect {...common} x="9" y="3.5" width="10" height="12" rx="2" />
+        <rect {...common} x="5" y="8.5" width="10" height="12" rx="2" />
+      </>}
+      {name === "warning" && <>
+        <path {...common} d="M12 4 21 19H3L12 4Z" />
+        <path {...common} d="M12 9v4M12 16.5h.01" />
+      </>}
+      {name === "download" && <>
+        <path {...common} d="M12 4.5v9" />
+        <path {...common} d="M8.5 10.5 12 14l3.5-3.5" />
+        <path {...common} d="M5 18.5h14" />
+      </>}
+      {name === "check" && <>
+        <circle {...common} cx="12" cy="12" r="8" />
+        <path {...common} d="m8.5 12.5 2.5 2.5 4.5-5" />
+      </>}
+      {name === "close" && <>
+        <path {...common} d="M7 7l10 10M17 7 7 17" />
+      </>}
+      {name === "clock" && <>
+        <circle {...common} cx="12" cy="12" r="8" />
+        <path {...common} d="M12 8v4l3 2" />
+      </>}
+      {name === "note" && <>
+        <path {...common} d="M6 4.5h9l3 3V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 20V5.5A1 1 0 0 1 6 4.5Z" />
+        <path {...common} d="M10 4.5V8h3.5" />
+        <path {...common} d="M8 12h8M8 15h8" />
+      </>}
+      {name === "package" && <>
+        <path {...common} d="M4.5 8 12 4l7.5 4-7.5 4-7.5-4Z" />
+        <path {...common} d="M4.5 8V16l7.5 4 7.5-4V8" />
+        <path {...common} d="M12 12v8" />
+      </>}
+      {name === "gear" && <>
+        <circle {...common} cx="12" cy="12" r="3.2" />
+        <path {...common} d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M16.8 7.2l1.6-1.6M5.6 18.4l1.6-1.6" />
+      </>}
+    </svg>
+  );
+}
+
+const EMOJI_FONT = {
+  fontFamily: '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif',
+};
+
+const SECTION_ICON_PREFIXES: Array<[string, string]> = [
+  ["🖨", "🖨"],
+  ["🗂", "🗂"],
+  ["✂️", "✂️"],
+  ["📐", "📐"],
+  ["📚", "📚"],
+  ["📝", "📝"],
+];
+
+const DICT_ICON_MAP: Record<string, string> = {
+  "👤": "👤",
+  "🖨": "🖨",
+  "📄": "📄",
+  "📅": "📅",
+  "🪪": "🪪",
+  "🟫": "🟫",
+  "✏️": "✏️",
+  "✉️": "✉️",
+  "🎨": "🎨",
+  "✂️": "✂️",
+  "📚": "📚",
+  "✨": "✨",
+  "📏": "📏",
+};
+
+function getSectionIcon(title: string): { icon: string | null; text: string } {
+  for (const [prefix, icon] of SECTION_ICON_PREFIXES) {
+    if (title.startsWith(prefix)) {
+      return { icon, text: title.slice(prefix.length).trimStart() };
+    }
+  }
+  return { icon: null, text: title };
+}
+
 function Section({ title, children, accent }: { title: string; children: React.ReactNode; accent?: string }) {
+  const parsed = getSectionIcon(title);
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className={`px-4 py-2.5 bg-gradient-to-r ${accent || "from-slate-50 to-white"} border-b border-slate-100`}>
-        <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+          {parsed.icon && <span style={EMOJI_FONT} className="text-slate-500">{parsed.icon}</span>}
+          <span>{parsed.text}</span>
+        </h2>
       </div>
       <div className="p-4">{children}</div>
     </div>
@@ -1564,7 +1771,7 @@ function DateTimeField({
         className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-slate-600 hover:bg-slate-50 transition-colors"
         aria-label="Открыть выбор времени"
       >
-        🕒
+        <span style={EMOJI_FONT}>🕒</span>
       </button>
     </div>
   );
@@ -1635,10 +1842,10 @@ function UpdateNotice({
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
               {state.status === "checking" && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
-              {state.status === "available" && <span className="text-lg">⬇</span>}
-              {state.status === "downloading" && <span className="text-lg">⏳</span>}
-              {state.status === "downloaded" && <span className="text-lg">✅</span>}
-              {state.status === "error" && <span className="text-lg">⚠</span>}
+              {state.status === "available" && <span style={EMOJI_FONT}>⬇️</span>}
+              {state.status === "downloading" && <span style={EMOJI_FONT}>⏳</span>}
+              {state.status === "downloaded" && <span style={EMOJI_FONT}>✅</span>}
+              {state.status === "error" && <span style={EMOJI_FONT}>⚠️</span>}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold">{title}</div>
@@ -1654,7 +1861,7 @@ function UpdateNotice({
                 className="rounded-lg px-2 py-1 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
                 aria-label="Закрыть окно обновления"
               >
-                ✕
+                <span style={EMOJI_FONT}>✕</span>
               </button>
             )}
           </div>
@@ -1767,8 +1974,8 @@ function UpdateSummaryModal({
       >
         <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-6 py-5 text-white">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-2xl ring-1 ring-white/20">
-              ✅
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
+              <span style={EMOJI_FONT}>✅</span>
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-lg font-semibold">Обновление прошло успешно</div>
@@ -1873,6 +2080,8 @@ function PaperSelectionField({
   invalidType,
   invalidMaterial,
   invalidCustom,
+  typeOptionLabels,
+  productType,
   disabled = false,
 }: {
   label: string;
@@ -1890,11 +2099,14 @@ function PaperSelectionField({
   invalidType: boolean;
   invalidMaterial: boolean;
   invalidCustom: boolean;
+  typeOptionLabels?: Partial<Record<PaperTypeOption, string>>;
+  productType?: string;
   disabled?: boolean;
 }) {
   const isDesigner = typeValue === "Дизайнерская";
   const isCardboard = typeValue === "Картон";
   const isPaperless = typeValue === "Без бумаги" || typeValue === "Давальческая";
+  const isEnvelopePaper = productType === "Конверты";
   const items = typeValue ? getPaperLibraryItems(library, typeValue) : [];
   const effectiveMaterialValue = isCardboard && !materialValue && items[0] ? items[0] : materialValue;
 
@@ -1917,7 +2129,7 @@ function PaperSelectionField({
           onChange={(e) => onTypeChange(e.target.value as PaperTypeOption | "")}
         >
           <option value="">— тип бумаги —</option>
-          {PAPER_TYPE_OPTIONS.map((item) => <option key={item}>{item}</option>)}
+          {PAPER_TYPE_OPTIONS.map((item) => <option key={item} value={item}>{typeOptionLabels?.[item] || (isEnvelopePaper && item === "Без бумаги" ? "Готовые конверты" : item)}</option>)}
         </select>
         {isDesigner ? (
           <div>
@@ -2275,12 +2487,12 @@ function ShortTZPanel({ form }: { form: FormData }) {
   return (
     <div className={`rounded-xl border shadow-sm overflow-hidden transition-all duration-300 ${shortText ? "border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50" : "border-slate-200 bg-white"}`}>
       <div className="px-4 py-2.5 flex items-center gap-2 border-b border-emerald-100">
-        <span className="text-lg">⚡</span>
+        <span className="text-emerald-500" style={EMOJI_FONT}>⚡</span>
         <h2 className="text-sm font-semibold text-slate-700">Краткое ТЗ</h2>
         <span className="text-xs text-slate-400 ml-1">— автоматически формируется из данных формы</span>
         {shortText && (
           <button onClick={handleCopy} className={`ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium border transition-all ${copied ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50"}`}>
-            {copied ? "✅ Скопировано!" : "📋 Копировать"}
+            {copied ? <><span style={EMOJI_FONT}>✅</span>Скопировано!</> : <><span style={EMOJI_FONT}>📋</span>Копировать</>}
           </button>
         )}
       </div>
@@ -2348,7 +2560,7 @@ function DictEditor({
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-4 py-2.5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center gap-2">
-        <span>{icon}</span>
+        <span style={EMOJI_FONT} className="text-slate-500">{DICT_ICON_MAP[icon] || "📄"}</span>
         <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
         <span className="ml-auto text-xs text-slate-400">{items.length} {"\u044d\u043b\u0435\u043c\u0435\u043d\u0442\u043e\u0432"}</span>
       </div>
@@ -2989,8 +3201,8 @@ function LegacyApp() {
       <div className="max-w-5xl mx-auto w-full px-4 mt-4">
         <div className="flex flex-col lg:flex-row lg:items-stretch gap-3">
           <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-slate-200 w-fit">
-            <button onClick={() => setActiveTab("form")} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "form" ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}>📋 Форма ТЗ</button>
-            <button onClick={() => setActiveTab("dicts")} className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "dicts" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}>⚙️ Справочники</button>
+            <button onClick={() => setActiveTab("form")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "form" ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><span style={EMOJI_FONT}>📋</span>Форма ТЗ</button>
+            <button onClick={() => setActiveTab("dicts")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "dicts" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><span style={EMOJI_FONT}>⚙️</span>Справочники</button>
           </div>
           {activeTab === "form" && (
             <div className="w-full lg:flex-1 bg-white rounded-xl px-3 py-2.5 shadow-sm border border-slate-200 min-w-0">
@@ -3200,40 +3412,41 @@ function LegacyApp() {
 
               {!multiBlock && !notebook && !calendar && !bag && !form.kashurovka.enabled && pt && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {bag ? (
-                    <Field label="Материал пакета" required><select data-field="density" value={form.density} className={selectFieldClass(showValidation && required.includes("density"))} onChange={(e) => update("density", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.bag.map((d) => <option key={d}>{d}</option>)}</select></Field>
-                  ) : (
-                    !sticker && (
-                      <PaperSelectionField
-                        label="Бумага / материал"
-                        typeValue={form.paperType}
-                        materialValue={form.density}
-                        customValue={form.paperCustomName}
-                        library={dicts.paperLibrary}
-                        onTypeChange={(value) => {
-                          update("paperType", value);
-                          update("density", "");
-                          update("paperCustomName", "");
-                        }}
-                        onMaterialChange={(value) => update("density", value)}
-                        onCustomChange={(value) => update("paperCustomName", value)}
-                        typeFieldName="paperType"
-                        materialFieldName="density"
-                        customFieldName="paperCustomName"
-                        showValidation={showValidation}
-                        invalidType={showValidation && required.includes("paperType")}
-                        invalidMaterial={showValidation && required.includes("density")}
-                        invalidCustom={showValidation && required.includes("paperCustomName")}
-                      />
-                    )
+                  {!sticker && (
+                    <PaperSelectionField
+                      label="Бумага / материал"
+                      typeValue={form.paperType}
+                      materialValue={form.density}
+                      customValue={form.paperCustomName}
+                      library={dicts.paperLibrary}
+                      productType={form.productType}
+                      onTypeChange={(value) => {
+                        update("paperType", value);
+                        update("density", "");
+                        update("paperCustomName", "");
+                      }}
+                      onMaterialChange={(value) => update("density", value)}
+                      onCustomChange={(value) => update("paperCustomName", value)}
+                      typeFieldName="paperType"
+                      materialFieldName="density"
+                      customFieldName="paperCustomName"
+                      showValidation={showValidation}
+                      invalidType={showValidation && required.includes("paperType")}
+                      invalidMaterial={showValidation && required.includes("density")}
+                      invalidCustom={showValidation && required.includes("paperCustomName")}
+                    />
                   )}
                   {sticker && <Field label="Материал" required><select data-field="stickerMaterial" value={form.stickerMaterial} className={selectFieldClass(showValidation && required.includes("stickerMaterial"))} onChange={(e) => update("stickerMaterial", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.sticker.map((d) => <option key={d}>{d}</option>)}</select></Field>}
-                  <PaperFinishField
-                    value={sticker ? form.stickerFinish : form.densityFinish}
-                    options={sticker ? PAPER_FINISHES : paperFinishOptionsForSelection(form.paperType, form.density)}
-                    onChange={(value) => update(sticker ? "stickerFinish" : "densityFinish", value as never)}
-                  />
-                  <Field label="Цветность" required><select data-field="colorMode" value={form.colorMode} disabled={(pt === "Листовки" || badge) && form.ownReverse} className={`${selectFieldClass(showValidation && required.includes("colorMode"))} ${(pt === "Листовки" || badge) && form.ownReverse ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{(sticker ? STICKER_COLOR_MODES : dicts.colors).map((c) => <option key={c}>{c}</option>)}</select></Field>
+                  {!bag && (
+                    <>
+                      <PaperFinishField
+                        value={sticker ? form.stickerFinish : form.densityFinish}
+                        options={sticker ? PAPER_FINISHES : paperFinishOptionsForSelection(form.paperType, form.density)}
+                        onChange={(value) => update(sticker ? "stickerFinish" : "densityFinish", value as never)}
+                      />
+                      <Field label="Цветность" required><select data-field="colorMode" value={form.colorMode} disabled={(pt === "Листовки" || badge) && form.ownReverse} className={`${selectFieldClass(showValidation && required.includes("colorMode"))} ${(pt === "Листовки" || badge) && form.ownReverse ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{(sticker ? STICKER_COLOR_MODES : dicts.colors).map((c) => <option key={c}>{c}</option>)}</select></Field>
+                    </>
+                  )}
                   {(pt === "Листовки" || badge) && (
                     <Field label="Свой оборот">
                       <YesNo value={form.ownReverse} onChange={(value) => { update("ownReverse", value); if (value) update("colorMode", AUTO_REVERSE_COLOR); }} />
@@ -3298,10 +3511,10 @@ function LegacyApp() {
               {(multiBlock || notebook) && (
                 <div className="mt-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label={multiBlock ? "Количество страниц с обложкой" : "Количество страниц в блоке"} required={!multiBlock}>
+                    <Field label={multiBlock ? "Количество страниц с обложкой" : "Количество листов в блоке"} required={!multiBlock}>
                       <input data-field={multiBlock ? "pageCount" : "blockPages"} type="number" min={2} className={`${fieldClass(showValidation && required.includes(multiBlock ? "pageCount" : "blockPages"))} max-w-xs`} value={multiBlock ? form.pageCount : form.blockPages} onChange={(e) => update(multiBlock ? "pageCount" : "blockPages", e.target.value as never)} />
                       {multiBlock && form.pageCount && <p className="text-xs text-slate-500 mt-1">Это {Number(form.pageCount) / 2} листов в блоке.</p>}
-                      {notebook && form.blockPages && <p className="text-xs text-slate-500 mt-1">Это {Number(form.blockPages) / 2} листов в блоке.</p>}
+                      {notebook && form.blockPages && <p className="text-xs text-slate-500 mt-1">Это {Number(form.blockPages) * 2} страниц в блоке.</p>}
                     </Field>
                     {(isCatalog(pt) || brochure) && (
                       <Field label={brochure ? "Формат брошюры" : "Формат продукции"} required>
@@ -3336,7 +3549,7 @@ function LegacyApp() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 space-y-3">
-                      <h3 className="text-sm font-semibold text-blue-700 flex items-center gap-1.5">📗 Обложка</h3>
+                      <h3 className="text-sm font-semibold text-blue-700 flex items-center gap-1.5"><span style={EMOJI_FONT}>📗</span>Обложка</h3>
                       <Field label="Обложка с кашированием">
                         <YesNo value={form.coverUseKash} onChange={(value) => {
                           update("coverUseKash", value);
@@ -3351,6 +3564,7 @@ function LegacyApp() {
                             materialValue={form.coverDensity}
                             customValue={form.coverPaperCustomName}
                             library={dicts.paperLibrary}
+                            productType={form.productType}
                             onTypeChange={(value) => {
                               update("coverPaperType", value);
                               update("coverDensity", "");
@@ -3377,7 +3591,7 @@ function LegacyApp() {
                       {form.coverUseKash && <p className="text-xs text-slate-500">Бумага, цветность и ламинация обложки задаются в блоке кашировки.</p>}
                     </div>
                     <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
-                      <h3 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5">📘 Блок</h3>
+                      <h3 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5"><span style={EMOJI_FONT}>📘</span>Блок</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="md:col-span-2">
                           <PaperSelectionField
@@ -3386,6 +3600,7 @@ function LegacyApp() {
                             materialValue={form.blockDensity}
                             customValue={form.blockPaperCustomName}
                             library={dicts.paperLibrary}
+                            productType={form.productType}
                             onTypeChange={(value) => {
                               update("blockPaperType", value);
                               update("blockDensity", "");
@@ -3425,6 +3640,7 @@ function LegacyApp() {
                         materialValue={form.calendarHeaderPaperDensity}
                         customValue={form.calendarHeaderPaperCustomName}
                         library={dicts.paperLibrary}
+                        productType={form.productType}
                         onTypeChange={(value) => {
                           update("calendarHeaderPaperType", value);
                           update("calendarHeaderPaperDensity", "");
@@ -3490,6 +3706,7 @@ function LegacyApp() {
                         materialValue={form.density}
                         customValue={form.paperCustomName}
                         library={dicts.paperLibrary}
+                        productType={form.productType}
                         onTypeChange={(value) => {
                           update("paperType", value);
                           update("density", "");
@@ -3515,13 +3732,49 @@ function LegacyApp() {
               {bag && (
                 <div className="mt-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Field label="Высота" required><input data-field="bagHeight" type="number" className={fieldClass(showValidation && required.includes("bagHeight"))} value={form.bagHeight} onChange={(e) => update("bagHeight", e.target.value)} /></Field>
                     <Field label="Ширина" required><input data-field="bagWidth" type="number" className={fieldClass(showValidation && required.includes("bagWidth"))} value={form.bagWidth} onChange={(e) => update("bagWidth", e.target.value)} /></Field>
+                    <Field label="Высота" required><input data-field="bagHeight" type="number" className={fieldClass(showValidation && required.includes("bagHeight"))} value={form.bagHeight} onChange={(e) => update("bagHeight", e.target.value)} /></Field>
                     <Field label="Глубина" required><input data-field="bagDepth" type="number" className={fieldClass(showValidation && required.includes("bagDepth"))} value={form.bagDepth} onChange={(e) => update("bagDepth", e.target.value)} /></Field>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${form.bagExternalSheets ? "opacity-60" : ""}`}>
+                    {!form.bagExternalSheets && (
+                      <>
+                        <Field label="Тип бумаги" required>
+                          <select value={form.bagPaperType} className={selectFieldClass(showValidation && required.includes("bagPaperType"))} onChange={(e) => update("bagPaperType", e.target.value)}>
+                            <option value="">— выберите —</option>
+                            {BAG_PAPER_TYPE_OPTIONS.map((item) => <option key={item}>{item}</option>)}
+                          </select>
+                        </Field>
+                        <Field label="Плотность бумаги" required>
+                          <select data-field="density" value={form.density} className={selectFieldClass(showValidation && required.includes("density"))} onChange={(e) => update("density", e.target.value)}>
+                            <option value="">— выберите —</option>{dicts.paperProfiles.bag.map((d) => <option key={d}>{d}</option>)}
+                          </select>
+                        </Field>
+                        <PaperFinishField value={form.densityFinish} options={PAPER_FINISHES} onChange={(value) => update("densityFinish", value)} />
+                        <Field label="Цветность" required>
+                          <select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}>
+                            <option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}
+                          </select>
+                        </Field>
+                      </>
+                    )}
+                    <Field label="Количество частей" required>
+                      <select value={form.bagPartsCount} className={selectFieldClass(showValidation && required.includes("bagPartsCount"))} onChange={(e) => update("bagPartsCount", e.target.value)}>
+                        <option value="Из 2-х частей">Из 2-х частей</option>
+                        <option value="Из 4-х частей">Из 4-х частей</option>
+                      </select>
+                    </Field>
+                    <Field label="Сборка из сторонних листов">
+                      <YesNo value={form.bagExternalSheets} onChange={(v) => update("bagExternalSheets", v)} />
+                    </Field>
                     <Field label="Цвет люверсов"><select value={form.bagEyeletColor} className={selectClass} onChange={(e) => update("bagEyeletColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagEyeletColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagEyeletColorCustom} onChange={(e) => update("bagEyeletColorCustom", e.target.value)} />}</Field>
                     <Field label="Цвет ручек"><select value={form.bagHandleColor} className={selectClass} onChange={(e) => update("bagHandleColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagHandleColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagHandleColorCustom} onChange={(e) => update("bagHandleColorCustom", e.target.value)} />}</Field>
+                    <Field label="Пипсик на ручках" required>
+                      <select value={form.bagHandlePipsik} className={selectFieldClass(showValidation && required.includes("bagHandlePipsik"))} onChange={(e) => update("bagHandlePipsik", e.target.value)}>
+                        <option value="Без пипсика">Без пипсика</option>
+                        <option value="С пипсиком">С пипсиком</option>
+                      </select>
+                    </Field>
                   </div>
                 </div>
               )}
@@ -3631,10 +3884,10 @@ function LegacyApp() {
             <ShortTZPanel form={form} />
 
             <div className="flex flex-wrap gap-3 pb-8">
-              <button type="button" onClick={() => validateThen(handlePreview)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors shadow-sm"><span>👁</span> Предпросмотр</button>
-              <button type="button" onClick={() => validateThen(() => setShowSend(true))} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span>📊</span> Отправить в таблицу</button>
-              <button type="button" onClick={() => validateThen(handleSave)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span>💾</span> Сохранить ТЗ в TXT</button>
-              <button type="button" onClick={openPresetSaveModal} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"><span>💽</span> Сохранить пресет</button>
+              <button type="button" onClick={() => validateThen(handlePreview)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors shadow-sm"><span style={EMOJI_FONT}>👁</span> Предпросмотр</button>
+              <button type="button" onClick={() => validateThen(() => setShowSend(true))} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span style={EMOJI_FONT}>📊</span> Отправить в таблицу</button>
+              <button type="button" onClick={() => validateThen(handleSave)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span style={EMOJI_FONT}>💾</span> Сохранить ТЗ в TXT</button>
+              <button type="button" onClick={openPresetSaveModal} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"><span style={EMOJI_FONT}>💽</span> Сохранить пресет</button>
               {savedMsg && <div className={`self-center rounded-xl border px-4 py-2 text-sm font-medium ${savedMsg.startsWith("Ошибка") ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"}`}>{savedMsg}</div>}
               {!isFormValid && <p className="text-xs text-slate-500 self-center">* Заполните обязательные поля</p>}
             </div>
@@ -3646,7 +3899,7 @@ function LegacyApp() {
           <div className="space-y-4 pb-6">
             {isDictLocked ? (
               <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-5xl mb-4">{"\ud83d\udd12"}</span>
+                <span className="text-5xl mb-4" style={EMOJI_FONT}>🔒</span>
                 <h2 className="text-xl font-bold text-slate-800 mb-2">{"\u0421\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0438 \u0437\u0430\u0449\u0438\u0449\u0435\u043d\u044b"}</h2>
                 <p className="text-sm text-slate-500 mb-6">{"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c \u0434\u043b\u044f \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f"}</p>
                 <div className="flex flex-col gap-2 items-center">
@@ -3692,7 +3945,7 @@ function LegacyApp() {
             ) : (
               <>
                 <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-start gap-3">
-                  <span className="text-2xl">{"\u2699\ufe0f"}</span>
+                  <span className="text-2xl" style={EMOJI_FONT}>⚙️</span>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-indigo-800">{"\u0420\u0435\u0434\u0430\u043a\u0442\u043e\u0440 \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u043e\u0432"}</p>
                     <p className="text-xs text-indigo-600 mt-0.5">{"\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u0445\u0440\u0430\u043d\u044f\u0442\u0441\u044f \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u0438 \u043c\u043e\u0433\u0443\u0442 \u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u0442\u044c\u0441\u044f \u0447\u0435\u0440\u0435\u0437 \u0441\u043a\u0440\u044b\u0442\u044b\u0439 \u043b\u0438\u0441\u0442 __CONFIG__ \u0432 Google \u0422\u0430\u0431\u043b\u0438\u0446\u0435. \u041f\u043e\u0438\u0441\u043a \u043d\u0438\u0436\u0435 \u0444\u0438\u043b\u044c\u0442\u0440\u0443\u0435\u0442 \u0438\u043c\u0435\u043d\u043d\u043e \u0433\u0440\u0443\u043f\u043f\u044b \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u043e\u0432 \u043f\u043e \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044e."}</p>
@@ -3703,10 +3956,10 @@ function LegacyApp() {
                     {dictSyncMsg && <p className={`mt-3 text-xs font-medium ${dictSyncMsg.startsWith("Ошибка") || dictSyncMsg.startsWith("Не удалось") ? "text-red-600" : "text-emerald-700"}`}>{dictSyncMsg}</p>}
                   </div>
                   <div className="flex flex-col gap-2">
-                    <button onClick={() => loadDictsFromCloud(true)} disabled={dictSyncBusy !== "idle"} className="text-xs px-3 py-1.5 rounded-lg border border-sky-300 text-sky-700 hover:bg-sky-100 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">{dictSyncBusy === "loading" ? "⟳ Загрузка..." : "☁ Загрузить из Google"}</button>
-                    <button onClick={saveDictsToCloud} disabled={dictSyncBusy !== "idle"} className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">{dictSyncBusy === "saving" ? "⟳ Сохранение..." : "☁ Сохранить в Google"}</button>
-                    <button onClick={() => { setIsDictLocked(true); setDictPassword(""); }} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap">{"\ud83d\udd12 \u0417\u0430\u043a\u0440\u044b\u0442\u044c \u0434\u043e\u0441\u0442\u0443\u043f"}</button>
-                    <button onClick={resetDicts} className="text-xs px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 hover:bg-indigo-100 transition-colors whitespace-nowrap">{"\u21ba \u0421\u0431\u0440\u043e\u0441\u0438\u0442\u044c \u0432\u0441\u0451"}</button>
+                    <button onClick={() => loadDictsFromCloud(true)} disabled={dictSyncBusy !== "idle"} className="text-xs px-3 py-1.5 rounded-lg border border-sky-300 text-sky-700 hover:bg-sky-100 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">{dictSyncBusy === "loading" ? "⟳ Загрузка..." : "☁️ Загрузить из Google"}</button>
+                    <button onClick={saveDictsToCloud} disabled={dictSyncBusy !== "idle"} className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">{dictSyncBusy === "saving" ? "⟳ Сохранение..." : "☁️ Сохранить в Google"}</button>
+                    <button onClick={() => { setIsDictLocked(true); setDictPassword(""); }} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap"><span style={EMOJI_FONT}>🔒</span> Закрыть доступ</button>
+                    <button onClick={resetDicts} className="text-xs px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 hover:bg-indigo-100 transition-colors whitespace-nowrap">↺ Сбросить всё</button>
                   </div>
                 </div>
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
@@ -3739,10 +3992,10 @@ function LegacyApp() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-slate-200 z-10" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-              <h2 className="font-semibold text-slate-800 flex items-center gap-2"><span>👁</span> Предпросмотр ТЗ</h2>
+              <h2 className="font-semibold text-slate-800 flex items-center gap-2"><span style={EMOJI_FONT}>👁</span> Предпросмотр ТЗ</h2>
               <div className="flex gap-2">
-                <button onClick={async () => { await handleSave(); }} disabled={!isFormValid} className={`text-sm px-4 py-1.5 rounded-lg font-medium transition-colors ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}>💾 Сохранить TXT</button>
-                <button onClick={() => setShowPreview(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors text-lg">✕</button>
+                <button onClick={async () => { await handleSave(); }} disabled={!isFormValid} className={`flex items-center gap-2 text-sm px-4 py-1.5 rounded-lg font-medium transition-colors ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}><span style={EMOJI_FONT}>💾</span>Сохранить TXT</button>
+                <button onClick={() => setShowPreview(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"><span style={EMOJI_FONT}>✕</span></button>
               </div>
             </div>
             <pre className="p-5 text-xs font-mono text-slate-700 whitespace-pre-wrap leading-relaxed overflow-auto flex-1">{previewText}</pre>
@@ -3755,7 +4008,7 @@ function LegacyApp() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { if(sendState === "idle" || sendState === "done" || sendState === "error") setShowSend(false); }}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 z-10 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="font-semibold text-slate-800 text-lg mb-4 flex items-center gap-2"><span>📊</span> Отправить в таблицу</h2>
+            <h2 className="font-semibold text-slate-800 text-lg mb-4 flex items-center gap-2"><span style={EMOJI_FONT}>📊</span> Отправить в таблицу</h2>
             
             {sendState === "idle" && (
               <>
@@ -3789,7 +4042,7 @@ function LegacyApp() {
 
             {sendState === "done" && (
               <div className="flex flex-col items-center py-8 gap-4">
-                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center text-3xl">✅</div>
+                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center"><span style={EMOJI_FONT}>✅</span></div>
                 <p className="text-sm text-emerald-700 font-semibold">Данные успешно отправлены!</p>
                 <button onClick={() => { setSendState("idle"); setShowSend(false); }} className="px-6 py-2 w-full rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Отлично</button>
               </div>
@@ -3989,8 +4242,13 @@ function getRequiredFields(form: FormData): string[] {
     if (form.calendarKind === "Настенный" && !form.wallMountDesc.trim()) errors.push("wallMountDesc");
     if (form.calendarKind === "Настольный" && !form.calendarBaseUseKash && !form.calendarBaseMaterial) errors.push("calendarBaseMaterial");
   } else if (isBag(form.productType)) {
-    if (!form.density) errors.push("density");
-    if (!form.colorMode) errors.push("colorMode");
+    if (!form.bagExternalSheets) {
+      if (!form.bagPaperType) errors.push("bagPaperType");
+      if (!form.density) errors.push("density");
+      if (!form.colorMode) errors.push("colorMode");
+    }
+    if (!form.bagPartsCount) errors.push("bagPartsCount");
+    if (!form.bagHandlePipsik) errors.push("bagHandlePipsik");
     if (!form.bagHeight) errors.push("bagHeight");
     if (!form.bagWidth) errors.push("bagWidth");
     if (!form.bagDepth) errors.push("bagDepth");
@@ -4065,7 +4323,7 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   catalogFormatCustom: "Нестандартный формат продукции",
   brochureFormat: "Формат брошюры",
   brochureFormatCustom: "Нестандартный формат брошюры",
-  blockPages: "Страницы в блоке",
+  blockPages: "Листов в блоке",
   coverDensity: "Плотность бумаги обложки",
   coverPaperType: "Тип бумаги обложки",
   coverPaperCustomName: "Название дизайнерской бумаги обложки",
@@ -4084,6 +4342,10 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   bagHeight: "Высота пакета",
   bagWidth: "Ширина пакета",
   bagDepth: "Глубина пакета",
+  bagPaperType: "Тип бумаги пакета",
+  bagPartsCount: "Количество частей пакета",
+  bagExternalSheets: "Сборка из сторонних листов",
+  bagHandlePipsik: "Пипсик на ручках",
   stickerMaterial: "Материал наклейки",
   badgeHoleType: "Отверстие бейджа",
   badgeHoleCount: "Количество отверстий бейджа",
