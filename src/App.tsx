@@ -579,12 +579,13 @@ function normalizeProductTemplatesPayload(payload: any): ProductTemplateStore {
   });
 
   Object.entries(source).forEach(([name, value]) => {
-    if (result[name] || !value || typeof value !== "object") return;
+    const cleanName = normalizeTemplateName(name);
+    if (!cleanName || result[cleanName] || !value || typeof value !== "object") return;
     const raw = value as Record<string, unknown>;
     const kind = (Object.keys(DEFAULT_PRODUCT_TEMPLATE_FLAGS) as ProductLayoutKind[]).includes(String(raw.kind) as ProductLayoutKind)
       ? (String(raw.kind) as ProductLayoutKind)
       : "standard";
-    result[name] = {
+    result[cleanName] = {
       kind,
       flags: normalizeTemplateFlags(raw.flags, kind),
       fields: normalizeTemplateFields(raw.fields),
@@ -976,8 +977,13 @@ function mergePresetIntoForm(base: FormData, presetData: Partial<FormData>): For
 // ─── Вспомогательные функции ────────────────────────────────────────────────
 
 const MULTIBLOCK_TYPES = ["Каталоги", "Брошюры"];
+const PRODUCT_TYPE_ALIASES: Record<string, string> = {
+  "Открытки": "Открытка",
+  "Сертификат": "Сертификаты",
+};
 function normalizeTemplateName(name: string): string {
-  return name.trim();
+  const clean = name.trim();
+  return PRODUCT_TYPE_ALIASES[clean] || clean;
 }
 
 function getProductTemplate(name: string): ProductTemplateConfig {
@@ -1029,10 +1035,26 @@ function isPocketCalendar(form: FormData): boolean {
 }
 
 function ensureProductTypes(list: string[]): string[] {
-  const normalized = list.filter((item) => item !== "Пакеты");
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  list.forEach((item) => {
+    const clean = normalizeTemplateName(item);
+    if (!clean || clean === "Пакеты") return;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    normalized.push(clean);
+  });
+
   const additions = ["Бумажные Пакеты", "Воблеры", "Бейджи"];
   additions.forEach((item) => {
-    if (!normalized.includes(item)) normalized.push(item);
+    const clean = normalizeTemplateName(item);
+    const key = clean.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      normalized.push(clean);
+    }
   });
   return normalized;
 }
@@ -3635,8 +3657,10 @@ function LegacyApp() {
 
   async function saveDictsToCloud() {
     setDictSyncBusy("saving");
-    const result = await (window as any).electronAPI?.saveConfigSheet?.({ config: dicts, appVersion: APP_VERSION });
+    const normalizedDicts = normalizeDictsPayload(dicts);
+    const result = await (window as any).electronAPI?.saveConfigSheet?.({ config: normalizedDicts, appVersion: APP_VERSION });
     if (result?.success) {
+      setDicts(normalizedDicts);
       setDictSource("cloud");
       setDictSyncMsg(`Справочники сохранены в Google Таблицу. Обновлено: ${new Date(result.updatedAt).toLocaleString("ru-RU")}`);
     } else {
