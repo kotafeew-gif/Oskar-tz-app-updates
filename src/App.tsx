@@ -7,7 +7,7 @@ const APP_VERSION = packageJson.version;
 
 const DEFAULT_PRODUCT_TYPES = [
   "Визитки", "Листовки", "Буклеты", "Флаеры", "Брошюры", "Каталоги",
-  "Воблеры", "Бейджи", "Календари", "Плакаты", "Наклейки", "Открытка", "Конверты", "Бланки",
+  "Воблеры", "Бейджи", "Календари", "Плакаты", "Наклейки", "Открытка", "Конверты", "Сертификаты", "Бланки",
   "Папки", "Блокноты", "Бумажные Пакеты", "Другое...",
 ];
 
@@ -163,6 +163,7 @@ const PAPER_PROFILE_LABELS: Record<PaperProfileKey, string> = {
 
 const LS_KEYS = {
   productTypes: "dict_productTypes",
+  productTemplates: "dict_productTemplates",
   paperSizes: "dict_paperSizes",
   pocketCalendarSizes: "dict_pocketCalendarSizes",
   businessCardSizes: "dict_businessCardSizes",
@@ -181,11 +182,169 @@ const LS_KEYS = {
   updateSummaryVersion: "update_summary_version",
 };
 
+type ProductLayoutKind =
+  | "standard"
+  | "businessCard"
+  | "catalog"
+  | "brochure"
+  | "calendar"
+  | "notebook"
+  | "envelope"
+  | "bag"
+  | "sticker"
+  | "wobbler"
+  | "badge";
+
+type ProductTemplateFieldKey = "size" | "paper" | "color" | "lamination" | "postProcessing";
+
+interface ProductTemplateFieldConfig {
+  label: string;
+  required: boolean;
+}
+
+interface ProductTemplateFlags {
+  showSize: boolean;
+  showPaper: boolean;
+  showColor: boolean;
+  showLamination: boolean;
+  showPostProcessing: boolean;
+}
+
+interface ProductTemplateConfig {
+  kind: ProductLayoutKind;
+  flags: ProductTemplateFlags;
+  fields: Record<ProductTemplateFieldKey, ProductTemplateFieldConfig>;
+}
+
+type ProductTemplateStore = Record<string, ProductTemplateConfig>;
+
+const PRODUCT_TEMPLATE_FIELD_KEYS: ProductTemplateFieldKey[] = ["size", "paper", "color", "lamination", "postProcessing"];
+
+const DEFAULT_PRODUCT_TEMPLATE_FIELDS: Record<ProductTemplateFieldKey, ProductTemplateFieldConfig> = {
+  size: { label: "Размер / формат", required: true },
+  paper: { label: "Бумага / материал", required: true },
+  color: { label: "Цветность", required: true },
+  lamination: { label: "Ламинация", required: true },
+  postProcessing: { label: "Обработка", required: true },
+};
+
+const DEFAULT_PRODUCT_TEMPLATE_FLAGS: Record<ProductLayoutKind, ProductTemplateFlags> = {
+  standard: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  businessCard: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  catalog: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  brochure: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  calendar: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  notebook: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  envelope: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  bag: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  sticker: { showSize: true, showPaper: true, showColor: true, showLamination: false, showPostProcessing: true },
+  wobbler: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  badge: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+};
+
+const DEFAULT_PRODUCT_TEMPLATE_KINDS: Record<string, ProductLayoutKind> = {
+  "Визитки": "businessCard",
+  "Листовки": "standard",
+  "Буклеты": "standard",
+  "Флаеры": "standard",
+  "Брошюры": "brochure",
+  "Каталоги": "catalog",
+  "Воблеры": "wobbler",
+  "Бейджи": "badge",
+  "Календари": "calendar",
+  "Плакаты": "standard",
+  "Наклейки": "sticker",
+  "Открытка": "standard",
+  "Конверты": "envelope",
+  "Сертификаты": "standard",
+  "Бланки": "standard",
+  "Папки": "standard",
+  "Блокноты": "notebook",
+  "Бумажные Пакеты": "bag",
+  "Другое...": "standard",
+};
+
+const DEFAULT_PRODUCT_TEMPLATES: ProductTemplateStore = Object.fromEntries(
+  Object.entries(DEFAULT_PRODUCT_TEMPLATE_KINDS).map(([name, kind]) => [
+    name,
+    {
+      kind,
+      flags: { ...DEFAULT_PRODUCT_TEMPLATE_FLAGS[kind] },
+      fields: Object.fromEntries(
+        PRODUCT_TEMPLATE_FIELD_KEYS.map((key) => [key, { ...DEFAULT_PRODUCT_TEMPLATE_FIELDS[key] }]),
+      ) as Record<ProductTemplateFieldKey, ProductTemplateFieldConfig>,
+    },
+  ]),
+) as ProductTemplateStore;
+
+const PRODUCT_LAYOUT_OPTIONS: Array<{ value: ProductLayoutKind; label: string }> = [
+  { value: "standard", label: "Стандарт" },
+  { value: "businessCard", label: "Визитки" },
+  { value: "catalog", label: "Каталог" },
+  { value: "brochure", label: "Брошюра" },
+  { value: "calendar", label: "Календарь" },
+  { value: "notebook", label: "Блокнот" },
+  { value: "envelope", label: "Конверт" },
+  { value: "bag", label: "Пакеты" },
+  { value: "sticker", label: "Наклейки" },
+  { value: "wobbler", label: "Воблер" },
+  { value: "badge", label: "Бейдж" },
+];
+
+const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; description: string }> = {
+  standard: {
+    title: "Стандарт",
+    description: "Универсальный шаблон для обычных изделий без особых правил.",
+  },
+  businessCard: {
+    title: "Визитки",
+    description: "Подходит для изделий, где важны формат, бумага и цветность.",
+  },
+  catalog: {
+    title: "Каталог",
+    description: "Для многостраничных изделий с акцентом на бумагу и постобработку.",
+  },
+  brochure: {
+    title: "Брошюра",
+    description: "Для изделий с акцентом на формат, бумагу и склейку/сшивку.",
+  },
+  calendar: {
+    title: "Календарь",
+    description: "Для календарей с отдельными параметрами шапки, сетки и основания.",
+  },
+  notebook: {
+    title: "Блокнот",
+    description: "Для блокнотов, где важно число листов, обложка и блок.",
+  },
+  envelope: {
+    title: "Конверт",
+    description: "Для конвертов с собственными правилами по бумаге и цветности.",
+  },
+  bag: {
+    title: "Пакеты",
+    description: "Для бумажных пакетов с выбором ручек, люверсов и сборки.",
+  },
+  sticker: {
+    title: "Наклейки",
+    description: "Для наклеек и этикеток, где часть полей может не понадобиться.",
+  },
+  wobbler: {
+    title: "Воблер",
+    description: "Для воблеров с учётом плоттера, ножки и материала.",
+  },
+  badge: {
+    title: "Бейдж",
+    description: "Для бейджей и пропусков с отдельными требованиями к отверстиям.",
+  },
+};
+
+let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
+
 const UPDATE_SUMMARY_POINTS = [
-  "Изменена логика заполнения кол-ва листов в блокнотах, теперь указываем ЛИСТЫ а не страницы",
-  "Поправлен выбор бумаги в конвертах",
-  "Поправлен выбор бумаги в пакетах и добавлен выбор пипсиков на ручках.",
-  "Прочие небольшие исправления.",
+  "В конверты вернулась ламинация и корректно отображается цветность в таблице.",
+  "Списки сохранённых заказчиков теперь сортируются в алфавитном порядке.",
+  "Появился вид продукции \"Сертификаты\".",
+  "Прочие улучшения и исправления.",
 ];
 
 function loadList(key: string, defaults: string[]): string[] {
@@ -377,6 +536,110 @@ function normalizeStringList(items: unknown[]): string[] {
   return result;
 }
 
+function normalizeTemplateFlags(flags: unknown, fallbackKind: ProductLayoutKind): ProductTemplateFlags {
+  const fallback = DEFAULT_PRODUCT_TEMPLATE_FLAGS[fallbackKind] || DEFAULT_PRODUCT_TEMPLATE_FLAGS.standard;
+  const source = flags && typeof flags === "object" ? flags as Record<string, unknown> : {};
+  return {
+    showSize: typeof source.showSize === "boolean" ? source.showSize : fallback.showSize,
+    showPaper: typeof source.showPaper === "boolean" ? source.showPaper : fallback.showPaper,
+    showColor: typeof source.showColor === "boolean" ? source.showColor : fallback.showColor,
+    showLamination: typeof source.showLamination === "boolean" ? source.showLamination : fallback.showLamination,
+    showPostProcessing: typeof source.showPostProcessing === "boolean" ? source.showPostProcessing : fallback.showPostProcessing,
+  };
+}
+
+function normalizeTemplateFields(fields: unknown): Record<ProductTemplateFieldKey, ProductTemplateFieldConfig> {
+  const source = fields && typeof fields === "object" ? fields as Record<string, unknown> : {};
+  return PRODUCT_TEMPLATE_FIELD_KEYS.reduce((acc, key) => {
+    const raw = source[key];
+    const fallback = DEFAULT_PRODUCT_TEMPLATE_FIELDS[key];
+    const label = raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).label === "string"
+      ? String((raw as Record<string, unknown>).label).trim() || fallback.label
+      : fallback.label;
+    const required = raw && typeof raw === "object" && typeof (raw as Record<string, unknown>).required === "boolean"
+      ? Boolean((raw as Record<string, unknown>).required)
+      : fallback.required;
+    acc[key] = { label, required };
+    return acc;
+  }, {} as Record<ProductTemplateFieldKey, ProductTemplateFieldConfig>);
+}
+
+function normalizeProductTemplatesPayload(payload: any): ProductTemplateStore {
+  const source = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+  const result: ProductTemplateStore = {};
+
+  Object.entries(DEFAULT_PRODUCT_TEMPLATES).forEach(([name, template]) => {
+    const entry = source[name];
+    const kind = template.kind;
+    result[name] = {
+      kind,
+      flags: normalizeTemplateFlags(entry && typeof entry === "object" ? (entry as Record<string, unknown>).flags : undefined, kind),
+      fields: normalizeTemplateFields(entry && typeof entry === "object" ? (entry as Record<string, unknown>).fields : undefined),
+    };
+  });
+
+  Object.entries(source).forEach(([name, value]) => {
+    if (result[name] || !value || typeof value !== "object") return;
+    const raw = value as Record<string, unknown>;
+    const kind = (Object.keys(DEFAULT_PRODUCT_TEMPLATE_FLAGS) as ProductLayoutKind[]).includes(String(raw.kind) as ProductLayoutKind)
+      ? (String(raw.kind) as ProductLayoutKind)
+      : "standard";
+    result[name] = {
+      kind,
+      flags: normalizeTemplateFlags(raw.flags, kind),
+      fields: normalizeTemplateFields(raw.fields),
+    };
+  });
+
+  return result;
+}
+
+function loadProductTemplates(): ProductTemplateStore {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.productTemplates);
+    if (!raw) return { ...DEFAULT_PRODUCT_TEMPLATES };
+    return normalizeProductTemplatesPayload(JSON.parse(raw));
+  } catch {
+    return { ...DEFAULT_PRODUCT_TEMPLATES };
+  }
+}
+
+function saveProductTemplates(templates: ProductTemplateStore) {
+  localStorage.setItem(LS_KEYS.productTemplates, JSON.stringify(templates));
+}
+
+function createProductTemplateConfig(kind: ProductLayoutKind, base?: Partial<ProductTemplateConfig>): ProductTemplateConfig {
+  const resolvedKind = (Object.keys(DEFAULT_PRODUCT_TEMPLATE_FLAGS) as ProductLayoutKind[]).includes(String(base?.kind || kind) as ProductLayoutKind)
+    ? (String(base?.kind || kind) as ProductLayoutKind)
+    : kind;
+  return {
+    kind: resolvedKind,
+    flags: {
+      ...DEFAULT_PRODUCT_TEMPLATE_FLAGS[resolvedKind],
+      ...(base?.flags || {}),
+    },
+    fields: normalizeTemplateFields(base?.fields),
+  };
+}
+
+function syncProductTemplatesToTypes(templates: ProductTemplateStore, productTypes: string[]): ProductTemplateStore {
+  const next: ProductTemplateStore = {};
+  const types = new Set(productTypes.map((name) => normalizeTemplateName(name)).filter(Boolean));
+
+  productTypes.forEach((name) => {
+    const cleanName = normalizeTemplateName(name);
+    if (!cleanName) return;
+    next[cleanName] = createProductTemplateConfig(DEFAULT_PRODUCT_TEMPLATE_KINDS[cleanName] || templates[cleanName]?.kind || "standard", templates[cleanName]);
+  });
+
+  Object.keys(templates).forEach((name) => {
+    if (!types.has(name)) return;
+    if (!next[name]) next[name] = createProductTemplateConfig(templates[name].kind, templates[name]);
+  });
+
+  return next;
+}
+
 function createDefaultManagerMarkers(managers: string[]): ManagerMarkerState {
   return normalizeManagerMarkerState(managers, [], {}, 0);
 }
@@ -391,8 +654,12 @@ function normalizeDictsPayload(payload: any): Dicts {
     }, {} as Record<string, string[]>);
   };
 
+  const productTypes = ensureProductTypes(mergeUniqueStrings(normalizeList(payload?.productTypes), Object.keys(normalizeProductTemplatesPayload(payload?.productTemplates))));
+  const productTemplates = syncProductTemplatesToTypes(normalizeProductTemplatesPayload(payload?.productTemplates), productTypes);
+
   return {
-    productTypes: ensureProductTypes(normalizeList(payload?.productTypes)),
+    productTypes,
+    productTemplates,
     paperSizes: normalizeList(payload?.paperSizes),
     pocketCalendarSizes: normalizeList(payload?.pocketCalendarSizes),
     businessCardSizes: normalizeList(payload?.businessCardSizes),
@@ -426,6 +693,7 @@ interface Dicts {
   managers: string[];
   managerMarkers: Record<string, string>;
   managerMarkerCounter: number;
+  productTemplates: ProductTemplateStore;
   paperProfiles: typeof DEFAULT_PAPER_PROFILES;
   paperLibrary: typeof DEFAULT_PAPER_LIBRARY;
 }
@@ -435,8 +703,13 @@ function createInitialDicts(): Dicts {
   const managers = loadList(LS_KEYS.managers, DEFAULT_MANAGERS);
   const normalizedManagers = normalizeManagerMarkerState(managers, managers, managerState.managerMarkers, managerState.managerMarkerCounter);
 
+  const productTypes = ensureProductTypes(mergeUniqueStrings(loadList(LS_KEYS.productTypes, DEFAULT_PRODUCT_TYPES), Object.keys(loadProductTemplates())));
+  const productTemplates = syncProductTemplatesToTypes(loadProductTemplates(), productTypes);
+  runtimeProductTemplates = productTemplates;
+
   return {
-    productTypes: ensureProductTypes(loadList(LS_KEYS.productTypes, DEFAULT_PRODUCT_TYPES)),
+    productTypes,
+    productTemplates,
     paperSizes: loadList(LS_KEYS.paperSizes, DEFAULT_PAPER_SIZES),
     pocketCalendarSizes: loadList(LS_KEYS.pocketCalendarSizes, DEFAULT_POCKET_CALENDAR_SIZES),
     businessCardSizes: loadList(LS_KEYS.businessCardSizes, DEFAULT_BUSINESS_CARD_SIZES),
@@ -457,8 +730,13 @@ function createInitialDicts(): Dicts {
 
 function createResetDicts(): Dicts {
   const managerState = createDefaultManagerMarkers(DEFAULT_MANAGERS);
+  const productTypes = ensureProductTypes(mergeUniqueStrings([...DEFAULT_PRODUCT_TYPES], Object.keys(DEFAULT_PRODUCT_TEMPLATES)));
+  const productTemplates = syncProductTemplatesToTypes({ ...DEFAULT_PRODUCT_TEMPLATES }, productTypes);
+  runtimeProductTemplates = productTemplates;
+
   return {
-    productTypes: ensureProductTypes([...DEFAULT_PRODUCT_TYPES]),
+    productTypes,
+    productTemplates,
     paperSizes: [...DEFAULT_PAPER_SIZES],
     pocketCalendarSizes: [...DEFAULT_POCKET_CALENDAR_SIZES],
     businessCardSizes: [...DEFAULT_BUSINESS_CARD_SIZES],
@@ -698,15 +976,52 @@ function mergePresetIntoForm(base: FormData, presetData: Partial<FormData>): For
 // ─── Вспомогательные функции ────────────────────────────────────────────────
 
 const MULTIBLOCK_TYPES = ["Каталоги", "Брошюры"];
-const isMultiBlock = (pt: string) => MULTIBLOCK_TYPES.includes(pt);
-const isCatalog = (pt: string) => pt === "Каталоги";
-const isBrochure = (pt: string) => pt === "Брошюры";
-const isCalendar = (pt: string) => pt === "Календари";
-const isNotebook = (pt: string) => pt === "Блокноты";
-const isEnvelope = (pt: string) => pt === "Конверты";
-const isBusinessCard = (pt: string) => pt === "Визитки";
-const isBag = (pt: string) => pt === "Бумажные Пакеты" || pt === "Пакеты";
-const isSticker = (pt: string) => pt === "Наклейки";
+function normalizeTemplateName(name: string): string {
+  return name.trim();
+}
+
+function getProductTemplate(name: string): ProductTemplateConfig {
+  const normalizedName = normalizeTemplateName(name);
+  const store = runtimeProductTemplates;
+  const fallbackKind = DEFAULT_PRODUCT_TEMPLATE_KINDS[normalizedName] || "standard";
+  const existing = store[normalizedName];
+  return {
+    kind: existing?.kind || fallbackKind,
+    flags: existing?.flags || { ...DEFAULT_PRODUCT_TEMPLATE_FLAGS[fallbackKind] },
+    fields: existing?.fields || createProductTemplateConfig(fallbackKind).fields,
+  };
+}
+
+function getProductLayoutKind(name: string): ProductLayoutKind {
+  return getProductTemplate(name).kind;
+}
+
+function isLayout(name: string, kind: ProductLayoutKind): boolean {
+  return getProductLayoutKind(name) === kind;
+}
+
+function getProductTemplateFieldConfig(productType: string, fieldKey: ProductTemplateFieldKey): ProductTemplateFieldConfig {
+  const template = getProductTemplate(productType);
+  return template.fields[fieldKey] || DEFAULT_PRODUCT_TEMPLATE_FIELDS[fieldKey];
+}
+
+function getProductTemplateFieldLabel(productType: string, fieldKey: ProductTemplateFieldKey): string {
+  return getProductTemplateFieldConfig(productType, fieldKey).label;
+}
+
+function isProductTemplateFieldRequired(productType: string, fieldKey: ProductTemplateFieldKey): boolean {
+  return getProductTemplateFieldConfig(productType, fieldKey).required;
+}
+
+const isMultiBlock = (pt: string) => ["catalog", "brochure"].includes(getProductLayoutKind(pt));
+const isCatalog = (pt: string) => getProductLayoutKind(pt) === "catalog";
+const isBrochure = (pt: string) => getProductLayoutKind(pt) === "brochure";
+const isCalendar = (pt: string) => isLayout(pt, "calendar");
+const isNotebook = (pt: string) => isLayout(pt, "notebook");
+const isEnvelope = (pt: string) => isLayout(pt, "envelope");
+const isBusinessCard = (pt: string) => isLayout(pt, "businessCard");
+const isBag = (pt: string) => isLayout(pt, "bag") || pt === "Пакеты";
+const isSticker = (pt: string) => isLayout(pt, "sticker");
 const PAPER_FINISHES: PaperFinish[] = ["Матовая", "Глянцевая"];
 
 function isPocketCalendar(form: FormData): boolean {
@@ -904,7 +1219,7 @@ function getClientSuggestions(store: ClientStore, managerName: string): string[]
     seen.add(key);
     result.push(value);
   });
-  return result;
+  return result.sort((left, right) => left.localeCompare(right, "ru", { sensitivity: "base", numeric: true }));
 }
 
 function getPaperLibraryItems(library: typeof DEFAULT_PAPER_LIBRARY, type: PaperTypeOption | ""): string[] {
@@ -1073,6 +1388,7 @@ function getDisplaySize(form: FormData): string {
 function generateShortTZ(form: FormData): string {
   const parts: string[] = [];
   const product = resolveProductName(form);
+  const templateFlags = getProductTemplate(form.productType).flags;
   if (product) parts.push(product.toLowerCase());
   const size = getDisplaySize(form);
   if (size) parts.push(size.split(/\s*[(/]/)[0].trim());
@@ -1168,14 +1484,18 @@ function generateShortTZ(form: FormData): string {
     }
   } else {
     const envelopePaperless = isEnvelope(form.productType) && form.paperType === "Без бумаги";
-    if (!envelopePaperless) {
+    if (templateFlags.showPaper && !envelopePaperless) {
       const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
       if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
-      if (form.colorMode) parts.push(formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки"));
+    }
+    if (templateFlags.showColor && isEnvelope(form.productType)) {
+      parts.push(formatShortColor(form.colorMode, form.ownReverse) || "—");
+    } else if (templateFlags.showColor && form.colorMode) {
+      parts.push(formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки"));
     }
   }
 
-  if (form.postProcessing.length > 0) {
+  if (templateFlags.showPostProcessing && form.postProcessing.length > 0) {
     const ppShort = form.postProcessing.map((p) => {
       if (p.includes("Перфорация")) return "перфор.";
       if (p.includes("Тиснение")) return `тиснение${form.foilColor ? " " + form.foilColor : ""}`;
@@ -1241,6 +1561,7 @@ function generateTZ(form: FormData, _tzNumber: number): string {
   const size = getDisplaySize(form);
   const cleanSize = size ? stripParentheticalNote(size) : "";
   const activeSubcontractWorks = getActiveSubcontractWorks(form);
+  const templateFlags = getProductTemplate(form.productType).flags;
 
   const lines: string[] = [];
   lines.push(` ЗАКАЗ № ${form.orderNumber || "БЕЗ НОМЕРА"}`);
@@ -1373,7 +1694,7 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     if (form.kashurovka.enabled) lines.push(" Базовые материалы задаются в блоке кашировки");
     else {
       const envelopePaperless = isEnvelope(form.productType) && form.paperType === "Без бумаги";
-      if (!envelopePaperless) {
+      if (templateFlags.showPaper && !envelopePaperless) {
         const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
         const paperLine = paperText
           ? `${paperText}${form.paperType === "Дизайнерская" ? "" : `, ${form.densityFinish.toLowerCase()}`}`
@@ -1381,20 +1702,20 @@ function generateTZ(form: FormData, _tzNumber: number): string {
         lines.push(` Материал : ${paperLine}`);
       }
     }
-    if (!form.kashurovka.enabled && !(isEnvelope(form.productType) && form.paperType === "Без бумаги")) {
+    if (templateFlags.showColor && !form.kashurovka.enabled) {
       lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки")}`);
     }
   }
   lines.push("");
 
-  if (!isMultiBlock(form.productType) && !isNotebook(form.productType) && !isCalendar(form.productType) && form.lamination.enabled) {
+  if (templateFlags.showLamination && !isMultiBlock(form.productType) && !isNotebook(form.productType) && !isCalendar(form.productType) && form.lamination.enabled) {
     lines.push(" ЛАМИНАЦИЯ");
     lines.push(" ---------");
     lines.push(` Ламинация : ${formatLamination(form.lamination)}`);
     lines.push("");
   }
 
-  if (form.postProcessing.length > 0) {
+  if (templateFlags.showPostProcessing && form.postProcessing.length > 0) {
     lines.push(" ОБРАБОТКА");
     lines.push(" ---------");
     form.postProcessing.forEach((p) => {
@@ -1530,6 +1851,9 @@ type UiIconName =
   | "check"
   | "close"
   | "clock"
+  | "eye"
+  | "flash"
+  | "lock"
   | "note"
   | "package"
   | "gear";
@@ -1622,6 +1946,17 @@ function UiIcon({ name, className = "h-4 w-4" }: { name: UiIconName; className?:
         <circle {...common} cx="12" cy="12" r="8" />
         <path {...common} d="M12 8v4l3 2" />
       </>}
+      {name === "eye" && <>
+        <path {...common} d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12Z" />
+        <circle {...common} cx="12" cy="12" r="2.5" />
+      </>}
+      {name === "flash" && <>
+        <path {...common} d="M13 2.5 5 13h5l-1 8.5 9-11h-5l1-8Z" />
+      </>}
+      {name === "lock" && <>
+        <rect {...common} x="6.5" y="10" width="11" height="9" rx="2" />
+        <path {...common} d="M8.5 10V8.5a3.5 3.5 0 0 1 7 0V10" />
+      </>}
       {name === "note" && <>
         <path {...common} d="M6 4.5h9l3 3V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 20V5.5A1 1 0 0 1 6 4.5Z" />
         <path {...common} d="M10 4.5V8h3.5" />
@@ -1641,35 +1976,35 @@ function UiIcon({ name, className = "h-4 w-4" }: { name: UiIconName; className?:
 }
 
 const EMOJI_FONT = {
-  fontFamily: '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif',
+  fontFamily: '"Segoe UI Symbol","Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif',
 };
 
-const SECTION_ICON_PREFIXES: Array<[string, string]> = [
-  ["🖨", "🖨"],
-  ["🗂", "🗂"],
-  ["✂️", "✂️"],
-  ["📐", "📐"],
-  ["📚", "📚"],
-  ["📝", "📝"],
+const SECTION_ICON_PREFIXES: Array<[string, UiIconName]> = [
+  ["🖨", "printer"],
+  ["🗂", "folder"],
+  ["✂️", "scissors"],
+  ["📐", "ruler"],
+  ["📚", "book"],
+  ["📝", "note"],
 ];
 
-const DICT_ICON_MAP: Record<string, string> = {
-  "👤": "👤",
-  "🖨": "🖨",
-  "📄": "📄",
-  "📅": "📅",
-  "🪪": "🪪",
-  "🟫": "🟫",
-  "✏️": "✏️",
-  "✉️": "✉️",
-  "🎨": "🎨",
-  "✂️": "✂️",
-  "📚": "📚",
-  "✨": "✨",
-  "📏": "📏",
+const DICT_ICON_MAP: Record<string, UiIconName> = {
+  "👤": "folder",
+  "🖨": "printer",
+  "📄": "file",
+  "📅": "calendar",
+  "🪪": "badge",
+  "🟫": "package",
+  "✏️": "clipboard",
+  "✉️": "package",
+  "🎨": "palette",
+  "✂️": "scissors",
+  "📚": "book",
+  "✨": "sparkles",
+  "📏": "ruler",
 };
 
-function getSectionIcon(title: string): { icon: string | null; text: string } {
+function getSectionIcon(title: string): { icon: UiIconName | null; text: string } {
   for (const [prefix, icon] of SECTION_ICON_PREFIXES) {
     if (title.startsWith(prefix)) {
       return { icon, text: title.slice(prefix.length).trimStart() };
@@ -1684,7 +2019,7 @@ function Section({ title, children, accent }: { title: string; children: React.R
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className={`px-4 py-2.5 bg-gradient-to-r ${accent || "from-slate-50 to-white"} border-b border-slate-100`}>
         <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-          {parsed.icon && <span style={EMOJI_FONT} className="text-slate-500">{parsed.icon}</span>}
+          {parsed.icon && <UiIcon name={parsed.icon} className="h-4 w-4 text-slate-500" />}
           <span>{parsed.text}</span>
         </h2>
       </div>
@@ -1773,7 +2108,7 @@ function DateTimeField({
         className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-slate-600 hover:bg-slate-50 transition-colors"
         aria-label="Открыть выбор времени"
       >
-        <span style={EMOJI_FONT}>🕒</span>
+        <UiIcon name="clock" className="h-4 w-4" />
       </button>
     </div>
   );
@@ -1844,10 +2179,10 @@ function UpdateNotice({
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/15">
               {state.status === "checking" && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
-              {state.status === "available" && <span style={EMOJI_FONT}>⬇️</span>}
-              {state.status === "downloading" && <span style={EMOJI_FONT}>⏳</span>}
-              {state.status === "downloaded" && <span style={EMOJI_FONT}>✅</span>}
-              {state.status === "error" && <span style={EMOJI_FONT}>⚠️</span>}
+              {state.status === "available" && <UiIcon name="download" className="h-4 w-4 text-white" />}
+              {state.status === "downloading" && <UiIcon name="clock" className="h-4 w-4 text-white" />}
+              {state.status === "downloaded" && <UiIcon name="check" className="h-4 w-4 text-white" />}
+              {state.status === "error" && <UiIcon name="warning" className="h-4 w-4 text-white" />}
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold">{title}</div>
@@ -1863,7 +2198,7 @@ function UpdateNotice({
                 className="rounded-lg px-2 py-1 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
                 aria-label="Закрыть окно обновления"
               >
-                <span style={EMOJI_FONT}>✕</span>
+                <UiIcon name="close" className="h-4 w-4" />
               </button>
             )}
           </div>
@@ -1977,7 +2312,7 @@ function UpdateSummaryModal({
         <div className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-6 py-5 text-white">
           <div className="flex items-start gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20">
-              <span style={EMOJI_FONT}>✅</span>
+              <UiIcon name="check" className="h-6 w-6 text-white" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-lg font-semibold">Обновление прошло успешно</div>
@@ -2489,12 +2824,12 @@ function ShortTZPanel({ form }: { form: FormData }) {
   return (
     <div className={`rounded-xl border shadow-sm overflow-hidden transition-all duration-300 ${shortText ? "border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50" : "border-slate-200 bg-white"}`}>
       <div className="px-4 py-2.5 flex items-center gap-2 border-b border-emerald-100">
-        <span className="text-emerald-500" style={EMOJI_FONT}>⚡</span>
+        <UiIcon name="flash" className="h-5 w-5 text-emerald-500" />
         <h2 className="text-sm font-semibold text-slate-700">Краткое ТЗ</h2>
         <span className="text-xs text-slate-400 ml-1">— автоматически формируется из данных формы</span>
         {shortText && (
           <button onClick={handleCopy} className={`ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium border transition-all ${copied ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50"}`}>
-            {copied ? <><span style={EMOJI_FONT}>✅</span>Скопировано!</> : <><span style={EMOJI_FONT}>📋</span>Копировать</>}
+            {copied ? <><UiIcon name="check" className="h-4 w-4" />Скопировано!</> : <><UiIcon name="clipboard" className="h-4 w-4" />Копировать</>}
           </button>
         )}
       </div>
@@ -2562,7 +2897,7 @@ function DictEditor({
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
       <div className="px-4 py-2.5 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center gap-2">
-        <span style={EMOJI_FONT} className="text-slate-500">{DICT_ICON_MAP[icon] || "📄"}</span>
+        <UiIcon name={DICT_ICON_MAP[icon] || "file"} className="h-4 w-4 text-slate-500" />
         <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
         <span className="ml-auto text-xs text-slate-400">{items.length} {"\u044d\u043b\u0435\u043c\u0435\u043d\u0442\u043e\u0432"}</span>
       </div>
@@ -2608,12 +2943,439 @@ function DictEditor({
   );
 }
 
+function ProductTemplateEditor({
+  productTypes,
+  templates,
+  onProductTypesChange,
+  onChange,
+}: {
+  productTypes: string[];
+  templates: ProductTemplateStore;
+  onProductTypesChange: (next: string[]) => void;
+  onChange: (next: ProductTemplateStore) => void;
+}) {
+  const [showModal, setShowModal] = useState(false);
+  const [selectedName, setSelectedName] = useState("");
+  const [newTypeName, setNewTypeName] = useState("");
+  const [renameDraft, setRenameDraft] = useState("");
+
+  const rows = productTypes
+    .map((name) => normalizeTemplateName(name))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "ru", { sensitivity: "base", numeric: true }));
+
+  useEffect(() => {
+    if (!rows.length) {
+      setSelectedName("");
+      return;
+    }
+    if (!selectedName || !rows.includes(selectedName)) {
+      setSelectedName(rows[0]);
+    }
+  }, [rows, selectedName]);
+
+  useEffect(() => {
+    if (!showModal) setNewTypeName("");
+  }, [showModal]);
+
+  const activeName = selectedName || rows[0] || "";
+  const activeTemplate = activeName
+    ? templates[activeName] || createProductTemplateConfig(DEFAULT_PRODUCT_TEMPLATE_KINDS[activeName] || "standard")
+    : null;
+
+  useEffect(() => {
+    setRenameDraft(activeName);
+  }, [activeName]);
+
+  const updateTemplate = (name: string, patch: Partial<ProductTemplateConfig>) => {
+    const cleanName = normalizeTemplateName(name);
+    if (!cleanName) return;
+    const current = templates[cleanName] || createProductTemplateConfig(DEFAULT_PRODUCT_TEMPLATE_KINDS[cleanName] || "standard");
+    const mergedFields = patch.fields ? { ...current.fields, ...(patch.fields || {}) } : current.fields;
+    const nextTemplate = createProductTemplateConfig(patch.kind || current.kind, {
+      ...current,
+      ...patch,
+      flags: { ...current.flags, ...(patch.flags || {}) },
+      fields: mergedFields,
+    });
+    onChange({ ...templates, [cleanName]: nextTemplate });
+  };
+
+  const resetTemplate = (name: string) => {
+    const cleanName = normalizeTemplateName(name);
+    if (!cleanName) return;
+    onChange({
+      ...templates,
+      [cleanName]: createProductTemplateConfig(DEFAULT_PRODUCT_TEMPLATE_KINDS[cleanName] || "standard"),
+    });
+  };
+
+  const addProductType = () => {
+    const cleanName = normalizeTemplateName(newTypeName);
+    if (!cleanName) return;
+    if (rows.includes(cleanName)) {
+      setSelectedName(cleanName);
+      setShowModal(true);
+      return;
+    }
+    onProductTypesChange([...productTypes, cleanName]);
+    setSelectedName(cleanName);
+    setNewTypeName("");
+  };
+
+  const renameProductType = () => {
+    const oldName = normalizeTemplateName(activeName);
+    const newName = normalizeTemplateName(renameDraft);
+    if (!oldName || !newName || oldName === newName) return;
+    if (rows.includes(newName)) return;
+    const nextTypes = productTypes.map((name) => (normalizeTemplateName(name) === oldName ? newName : name));
+    const nextTemplates = { ...templates };
+    nextTemplates[newName] = nextTemplates[oldName] || createProductTemplateConfig(DEFAULT_PRODUCT_TEMPLATE_KINDS[newName] || "standard");
+    delete nextTemplates[oldName];
+    onProductTypesChange(nextTypes);
+    onChange(nextTemplates);
+    setSelectedName(newName);
+    setRenameDraft(newName);
+  };
+
+  const activeFlags = activeTemplate?.flags || DEFAULT_PRODUCT_TEMPLATE_FLAGS.standard;
+  const activeFields = activeTemplate?.fields || createProductTemplateConfig(activeTemplate?.kind || "standard").fields;
+  const enabledFields = [
+    activeFlags.showSize ? activeFields.size.label || "Размер" : null,
+    activeFlags.showPaper ? activeFields.paper.label || "Бумага" : null,
+    activeFlags.showColor ? activeFields.color.label || "Цветность" : null,
+    activeFlags.showLamination ? activeFields.lamination.label || "Ламинация" : null,
+    activeFlags.showPostProcessing ? activeFields.postProcessing.label || "Обработка" : null,
+  ].filter(Boolean) as string[];
+  const layoutMeta = activeTemplate ? PRODUCT_LAYOUT_META[activeTemplate.kind] : PRODUCT_LAYOUT_META.standard;
+  const fieldRows: Array<{ key: ProductTemplateFieldKey; title: string; desc: string }> = [
+    { key: "size", title: "Размер / формат", desc: "Формат, размер или страницы, которые нужны этому изделию." },
+    { key: "paper", title: "Бумага / материал", desc: "Тип бумаги, материал или плотность, если они используются." },
+    { key: "color", title: "Цветность", desc: "Красочность и оборот, если это нужно показывать менеджеру." },
+    { key: "lamination", title: "Ламинация", desc: "Параметры ламинации для этого типа продукции." },
+    { key: "postProcessing", title: "Обработка", desc: "Биговка, фальцовка, перфорация и другие операции." },
+  ];
+
+  return (
+    <>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-start gap-4 bg-gradient-to-r from-slate-50 to-white px-4 py-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100">
+            <UiIcon name="settings" className="h-6 w-6 text-emerald-600" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-slate-800">Шаблоны продукции</div>
+            <div className="mt-1 text-sm leading-6 text-slate-600">
+              Отдельное окно для настройки, какие поля показывать у каждого вида изделий. Здесь удобнее править шаблоны, не перегружая справочники.
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600">{rows.length} шаблонов</span>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">Сохраняется локально на ПК</span>
+              <span className="rounded-full bg-sky-50 px-3 py-1 text-[11px] font-semibold text-sky-700">Можно вернуть к стандарту</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+          >
+            Открыть конструктор
+          </button>
+        </div>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
+          <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" />
+          <div
+            className="relative z-10 flex h-[min(90vh,900px)] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_30px_90px_rgba(15,23,42,0.28)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-5 text-white">
+              <div className="min-w-0">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/15">
+                    <UiIcon name="settings" className="h-6 w-6 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-lg font-semibold">Конструктор шаблонов продукции</div>
+                    <div className="mt-1 text-sm text-white/70">
+                      Настраиваем внешний вид изделий, чтобы менеджеру показывались только нужные поля.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="rounded-xl bg-white/10 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/15"
+              >
+                Закрыть
+              </button>
+            </div>
+
+            <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[300px_1fr]">
+              <aside className="flex min-h-0 flex-col border-b border-slate-200 bg-slate-50/80 lg:border-b-0 lg:border-r">
+                <div className="border-b border-slate-200 px-4 py-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-800">Список изделий</div>
+                      <div className="mt-1 text-xs leading-5 text-slate-500">
+                        Выберите изделие слева. Справа меняются только настройки выбранного шаблона.
+                      </div>
+                    </div>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold text-slate-500 ring-1 ring-slate-200">
+                      {rows.length}
+                    </span>
+                  </div>
+                  <div className="mt-3.5 flex gap-2">
+                    <input
+                      className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/25"
+                      placeholder="Новый тип изделия"
+                      value={newTypeName}
+                      onChange={(e) => setNewTypeName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") addProductType();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={addProductType}
+                      disabled={!newTypeName.trim()}
+                    className="shrink-0 rounded-xl bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400"
+                  >
+                    + Добавить
+                  </button>
+                </div>
+                  <div className="mt-2 text-[11px] leading-5 text-slate-500">
+                    Новый тип сразу появится в списке и получит шаблон по умолчанию.
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+                  {rows.map((name) => {
+                    const template = templates[name] || createProductTemplateConfig(DEFAULT_PRODUCT_TEMPLATE_KINDS[name] || "standard");
+                    const kindInfo = PRODUCT_LAYOUT_META[template.kind];
+                    const isActive = name === activeName;
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setSelectedName(name)}
+                        className={`mb-2 w-full rounded-2xl border px-3.5 py-2.5 text-left transition-colors ${
+                          isActive
+                            ? "border-emerald-200 bg-emerald-50 shadow-sm"
+                            : "border-slate-200 bg-white hover:bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-slate-800">{name}</div>
+                            <div className="mt-0.5 text-xs leading-5 text-slate-500">{kindInfo.title}</div>
+                          </div>
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                            {template.kind === "standard" ? "base" : "custom"}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {!rows.length && (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500">
+                      Сначала добавьте типы изделий в справочнике, потом здесь можно будет настроить их шаблоны.
+                    </div>
+                  )}
+                </div>
+              </aside>
+
+              <section className="min-h-0 overflow-y-auto p-4 sm:p-5">
+                {!activeTemplate ? (
+                  <div className="flex h-full items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+                    <div className="max-w-md">
+                      <div className="text-base font-semibold text-slate-800">Нет доступных шаблонов</div>
+                      <div className="mt-2 text-sm leading-6 text-slate-500">
+                        Добавьте хотя бы один тип изделия, и справа появятся настройки для его шаблона.
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3.5">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-base font-semibold text-slate-900">{activeName}</h3>
+                            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                              {layoutMeta.title}
+                            </span>
+                          </div>
+                          <p className="mt-1.5 max-w-3xl text-sm leading-6 text-slate-600">{layoutMeta.description}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => resetTemplate(activeName)}
+                          className="rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                        >
+                          Сбросить
+                        </button>
+                      </div>
+                      <div className="mt-3 rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs text-slate-600">
+                        <span className="font-semibold text-slate-800">Включено:</span>{" "}
+                        {enabledFields.length ? enabledFields.join(", ") : "ничего не выводится"}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 xl:grid-cols-[1fr_0.95fr]">
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="text-sm font-semibold text-slate-900">Название типа</div>
+                        <div className="mt-1 text-xs leading-5 text-slate-500">
+                          Здесь можно переименовать тип изделия прямо в справочнике.
+                        </div>
+                        <div className="mt-3 flex gap-2">
+                          <input
+                            className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/25"
+                            value={renameDraft}
+                            onChange={(e) => setRenameDraft(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            onClick={renameProductType}
+                            disabled={!renameDraft.trim() || renameDraft.trim() === activeName}
+                            className="rounded-xl bg-slate-900 px-3.5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-slate-800 disabled:bg-slate-200 disabled:text-slate-400"
+                          >
+                            Переименовать
+                          </button>
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="text-sm font-semibold text-slate-900">Тип конструкции</div>
+                        <div className="mt-1 text-xs leading-5 text-slate-500">
+                          Определяет базовую логику шаблона и набор стандартных правил.
+                        </div>
+                        <select
+                          className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm"
+                          value={activeTemplate.kind}
+                          onChange={(e) => updateTemplate(activeName, { kind: e.target.value as ProductLayoutKind })}
+                        >
+                          {PRODUCT_LAYOUT_OPTIONS.map((item) => (
+                            <option key={item.value} value={item.value}>
+                              {item.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="mb-3">
+                        <div className="text-sm font-semibold text-slate-900">Поля и обязательность</div>
+                        <div className="mt-1 text-xs leading-5 text-slate-500">
+                          Тут задаётся не только видимость поля, но и является ли оно обязательным для отправки.
+                        </div>
+                      </div>
+                      <div className="space-y-2.5">
+                        {fieldRows.map((item) => {
+                          const visibleKey = ({
+                            size: "showSize",
+                            paper: "showPaper",
+                            color: "showColor",
+                            lamination: "showLamination",
+                            postProcessing: "showPostProcessing",
+                          } as const)[item.key];
+                          const fieldConfig = activeFields[item.key] || DEFAULT_PRODUCT_TEMPLATE_FIELDS[item.key];
+                          const isVisible = activeTemplate.flags[visibleKey];
+                          return (
+                            <div key={item.key} className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 xl:grid-cols-[1.25fr_1fr_auto_auto] xl:items-center">
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-slate-800">{item.title}</div>
+                                <div className="mt-0.5 text-xs leading-5 text-slate-500">{item.desc}</div>
+                              </div>
+                              <input
+                                className="min-w-0 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/25"
+                                value={fieldConfig.label}
+                                onChange={(e) =>
+                                  updateTemplate(activeName, {
+                                    fields: {
+                                      [item.key]: { ...fieldConfig, label: e.target.value },
+                                    } as Partial<Record<ProductTemplateFieldKey, ProductTemplateFieldConfig>>,
+                                  })
+                                }
+                              />
+                              <label className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                  checked={isVisible}
+                                  onChange={(e) =>
+                                    updateTemplate(activeName, {
+                                      flags: { [visibleKey]: e.target.checked } as Partial<ProductTemplateFlags>,
+                                    })
+                                  }
+                                />
+                                <span>Показывать</span>
+                              </label>
+                              <label className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${isVisible ? "border-slate-200 bg-white text-slate-700" : "border-slate-200 bg-slate-100 text-slate-400"}`}>
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                  checked={fieldConfig.required}
+                                  disabled={!isVisible}
+                                  onChange={(e) =>
+                                    updateTemplate(activeName, {
+                                      fields: {
+                                        [item.key]: { ...fieldConfig, required: e.target.checked },
+                                      } as Partial<Record<ProductTemplateFieldKey, ProductTemplateFieldConfig>>,
+                                    })
+                                  }
+                                />
+                                <span>Обязательное</span>
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 xl:grid-cols-[1fr_1fr]">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="text-sm font-semibold text-slate-900">Подсказка</div>
+                        <div className="mt-2 space-y-2 text-sm leading-6 text-slate-600">
+                          <p>Это окно заменяет старый блок в справочниках и позволяет не перегружать список настроек.</p>
+                          <p>Если поле скрыто, оно автоматически перестаёт быть обязательным.</p>
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div className="text-sm font-semibold text-slate-900">Кратко сейчас</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {enabledFields.length ? (
+                            enabledFields.map((item) => (
+                              <span key={item} className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                                {item}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-sm text-slate-500">Поля скрыты</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function LegacyApp() {
   const [dicts, setDicts] = useState<Dicts>(() => createInitialDicts());
 
   const [sheetName, setSheetName] = useState(() => localStorage.getItem(LS_KEYS.sheetName) || "Печать_2026");
 
   useEffect(() => { saveList(LS_KEYS.productTypes, dicts.productTypes); }, [dicts.productTypes]);
+  useEffect(() => { saveProductTemplates(dicts.productTemplates); }, [dicts.productTemplates]);
   useEffect(() => { saveList(LS_KEYS.paperSizes, dicts.paperSizes); }, [dicts.paperSizes]);
   useEffect(() => { saveList(LS_KEYS.pocketCalendarSizes, dicts.pocketCalendarSizes); }, [dicts.pocketCalendarSizes]);
   useEffect(() => { saveList(LS_KEYS.businessCardSizes, dicts.businessCardSizes); }, [dicts.businessCardSizes]);
@@ -2628,6 +3390,7 @@ function LegacyApp() {
   useEffect(() => { saveManagerMarkerState({ managerMarkers: dicts.managerMarkers, managerMarkerCounter: dicts.managerMarkerCounter }); }, [dicts.managerMarkers, dicts.managerMarkerCounter]);
   useEffect(() => { savePaperProfiles(dicts.paperProfiles); }, [dicts.paperProfiles]);
   useEffect(() => { savePaperLibrary(dicts.paperLibrary); }, [dicts.paperLibrary]);
+  useEffect(() => { runtimeProductTemplates = dicts.productTemplates; }, [dicts.productTemplates]);
   useEffect(() => { localStorage.setItem(LS_KEYS.sheetName, sheetName); }, [sheetName]);
 
   useEffect(() => {
@@ -2718,7 +3481,13 @@ function LegacyApp() {
   }, []);
 
   function updateDict<K extends keyof Dicts>(key: K, val: string[]) {
-    setDicts((prev) => ({ ...prev, [key]: val }));
+    setDicts((prev) => {
+      const next = { ...prev, [key]: val } as Dicts;
+      if (key === "productTypes") {
+        next.productTemplates = syncProductTemplatesToTypes(prev.productTemplates, val);
+      }
+      return next;
+    });
   }
 
   function updateManagers(nextManagers: string[]) {
@@ -2736,6 +3505,26 @@ function LegacyApp() {
 
   function updatePaperLibrary(key: PaperLibraryKey, val: string[]) {
     setDicts((prev) => ({ ...prev, paperLibrary: { ...prev.paperLibrary, [key]: val } }));
+  }
+
+  function updateProductTemplate(name: string, patch: Partial<ProductTemplateConfig>) {
+    const cleanName = normalizeTemplateName(name);
+    if (!cleanName) return;
+    setDicts((prev) => {
+      const current = prev.productTemplates[cleanName] || createProductTemplateConfig(DEFAULT_PRODUCT_TEMPLATE_KINDS[cleanName] || "standard");
+      const nextTemplate = createProductTemplateConfig(patch.kind || current.kind, {
+        ...current,
+        ...patch,
+        flags: { ...current.flags, ...(patch.flags || {}) },
+      });
+      return {
+        ...prev,
+        productTemplates: {
+          ...prev.productTemplates,
+          [cleanName]: nextTemplate,
+        },
+      };
+    });
   }
 
   async function rememberClientIfNeeded() {
@@ -2965,6 +3754,7 @@ function LegacyApp() {
       ),
     },
     { key: "productTypes", title: "Типы изделий", icon: "🖨", element: <DictEditor title="Типы изделий" icon="🖨" items={dicts.productTypes} locked={["Другое..."]} onChange={(v) => updateDict("productTypes", v)} /> },
+    { key: "productTemplates", title: "Шаблоны продукции", icon: "⚙️", element: <ProductTemplateEditor productTypes={dicts.productTypes} templates={dicts.productTemplates} onProductTypesChange={(next) => updateDict("productTypes", next)} onChange={(next) => setDicts((prev) => ({ ...prev, productTemplates: next }))} /> },
     { key: "paperSizes", title: "Форматы бумаги", icon: "📄", element: <DictEditor title="Форматы бумаги" icon="📄" items={dicts.paperSizes} locked={["Нестандартный"]} onChange={(v) => updateDict("paperSizes", v)} /> },
     { key: "pocketCalendarSizes", title: "Форматы карманных календарей", icon: "📅", element: <DictEditor title="Форматы карманных календарей" icon="📅" items={dicts.pocketCalendarSizes} locked={["70×100", "Нестандартный"]} onChange={(v) => updateDict("pocketCalendarSizes", v)} /> },
     { key: "businessCardSizes", title: "Форматы визиток", icon: "🪪", element: <DictEditor title="Форматы визиток" icon="🪪" items={dicts.businessCardSizes} locked={["Нестандартный"]} onChange={(v) => updateDict("businessCardSizes", v)} /> },
@@ -3168,6 +3958,12 @@ function LegacyApp() {
   const brochure = isBrochure(pt);
   const wobbler = pt === "Воблеры";
   const badge = pt === "Бейджи";
+  const templateFlags = getProductTemplate(pt).flags;
+  const templateSizeLabel = getProductTemplateFieldLabel(pt, "size");
+  const templatePaperLabel = getProductTemplateFieldLabel(pt, "paper");
+  const templateColorLabel = getProductTemplateFieldLabel(pt, "color");
+  const templateLaminationLabel = getProductTemplateFieldLabel(pt, "lamination");
+  const templatePostProcessingLabel = getProductTemplateFieldLabel(pt, "postProcessing");
   const deskCalendarBigovkaActive = calendar && form.calendarKind === "Настольный" && !!form.calendarBaseBigovkaLines && form.calendarBaseBigovkaLines !== "0";
   const clientSuggestionItems = getClientSuggestions(clientStore, form.managerName);
 
@@ -3187,7 +3983,7 @@ function LegacyApp() {
       <header className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center shadow">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            <UiIcon name="file" className="w-6 h-6 text-white" />
           </div>
           <div>
             <h1 className="text-lg font-bold text-slate-800 leading-none">ТЗ Оскар-Принт</h1>
@@ -3196,15 +3992,15 @@ function LegacyApp() {
               <span className="ml-2 text-[10px] text-slate-400">v{APP_VERSION}</span>
             </p>
           </div>
-          <div className="ml-auto flex gap-2"><button onClick={handleReset} className="text-sm px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200">🗑 Очистить</button></div>
+          <div className="ml-auto flex gap-2"><button onClick={handleReset} className="text-sm px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors border border-slate-200">Очистить</button></div>
         </div>
       </header>
 
       <div className="max-w-5xl mx-auto w-full px-4 mt-4">
         <div className="flex flex-col lg:flex-row lg:items-stretch gap-3">
           <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-slate-200 w-fit">
-            <button onClick={() => setActiveTab("form")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "form" ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><span style={EMOJI_FONT}>📋</span>Форма ТЗ</button>
-            <button onClick={() => setActiveTab("dicts")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "dicts" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><span style={EMOJI_FONT}>⚙️</span>Справочники</button>
+            <button onClick={() => setActiveTab("form")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "form" ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><UiIcon name="clipboard" className="h-4 w-4" />Форма ТЗ</button>
+            <button onClick={() => setActiveTab("dicts")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "dicts" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><UiIcon name="settings" className="h-4 w-4" />Справочники</button>
           </div>
           {activeTab === "form" && (
             <div className="w-full lg:flex-1 bg-white rounded-xl px-3 py-2.5 shadow-sm border border-slate-200 min-w-0">
@@ -3371,14 +4167,14 @@ function LegacyApp() {
                   {pt === "Другое..." && <input data-field="productTypeCustom" className={`${fieldClass(showValidation && required.includes("productTypeCustom"))} mt-2`} placeholder="Укажите тип изделия" value={form.productTypeCustom} onChange={(e) => update("productTypeCustom", e.target.value)} />}
                 </Field>
                 {pt === "Визитки" ? (
-                  <Field label="Формат визиток" required>
+                  <Field label={templateSizeLabel} required>
                     <select data-field="businessCardSize" value={form.businessCardSize} className={selectFieldClass(showValidation && required.includes("businessCardSize"))} onChange={(e) => update("businessCardSize", e.target.value)}>
                       <option value="">— выберите —</option>{dicts.businessCardSizes.map((s) => <option key={s}>{s}</option>)}
                     </select>
                     {form.businessCardSize === "Нестандартный" && <input data-field="businessCardSizeCustom" className={`${fieldClass(showValidation && required.includes("businessCardSizeCustom"))} mt-2`} placeholder="Например: 85×55 мм" value={form.businessCardSizeCustom} onChange={(e) => update("businessCardSizeCustom", e.target.value)} />}
                   </Field>
                 ) : !envelope && !multiBlock && !calendar && !bag && (
-                  <Field label="Формат / размер" required>
+                  <Field label={templateSizeLabel} required>
                     <select data-field="paperSize" value={form.paperSize} className={selectFieldClass(showValidation && required.includes("paperSize"))} onChange={(e) => update("paperSize", e.target.value)}>
                       <option value="">— выберите —</option>{dicts.paperSizes.map((s) => <option key={s}>{s}</option>)}
                     </select>
@@ -3386,7 +4182,7 @@ function LegacyApp() {
                   </Field>
                 )}
                 {envelope && (
-                  <Field label="Формат конверта" required>
+                  <Field label={templateSizeLabel} required>
                     <select data-field="envelopeSize" value={form.envelopeSize} className={selectFieldClass(showValidation && required.includes("envelopeSize"))} onChange={(e) => update("envelopeSize", e.target.value)}>
                       <option value="">— выберите —</option>{dicts.envelopeSizes.map((s) => <option key={s}>{s}</option>)}
                     </select>
@@ -3412,11 +4208,11 @@ function LegacyApp() {
                 </Field>
               </div>
 
-              {!multiBlock && !notebook && !calendar && !bag && !form.kashurovka.enabled && pt && (
+              {templateFlags.showPaper && !multiBlock && !notebook && !calendar && !bag && !form.kashurovka.enabled && pt && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                   {!sticker && (
                     <PaperSelectionField
-                      label="Бумага / материал"
+                      label={templatePaperLabel}
                       typeValue={form.paperType}
                       materialValue={form.density}
                       customValue={form.paperCustomName}
@@ -3439,14 +4235,14 @@ function LegacyApp() {
                     />
                   )}
                   {sticker && <Field label="Материал" required><select data-field="stickerMaterial" value={form.stickerMaterial} className={selectFieldClass(showValidation && required.includes("stickerMaterial"))} onChange={(e) => update("stickerMaterial", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.sticker.map((d) => <option key={d}>{d}</option>)}</select></Field>}
-                  {!bag && (
+                  {templateFlags.showColor && !bag && (
                     <>
                       <PaperFinishField
                         value={sticker ? form.stickerFinish : form.densityFinish}
                         options={sticker ? PAPER_FINISHES : paperFinishOptionsForSelection(form.paperType, form.density)}
                         onChange={(value) => update(sticker ? "stickerFinish" : "densityFinish", value as never)}
                       />
-                      <Field label="Цветность" required><select data-field="colorMode" value={form.colorMode} disabled={(pt === "Листовки" || badge) && form.ownReverse} className={`${selectFieldClass(showValidation && required.includes("colorMode"))} ${(pt === "Листовки" || badge) && form.ownReverse ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{(sticker ? STICKER_COLOR_MODES : dicts.colors).map((c) => <option key={c}>{c}</option>)}</select></Field>
+                      <Field label={templateColorLabel} required><select data-field="colorMode" value={form.colorMode} disabled={(pt === "Листовки" || badge) && form.ownReverse} className={`${selectFieldClass(showValidation && required.includes("colorMode"))} ${(pt === "Листовки" || badge) && form.ownReverse ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{(sticker ? STICKER_COLOR_MODES : dicts.colors).map((c) => <option key={c}>{c}</option>)}</select></Field>
                     </>
                   )}
                   {(pt === "Листовки" || badge) && (
@@ -3551,7 +4347,7 @@ function LegacyApp() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 space-y-3">
-                      <h3 className="text-sm font-semibold text-blue-700 flex items-center gap-1.5"><span style={EMOJI_FONT}>📗</span>Обложка</h3>
+                      <h3 className="text-sm font-semibold text-blue-700 flex items-center gap-1.5"><UiIcon name="book" className="h-4 w-4" />Обложка</h3>
                       <Field label="Обложка с кашированием">
                         <YesNo value={form.coverUseKash} onChange={(value) => {
                           update("coverUseKash", value);
@@ -3593,7 +4389,7 @@ function LegacyApp() {
                       {form.coverUseKash && <p className="text-xs text-slate-500">Бумага, цветность и ламинация обложки задаются в блоке кашировки.</p>}
                     </div>
                     <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
-                      <h3 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5"><span style={EMOJI_FONT}>📘</span>Блок</h3>
+                      <h3 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5"><UiIcon name="book" className="h-4 w-4" />Блок</h3>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="md:col-span-2">
                           <PaperSelectionField
@@ -3696,14 +4492,14 @@ function LegacyApp() {
                   )}
                   {form.calendarKind === "Карманный" && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Field label="Формат / размер" required>
+                      <Field label={templateSizeLabel} required>
                         <select data-field="paperSize" value={form.paperSize} className={selectFieldClass(showValidation && required.includes("paperSize"))} onChange={(e) => update("paperSize", e.target.value)}>
                           <option value="">— выберите —</option>{dicts.pocketCalendarSizes.map((s) => <option key={s}>{s}</option>)}
                         </select>
                         {form.paperSize === "Нестандартный" && <input data-field="paperSizeCustom" className={`${fieldClass(showValidation && required.includes("paperSizeCustom"))} mt-2`} placeholder="Например: 150×210 мм" value={form.paperSizeCustom} onChange={(e) => update("paperSizeCustom", e.target.value)} />}
                       </Field>
                       <PaperSelectionField
-                        label="Бумага / материал"
+                        label={templatePaperLabel}
                         typeValue={form.paperType}
                         materialValue={form.density}
                         customValue={form.paperCustomName}
@@ -3725,7 +4521,7 @@ function LegacyApp() {
                         invalidCustom={showValidation && required.includes("paperCustomName")}
                       />
                       <PaperFinishField value={form.densityFinish} onChange={(value) => update("densityFinish", value)} />
-                      <Field label="Цветность" required><select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
+                      <Field label={templateColorLabel} required><select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
                     </div>
                   )}
                 </div>
@@ -3741,7 +4537,7 @@ function LegacyApp() {
                   <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${form.bagExternalSheets ? "opacity-60" : ""}`}>
                     {!form.bagExternalSheets && (
                       <>
-                        <Field label="Тип бумаги" required>
+                        <Field label={templatePaperLabel} required>
                           <select value={form.bagPaperType} className={selectFieldClass(showValidation && required.includes("bagPaperType"))} onChange={(e) => update("bagPaperType", e.target.value)}>
                             <option value="">— выберите —</option>
                             {BAG_PAPER_TYPE_OPTIONS.map((item) => <option key={item}>{item}</option>)}
@@ -3781,23 +4577,25 @@ function LegacyApp() {
                 </div>
               )}
 
-              {!multiBlock && !notebook && !calendar && !envelope && !form.kashurovka.enabled && pt && (
-                <div className="mt-4 p-3 rounded-xl border border-slate-100 bg-slate-50"><LaminationBlockComponent label="Ламинация" value={form.lamination} onChange={(v: any) => update("lamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
+              {templateFlags.showLamination && !multiBlock && !notebook && !calendar && !form.kashurovka.enabled && pt && (
+                <div className="mt-4 p-3 rounded-xl border border-slate-100 bg-slate-50"><LaminationBlockComponent label={templateLaminationLabel} value={form.lamination} onChange={(v: any) => update("lamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
               )}
             </Section>
 
-            <Section title="✂️ Послепечатная обработка">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {dicts.postProcessing.map((item) => (
-                  <label key={item} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${form.postProcessing.includes(item) ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 hover:border-slate-300 text-slate-700"}`}>
-                    <input type="checkbox" checked={form.postProcessing.includes(item)} onChange={() => togglePostProcessing(item)} className="accent-blue-600" />
-                    <span className="text-sm">{item}</span>
-                  </label>
-                ))}
-              </div>
-              {(form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && <div className="mt-3"><Field label="Цвет фольги"><input type="text" className={`${inputClass} max-w-xs`} placeholder="Например: золото, серебро, красная..." value={form.foilColor} onChange={(e) => update("foilColor", e.target.value)} /></Field></div>}
-              {form.postProcessing.includes("УФ-лак") && <div className="mt-3"><Field label="Вид УФ-лака"><div className="flex gap-2">{["Обычный", "Текстурный"].map((t) => (<button key={t} type="button" onClick={() => update("uvType", t)} className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${form.uvType === t ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>{t}</button>))}</div></Field></div>}
-            </Section>
+            {templateFlags.showPostProcessing && (
+              <Section title={`✂️ ${templatePostProcessingLabel}`}>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {dicts.postProcessing.map((item) => (
+                    <label key={item} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${form.postProcessing.includes(item) ? "border-blue-500 bg-blue-50 text-blue-700" : "border-slate-200 hover:border-slate-300 text-slate-700"}`}>
+                      <input type="checkbox" checked={form.postProcessing.includes(item)} onChange={() => togglePostProcessing(item)} className="accent-blue-600" />
+                      <span className="text-sm">{item}</span>
+                    </label>
+                  ))}
+                </div>
+                {(form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && <div className="mt-3"><Field label="Цвет фольги"><input type="text" className={`${inputClass} max-w-xs`} placeholder="Например: золото, серебро, красная..." value={form.foilColor} onChange={(e) => update("foilColor", e.target.value)} /></Field></div>}
+                {form.postProcessing.includes("УФ-лак") && <div className="mt-3"><Field label="Вид УФ-лака"><div className="flex gap-2">{["Обычный", "Текстурный"].map((t) => (<button key={t} type="button" onClick={() => update("uvType", t)} className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${form.uvType === t ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>{t}</button>))}</div></Field></div>}
+              </Section>
+            )}
 
             <Section title="📐 Биговка">
               <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 items-start ${deskCalendarBigovkaActive ? "opacity-50" : ""}`}>
@@ -3886,10 +4684,10 @@ function LegacyApp() {
             <ShortTZPanel form={form} />
 
             <div className="flex flex-wrap gap-3 pb-8">
-              <button type="button" onClick={() => validateThen(handlePreview)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors shadow-sm"><span style={EMOJI_FONT}>👁</span> Предпросмотр</button>
-              <button type="button" onClick={() => validateThen(() => setShowSend(true))} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span style={EMOJI_FONT}>📊</span> Отправить в таблицу</button>
-              <button type="button" onClick={() => validateThen(handleSave)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><span style={EMOJI_FONT}>💾</span> Сохранить ТЗ в TXT</button>
-              <button type="button" onClick={openPresetSaveModal} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"><span style={EMOJI_FONT}>💽</span> Сохранить пресет</button>
+              <button type="button" onClick={() => validateThen(handlePreview)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors shadow-sm"><UiIcon name="eye" className="h-4 w-4" /> Предпросмотр</button>
+              <button type="button" onClick={() => validateThen(() => setShowSend(true))} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><UiIcon name="clipboard" className="h-4 w-4" /> Отправить в таблицу</button>
+              <button type="button" onClick={() => validateThen(handleSave)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><UiIcon name="save" className="h-4 w-4" /> Сохранить ТЗ в TXT</button>
+              <button type="button" onClick={openPresetSaveModal} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"><UiIcon name="save" className="h-4 w-4" /> Сохранить пресет</button>
               {savedMsg && <div className={`self-center rounded-xl border px-4 py-2 text-sm font-medium ${savedMsg.startsWith("Ошибка") ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"}`}>{savedMsg}</div>}
               {!isFormValid && <p className="text-xs text-slate-500 self-center">* Заполните обязательные поля</p>}
             </div>
@@ -3901,7 +4699,7 @@ function LegacyApp() {
           <div className="space-y-4 pb-6">
             {isDictLocked ? (
               <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-5xl mb-4" style={EMOJI_FONT}>🔒</span>
+                <UiIcon name="lock" className="mx-auto mb-4 h-12 w-12 text-slate-500" />
                 <h2 className="text-xl font-bold text-slate-800 mb-2">{"\u0421\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0438 \u0437\u0430\u0449\u0438\u0449\u0435\u043d\u044b"}</h2>
                 <p className="text-sm text-slate-500 mb-6">{"\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u043f\u0430\u0440\u043e\u043b\u044c \u0434\u043b\u044f \u0440\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f"}</p>
                 <div className="flex flex-col gap-2 items-center">
@@ -3947,7 +4745,7 @@ function LegacyApp() {
             ) : (
               <>
                 <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-start gap-3">
-                  <span className="text-2xl" style={EMOJI_FONT}>⚙️</span>
+                  <UiIcon name="settings" className="h-6 w-6 text-indigo-600" />
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-indigo-800">{"\u0420\u0435\u0434\u0430\u043a\u0442\u043e\u0440 \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u043e\u0432"}</p>
                     <p className="text-xs text-indigo-600 mt-0.5">{"\u0418\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f \u0445\u0440\u0430\u043d\u044f\u0442\u0441\u044f \u043b\u043e\u043a\u0430\u043b\u044c\u043d\u043e \u0438 \u043c\u043e\u0433\u0443\u0442 \u0441\u0438\u043d\u0445\u0440\u043e\u043d\u0438\u0437\u0438\u0440\u043e\u0432\u0430\u0442\u044c\u0441\u044f \u0447\u0435\u0440\u0435\u0437 \u0441\u043a\u0440\u044b\u0442\u044b\u0439 \u043b\u0438\u0441\u0442 __CONFIG__ \u0432 Google \u0422\u0430\u0431\u043b\u0438\u0446\u0435. \u041f\u043e\u0438\u0441\u043a \u043d\u0438\u0436\u0435 \u0444\u0438\u043b\u044c\u0442\u0440\u0443\u0435\u0442 \u0438\u043c\u0435\u043d\u043d\u043e \u0433\u0440\u0443\u043f\u043f\u044b \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u043e\u0432 \u043f\u043e \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044e."}</p>
@@ -3960,7 +4758,7 @@ function LegacyApp() {
                   <div className="flex flex-col gap-2">
                     <button onClick={() => loadDictsFromCloud(true)} disabled={dictSyncBusy !== "idle"} className="text-xs px-3 py-1.5 rounded-lg border border-sky-300 text-sky-700 hover:bg-sky-100 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">{dictSyncBusy === "loading" ? "⟳ Загрузка..." : "☁️ Загрузить из Google"}</button>
                     <button onClick={saveDictsToCloud} disabled={dictSyncBusy !== "idle"} className="text-xs px-3 py-1.5 rounded-lg border border-emerald-300 text-emerald-700 hover:bg-emerald-100 transition-colors whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed">{dictSyncBusy === "saving" ? "⟳ Сохранение..." : "☁️ Сохранить в Google"}</button>
-                    <button onClick={() => { setIsDictLocked(true); setDictPassword(""); }} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap"><span style={EMOJI_FONT}>🔒</span> Закрыть доступ</button>
+                    <button onClick={() => { setIsDictLocked(true); setDictPassword(""); }} className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition-colors whitespace-nowrap"><UiIcon name="lock" className="h-4 w-4" /> Закрыть доступ</button>
                     <button onClick={resetDicts} className="text-xs px-3 py-1.5 rounded-lg border border-indigo-300 text-indigo-600 hover:bg-indigo-100 transition-colors whitespace-nowrap">↺ Сбросить всё</button>
                   </div>
                 </div>
@@ -3994,10 +4792,10 @@ function LegacyApp() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col border border-slate-200 z-10" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-              <h2 className="font-semibold text-slate-800 flex items-center gap-2"><span style={EMOJI_FONT}>👁</span> Предпросмотр ТЗ</h2>
+              <h2 className="font-semibold text-slate-800 flex items-center gap-2"><UiIcon name="eye" className="h-4 w-4" /> Предпросмотр ТЗ</h2>
               <div className="flex gap-2">
-                <button onClick={async () => { await handleSave(); }} disabled={!isFormValid} className={`flex items-center gap-2 text-sm px-4 py-1.5 rounded-lg font-medium transition-colors ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}><span style={EMOJI_FONT}>💾</span>Сохранить TXT</button>
-                <button onClick={() => setShowPreview(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"><span style={EMOJI_FONT}>✕</span></button>
+                <button onClick={async () => { await handleSave(); }} disabled={!isFormValid} className={`flex items-center gap-2 text-sm px-4 py-1.5 rounded-lg font-medium transition-colors ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}><UiIcon name="save" className="h-4 w-4" />Сохранить TXT</button>
+                <button onClick={() => setShowPreview(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"><UiIcon name="close" className="h-4 w-4" /></button>
               </div>
             </div>
             <pre className="p-5 text-xs font-mono text-slate-700 whitespace-pre-wrap leading-relaxed overflow-auto flex-1">{previewText}</pre>
@@ -4010,7 +4808,7 @@ function LegacyApp() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { if(sendState === "idle" || sendState === "done" || sendState === "error") setShowSend(false); }}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 z-10 p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="font-semibold text-slate-800 text-lg mb-4 flex items-center gap-2"><span style={EMOJI_FONT}>📊</span> Отправить в таблицу</h2>
+            <h2 className="font-semibold text-slate-800 text-lg mb-4 flex items-center gap-2"><UiIcon name="clipboard" className="h-5 w-5" /> Отправить в таблицу</h2>
             
             {sendState === "idle" && (
               <>
@@ -4044,7 +4842,7 @@ function LegacyApp() {
 
             {sendState === "done" && (
               <div className="flex flex-col items-center py-8 gap-4">
-                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center"><span style={EMOJI_FONT}>✅</span></div>
+                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center"><UiIcon name="check" className="h-7 w-7 text-emerald-600" /></div>
                 <p className="text-sm text-emerald-700 font-semibold">Данные успешно отправлены!</p>
                 <button onClick={() => { setSendState("idle"); setShowSend(false); }} className="px-6 py-2 w-full rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Отлично</button>
               </div>
@@ -4170,6 +4968,10 @@ function getRequiredFields(form: FormData): string[] {
   const errors: string[] = [];
   const product = resolveProductName(form);
   const pocketCalendar = isPocketCalendar(form);
+  const templateFlags = getProductTemplate(form.productType).flags;
+  const templateSizeRequired = isProductTemplateFieldRequired(form.productType, "size");
+  const templatePaperRequired = templateFlags.showPaper && isProductTemplateFieldRequired(form.productType, "paper");
+  const templateColorRequired = templateFlags.showColor && isProductTemplateFieldRequired(form.productType, "color");
   if (!form.clientName.trim()) errors.push("clientName");
   if (!form.managerName) errors.push("managerName");
   if (!form.deadline || form.deadline < getTodayLocalIso()) errors.push("deadline");
@@ -4186,37 +4988,49 @@ function getRequiredFields(form: FormData): string[] {
   if (form.productType === "Другое..." && !product) errors.push("productTypeCustom");
   if (!form.quantity) errors.push("quantity");
   if (pocketCalendar) {
-    if (!form.paperSize) errors.push("paperSize");
-    if (form.paperSize === "Нестандартный" && !form.paperSizeCustom.trim()) errors.push("paperSizeCustom");
-    if (!form.kashurovka.enabled) {
+    if (templateSizeRequired) {
+      if (!form.paperSize) errors.push("paperSize");
+      if (form.paperSize === "Нестандартный" && !form.paperSizeCustom.trim()) errors.push("paperSizeCustom");
+    }
+    if (templatePaperRequired && !form.kashurovka.enabled) {
       if (!form.paperType) errors.push("paperType");
       else if (form.paperType === "Дизайнерская" ? !form.paperCustomName.trim() : requiresPaperDensity(form.paperType) && !form.density.trim()) {
         errors.push(form.paperType === "Дизайнерская" ? "paperCustomName" : "density");
       }
-      if (!form.colorMode && !isPaperlessPaperType(form.paperType)) errors.push("colorMode");
+      if (templateColorRequired && !form.colorMode && !isPaperlessPaperType(form.paperType)) errors.push("colorMode");
     }
   } else if (isEnvelope(form.productType)) {
-    if (!form.envelopeSize) errors.push("envelopeSize");
-    if (form.envelopeSize === "Нестандартный" && !form.envelopeSizeCustom.trim()) errors.push("envelopeSizeCustom");
-    if (!form.kashurovka.enabled) {
+    if (templateSizeRequired) {
+      if (!form.envelopeSize) errors.push("envelopeSize");
+      if (form.envelopeSize === "Нестандартный" && !form.envelopeSizeCustom.trim()) errors.push("envelopeSizeCustom");
+    }
+    if (templatePaperRequired && !form.kashurovka.enabled) {
       if (!form.paperType) errors.push("paperType");
       else if (form.paperType === "Дизайнерская" ? !form.paperCustomName.trim() : requiresPaperDensity(form.paperType) && !form.density.trim()) {
         errors.push(form.paperType === "Дизайнерская" ? "paperCustomName" : "density");
       }
-      if (!form.colorMode && !isPaperlessPaperType(form.paperType)) errors.push("colorMode");
+      if (templateColorRequired && !form.colorMode && !isPaperlessPaperType(form.paperType)) errors.push("colorMode");
     }
   } else if (isBusinessCard(form.productType)) {
-    if (!form.businessCardSize) errors.push("businessCardSize");
-    if (form.businessCardSize === "Нестандартный" && !form.businessCardSizeCustom.trim()) errors.push("businessCardSizeCustom");
+    if (templateSizeRequired) {
+      if (!form.businessCardSize) errors.push("businessCardSize");
+      if (form.businessCardSize === "Нестандартный" && !form.businessCardSizeCustom.trim()) errors.push("businessCardSizeCustom");
+    }
   } else if (isCatalog(form.productType)) {
-    if (!form.catalogFormat) errors.push("catalogFormat");
-    if (form.catalogFormat === "Нестандартный" && !form.catalogFormatCustom.trim()) errors.push("catalogFormatCustom");
+    if (templateSizeRequired) {
+      if (!form.catalogFormat) errors.push("catalogFormat");
+      if (form.catalogFormat === "Нестандартный" && !form.catalogFormatCustom.trim()) errors.push("catalogFormatCustom");
+    }
   } else if (isBrochure(form.productType)) {
-    if (!form.brochureFormat) errors.push("brochureFormat");
-    if (form.brochureFormat === "Нестандартный" && !form.brochureFormatCustom.trim()) errors.push("brochureFormatCustom");
+    if (templateSizeRequired) {
+      if (!form.brochureFormat) errors.push("brochureFormat");
+      if (form.brochureFormat === "Нестандартный" && !form.brochureFormatCustom.trim()) errors.push("brochureFormatCustom");
+    }
   } else if (!isMultiBlock(form.productType) && !isCalendar(form.productType) && !isBag(form.productType) && !isSticker(form.productType)) {
-    if (!form.paperSize) errors.push("paperSize");
-    if (form.paperSize === "Нестандартный" && !form.paperSizeCustom.trim()) errors.push("paperSizeCustom");
+    if (templateSizeRequired) {
+      if (!form.paperSize) errors.push("paperSize");
+      if (form.paperSize === "Нестандартный" && !form.paperSizeCustom.trim()) errors.push("paperSizeCustom");
+    }
   }
   if (isMultiBlock(form.productType) || isNotebook(form.productType)) {
     if (isNotebook(form.productType) && !form.blockPages) errors.push("blockPages");
@@ -4245,29 +5059,33 @@ function getRequiredFields(form: FormData): string[] {
     if (form.calendarKind === "Настольный" && !form.calendarBaseUseKash && !form.calendarBaseMaterial) errors.push("calendarBaseMaterial");
   } else if (isBag(form.productType)) {
     if (!form.bagExternalSheets) {
-      if (!form.bagPaperType) errors.push("bagPaperType");
-      if (!form.density) errors.push("density");
-      if (!form.colorMode) errors.push("colorMode");
+      if (templatePaperRequired) {
+        if (!form.bagPaperType) errors.push("bagPaperType");
+        if (!form.density) errors.push("density");
+      }
+      if (templateColorRequired && !form.colorMode) errors.push("colorMode");
     }
     if (!form.bagPartsCount) errors.push("bagPartsCount");
     if (!form.bagHandlePipsik) errors.push("bagHandlePipsik");
-    if (!form.bagHeight) errors.push("bagHeight");
-    if (!form.bagWidth) errors.push("bagWidth");
-    if (!form.bagDepth) errors.push("bagDepth");
+    if (templateSizeRequired) {
+      if (!form.bagHeight) errors.push("bagHeight");
+      if (!form.bagWidth) errors.push("bagWidth");
+      if (!form.bagDepth) errors.push("bagDepth");
+    }
   } else if (isSticker(form.productType)) {
-    if (!form.stickerMaterial) errors.push("stickerMaterial");
-    if (!form.colorMode) errors.push("colorMode");
+    if (templatePaperRequired && !form.stickerMaterial) errors.push("stickerMaterial");
+    if (templateColorRequired && !form.colorMode) errors.push("colorMode");
   } else if (form.productType === "Воблеры") {
     // No extra required fields beyond the base material/color block.
   } else if (form.productType === "Бейджи") {
     if (!form.badgeHoleType) errors.push("badgeHoleType");
     if (form.badgeHoleType === "Круглое" && !form.badgeHoleCount) errors.push("badgeHoleCount");
-  } else if (!isEnvelope(form.productType) && !isCalendar(form.productType) && !form.kashurovka.enabled) {
+  } else if (!isEnvelope(form.productType) && !isCalendar(form.productType) && !form.kashurovka.enabled && templatePaperRequired) {
     if (!form.paperType) errors.push("paperType");
     else if (form.paperType === "Дизайнерская" ? !form.paperCustomName.trim() : requiresPaperDensity(form.paperType) && !form.density.trim()) {
       errors.push(form.paperType === "Дизайнерская" ? "paperCustomName" : "density");
     }
-    if (!form.colorMode && !isPaperlessPaperType(form.paperType)) errors.push("colorMode");
+    if (templateColorRequired && !form.colorMode && !isPaperlessPaperType(form.paperType)) errors.push("colorMode");
   }
   if (form.kashurovka.enabled) {
     if (form.kashurovka.connectionType === "Слим-каширование") {
@@ -4294,7 +5112,7 @@ function getRequiredFields(form: FormData): string[] {
     }
   }
   if (form.binding && form.bindingType === "Пружина" && !form.springDiameter) errors.push("springDiameter");
-  if ((form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && !form.foilColor.trim()) errors.push("foilColor");
+  if (templateFlags.showPostProcessing && (form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && !form.foilColor.trim()) errors.push("foilColor");
   return Array.from(new Set(errors));
 }
 
