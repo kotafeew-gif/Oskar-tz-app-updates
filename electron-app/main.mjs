@@ -768,11 +768,13 @@ ipcMain.handle('save-preset-entry', async (event, { managerName, presetName, pre
   }
 });
 
-ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName, managerMarker }) => {
+ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz, sheetName, managerMarker }) => {
   try {
     const sheets = createSheetsClient();
-    const targetSheet = sheetName || 'Печать_2026';
-    const normalizedManagerMarker = normalizeSheetCell(managerMarker);
+    const targetSheet = sheetName || '??????_2026';
+    const isAds = kind === 'ads';
+    const sourceData = isAds ? (adData || {}) : (formData || {});
+    const normalizedManagerMarker = normalizeSheetCell(isAds ? '' : managerMarker);
 
     const [metaResponse, readResponse] = await Promise.all([
       sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID }),
@@ -786,7 +788,7 @@ ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName, ma
     const sheetRowCount = sheetMeta?.properties?.gridProperties?.rowCount || readResponse.data.values?.length || 0;
 
     const rows = readResponse.data.values || [];
-    const totalRowsRequested = Math.max(0, Number.parseInt(String(formData?.cellBooking || '').replace(/[^\d]/g, ''), 10) || 0);
+    const totalRowsRequested = Math.max(0, Number.parseInt(String(sourceData?.cellBooking || '').replace(/[^\d]/g, ''), 10) || 0);
     const reservationCount = totalRowsRequested > 0 ? Math.max(0, totalRowsRequested - 1) : 0;
     const blockSize = totalRowsRequested > 0 ? totalRowsRequested : 1;
     const foundRowNumber = findAvailableBlock(rows, normalizedManagerMarker, blockSize, sheetRowCount);
@@ -796,26 +798,28 @@ ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName, ma
 
     await ensureSheetRowCount(sheets, sheetId, sheetRowCount, requiredRowCount);
 
-    const orderNumberFromA = rows[rowNumber - 1] ? rows[rowNumber - 1][0] : "???";
+    const orderNumberFromA = rows[rowNumber - 1] ? rows[rowNumber - 1][0] : '???';
 
     const now = new Date();
     const creationCell = `${now.toLocaleDateString('ru-RU')}\n${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
 
-    const deadlineCell = buildDeadlineCell(formData);
+    const deadlineCell = buildDeadlineCell(sourceData);
 
-  const columnEParts = [];
-  if (formData.fileLink?.trim()) columnEParts.push(formData.fileLink.trim());
-  if (shortTz?.trim()) columnEParts.push(shortTz.trim());
-  columnEParts.push(`Тираж : ${formData.quantity ? `${formatQuantityCell(formData.quantity)} шт.` : '—'}`);
-  const columnE = columnEParts.join('\n\n');
+    const columnE = isAds
+      ? String(shortTz || '').trim()
+      : [
+          sourceData.fileLink?.trim(),
+          shortTz?.trim(),
+          `????? : ${sourceData.quantity ? `${formatQuantityCell(sourceData.quantity)} ??.` : '?'}`,
+        ].filter(Boolean).join('\n\n');
 
     const values = [
-      formData.clientName,
+      sourceData.clientName,
       creationCell,
       deadlineCell,
       columnE,
-      "", "", "", "", "",
-      formData.managerName
+      '', '', '', '', '',
+      sourceData.managerName,
     ];
 
     await sheets.spreadsheets.values.update({
@@ -847,7 +851,7 @@ ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName, ma
 
     const requests = [];
 
-    if (sheetId && formData.deadline && formData.deadline === getLocalIsoDate(now)) {
+    if (sheetId && sourceData.deadline && sourceData.deadline === getLocalIsoDate(now)) {
       requests.push({
         repeatCell: {
           range: {
@@ -870,7 +874,7 @@ ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName, ma
       });
     }
 
-    if (sheetId && columnE.includes('УФ-лак')) {
+    if (sheetId && columnE.includes('??-???')) {
       requests.push({
         updateCells: {
           range: {
@@ -905,7 +909,7 @@ ipcMain.handle('send-to-sheet', async (event, { formData, shortTz, sheetName, ma
     return { success: true, orderNumber: orderNumberFromA };
 
   } catch (error) {
-    console.error('ОШИБКА:', error.message);
+    console.error('??????:', error.message);
     return { success: false, error: error.message };
   }
 });

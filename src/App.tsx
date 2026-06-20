@@ -129,6 +129,8 @@ const DEFAULT_MANAGERS = [
   "Алёна", "Аня", "Катя", "Кристина", "Лиза", "Татьяна Почебыт"
 ];
 
+const DEFAULT_AD_MANAGERS = ["Оля"];
+
 const DEFAULT_PAPER_PROFILES = {
   common: ["80 г/м² (офисная)", "90 г/м²", "115 г/м²", "130 г/м²", "150 г/м²", "170 г/м²", "200 г/м²"],
   heavy: ["170 г/м²", "200 г/м²", "250 г/м²", "300 г/м²", "350 г/м²", "400 г/м²"],
@@ -176,6 +178,7 @@ const LS_KEYS = {
   laminationKinds: "dict_laminationKinds",
   laminationThickness: "dict_laminationThickness",
   managers: "dict_managers",
+  adManagers: "dict_adManagers",
   managerMarkerState: "dict_managerMarkerState",
   paperProfiles: "dict_paperProfiles",
   sheetName: "config_sheetName",
@@ -341,10 +344,8 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "В конверты вернулась ламинация и корректно отображается цветность в таблице.",
-  "Списки сохранённых заказчиков теперь сортируются в алфавитном порядке.",
-  "Появился вид продукции \"Сертификаты\".",
-  "Прочие улучшения и исправления.",
+  "Исправлено отображение для кармашкового ламината.",
+  "Добавлена отдельная форма для Оскар-Арт.",
 ];
 
 function loadList(key: string, defaults: string[]): string[] {
@@ -672,6 +673,7 @@ function normalizeDictsPayload(payload: any): Dicts {
     laminationKinds: normalizeList(payload?.laminationKinds),
     laminationThickness: normalizeList(payload?.laminationThickness),
     managers: normalizeList(payload?.managers),
+    adManagers: normalizeList(payload?.adManagers).length ? normalizeList(payload?.adManagers) : [...DEFAULT_AD_MANAGERS],
     ...normalizeManagerMarkerState(
       normalizeList(payload?.managers),
       normalizeList(payload?.managers),
@@ -692,6 +694,7 @@ interface Dicts {
   densities: string[]; colors: string[]; postProcessing: string[];
   bindingTypes: string[]; laminationKinds: string[]; laminationThickness: string[];
   managers: string[];
+  adManagers: string[];
   managerMarkers: Record<string, string>;
   managerMarkerCounter: number;
   productTemplates: ProductTemplateStore;
@@ -702,6 +705,7 @@ interface Dicts {
 function createInitialDicts(): Dicts {
   const managerState = loadManagerMarkerState();
   const managers = loadList(LS_KEYS.managers, DEFAULT_MANAGERS);
+  const adManagers = loadList(LS_KEYS.adManagers, DEFAULT_AD_MANAGERS);
   const normalizedManagers = normalizeManagerMarkerState(managers, managers, managerState.managerMarkers, managerState.managerMarkerCounter);
 
   const productTypes = ensureProductTypes(mergeUniqueStrings(loadList(LS_KEYS.productTypes, DEFAULT_PRODUCT_TYPES), Object.keys(loadProductTemplates())));
@@ -722,6 +726,7 @@ function createInitialDicts(): Dicts {
     laminationKinds: loadList(LS_KEYS.laminationKinds, DEFAULT_LAMINATION_KINDS),
     laminationThickness: loadList(LS_KEYS.laminationThickness, DEFAULT_LAMINATION_THICKNESS),
     managers: normalizeStringList(managers),
+    adManagers: normalizeStringList(adManagers),
     managerMarkers: normalizedManagers.managerMarkers,
     managerMarkerCounter: normalizedManagers.managerMarkerCounter,
     paperProfiles: loadPaperProfiles(),
@@ -749,6 +754,7 @@ function createResetDicts(): Dicts {
     laminationKinds: [...DEFAULT_LAMINATION_KINDS],
     laminationThickness: [...DEFAULT_LAMINATION_THICKNESS],
     managers: [...DEFAULT_MANAGERS],
+    adManagers: [...DEFAULT_AD_MANAGERS],
     managerMarkers: managerState.managerMarkers,
     managerMarkerCounter: managerState.managerMarkerCounter,
     paperProfiles: { ...DEFAULT_PAPER_PROFILES },
@@ -807,6 +813,17 @@ interface FormData {
   badgeHoleType: string;
   badgeHoleCount: string;
   fileLink: string; notes: string;
+}
+
+interface AdFormData {
+  orderNumber: string;
+  clientName: string;
+  managerName: string;
+  deadline: string;
+  deadlineTime: string;
+  fileCount: string;
+  fileLink: string;
+  notes: string;
 }
 
 interface SubcontractWork {
@@ -876,7 +893,21 @@ function createDefaultForm(): FormData {
   };
 }
 
+function createDefaultAdForm(): AdFormData {
+  return {
+    orderNumber: "",
+    clientName: "Оскар-Арт",
+    managerName: DEFAULT_AD_MANAGERS[0] || "Оля",
+    deadline: "",
+    deadlineTime: "",
+    fileCount: "",
+    fileLink: "",
+    notes: "",
+  };
+}
+
 const defaultForm: FormData = createDefaultForm();
+const defaultAdForm: AdFormData = createDefaultAdForm();
 
 const PRESET_EXCLUDED_FIELDS = new Set<keyof FormData>([
   "orderNumber",
@@ -1115,8 +1146,31 @@ function formatLamination(value: LaminationBlock): string {
 
 function formatLaminationCompact(value: LaminationBlock): string {
   if (!value.enabled) return "без лам.";
+  const kindLower = value.kind.toLowerCase();
+  if (kindLower.includes("карм")) {
+    return `лам. карм.${value.thickness ? ` ${value.thickness}` : ""}`;
+  }
   const kind = value.kind === "Глянцевая" ? "глян." : value.kind === "Матовая" ? "мат." : "софт";
   return `лам. ${getLaminationSideNotation(value.side)} ${kind} ${value.thickness}`;
+}
+
+function formatFileCountText(value: string): string {
+  const normalized = String(value || "").replace(/[^\d]/g, "").trim();
+  if (!normalized) return "";
+  const count = Number(normalized);
+  if (!Number.isFinite(count) || count <= 0) return normalized;
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  let word = "файлов";
+  if (mod100 < 11 || mod100 > 14) {
+    if (mod10 === 1) word = "файл";
+    else if (mod10 >= 2 && mod10 <= 4) word = "файла";
+  }
+  return `${count} ${word}`;
+}
+
+function generateAdShortTZ(form: AdFormData): string {
+  return [form.fileLink.trim(), formatFileCountText(form.fileCount), form.notes.trim()].filter(Boolean).join("\n");
 }
 
 function formatPaperSelection(type: PaperTypeOption | "", value: string, customName = "", envelopeLabel = false): string {
@@ -2008,6 +2062,7 @@ const SECTION_ICON_PREFIXES: Array<[string, UiIconName]> = [
   ["📐", "ruler"],
   ["📚", "book"],
   ["📝", "note"],
+  ["📣", "flash"],
 ];
 
 const DICT_ICON_MAP: Record<string, UiIconName> = {
@@ -2890,6 +2945,67 @@ function ShortTZPanel({ form }: { form: FormData }) {
   );
 }
 
+function AdShortTZPanel({ form }: { form: AdFormData }) {
+  const [copied, setCopied] = useState(false);
+  const shortText = generateAdShortTZ(form);
+  const [flash, setFlash] = useState(false);
+  const prevShort = useRef(shortText);
+  const shortLines = shortText ? shortText.split("\n") : [];
+
+  useEffect(() => {
+    if (prevShort.current !== shortText && shortText) {
+      setFlash(true);
+      const t = setTimeout(() => setFlash(false), 600);
+      prevShort.current = shortText;
+      return () => clearTimeout(t);
+    }
+    prevShort.current = shortText;
+  }, [shortText]);
+
+  function handleCopy() {
+    if (!shortText) return;
+    navigator.clipboard.writeText(shortText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <div className={`rounded-xl border shadow-sm overflow-hidden transition-all duration-300 ${shortText ? "border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50" : "border-slate-200 bg-white"}`}>
+      <div className="px-4 py-2.5 flex items-center gap-2 border-b border-orange-100">
+        <UiIcon name="flash" className="h-5 w-5 text-orange-500" />
+        <h2 className="text-sm font-semibold text-slate-700">Короткое ТЗ</h2>
+        <span className="text-xs text-slate-400 ml-1">— автоматически формируется из данных формы</span>
+        {shortText && (
+          <button onClick={handleCopy} className={`ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium border transition-all ${copied ? "bg-orange-600 text-white border-orange-600" : "bg-white text-orange-700 border-orange-300 hover:bg-orange-50"}`}>
+            {copied ? <><UiIcon name="check" className="h-4 w-4" />Скопировано!</> : <><UiIcon name="clipboard" className="h-4 w-4" />Копировать</>}
+          </button>
+        )}
+      </div>
+      <div className="px-4 py-3">
+        {shortText ? (
+          <>
+            <div className={`font-mono text-sm leading-relaxed text-slate-800 select-all rounded-lg px-3 py-2 bg-white border border-orange-100 transition-all duration-300 whitespace-pre-wrap ${flash ? "ring-2 ring-orange-400 ring-offset-1" : ""}`}>
+              {shortLines.map((line, lineIndex) => (
+                <div key={lineIndex} className={`${lineIndex > 0 ? "mt-1" : ""} text-slate-700`}>
+                  {line}
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {shortLines.map((line, i) => (
+                <span key={`ad-${i}`} className="inline-flex items-center px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-medium">{line}</span>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-slate-400 italic px-3 py-2">Заполните поля формы — короткая реклама появится здесь автоматически…</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DictEditor({
   title,
   icon,
@@ -3409,6 +3525,7 @@ function LegacyApp() {
   useEffect(() => { saveList(LS_KEYS.laminationKinds, dicts.laminationKinds); }, [dicts.laminationKinds]);
   useEffect(() => { saveList(LS_KEYS.laminationThickness, dicts.laminationThickness); }, [dicts.laminationThickness]);
   useEffect(() => { saveList(LS_KEYS.managers, dicts.managers); }, [dicts.managers]);
+  useEffect(() => { saveList(LS_KEYS.adManagers, dicts.adManagers); }, [dicts.adManagers]);
   useEffect(() => { saveManagerMarkerState({ managerMarkers: dicts.managerMarkers, managerMarkerCounter: dicts.managerMarkerCounter }); }, [dicts.managerMarkers, dicts.managerMarkerCounter]);
   useEffect(() => { savePaperProfiles(dicts.paperProfiles); }, [dicts.paperProfiles]);
   useEffect(() => { savePaperLibrary(dicts.paperLibrary); }, [dicts.paperLibrary]);
@@ -3523,6 +3640,13 @@ function LegacyApp() {
         managerMarkerCounter: nextState.managerMarkerCounter,
       };
     });
+  }
+
+  function updateAdManagers(nextManagers: string[]) {
+    setDicts((prev) => ({
+      ...prev,
+      adManagers: normalizeStringList(nextManagers),
+    }));
   }
 
   function updatePaperLibrary(key: PaperLibraryKey, val: string[]) {
@@ -3677,12 +3801,14 @@ function LegacyApp() {
   }
 
   const [form, setForm] = useState<FormData>(() => createDefaultForm());
+  const [adForm, setAdForm] = useState<AdFormData>(() => createDefaultAdForm());
   const [clientStore, setClientStore] = useState<ClientStore>(() => createEmptyClientStore());
   const [presetStore, setPresetStore] = useState<PresetStore>(() => createEmptyPresetStore());
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [presetMsg, setPresetMsg] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"form" | "dicts">("form");
+  const [activeTab, setActiveTab] = useState<"form" | "ads" | "dicts">("form");
   const [showValidation, setShowValidation] = useState(false);
+  const [showAdValidation, setShowAdValidation] = useState(false);
   
   const [isDictLocked, setIsDictLocked] = useState(true);
   const [dictPassword, setDictPassword] = useState("");
@@ -3709,6 +3835,16 @@ function LegacyApp() {
   function update<K extends keyof FormData>(key: K, value: FormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
+
+  function updateAd<K extends keyof AdFormData>(key: K, value: AdFormData[K]) {
+    setAdForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  useEffect(() => {
+    if (!dicts.adManagers.length) return;
+    if (dicts.adManagers.includes(adForm.managerName)) return;
+    setAdForm((prev) => ({ ...prev, managerName: dicts.adManagers[0] || DEFAULT_AD_MANAGERS[0] || "Оля" }));
+  }, [dicts.adManagers, adForm.managerName]);
 
   function updateSubcontractWork(id: string, patch: Partial<SubcontractWork>) {
     setForm((prev) => ({
@@ -3755,10 +3891,13 @@ function LegacyApp() {
     }
     return REQUIRED_FIELD_LABELS[field] ?? field;
   });
+  const adRequired = getRequiredAdFields(adForm);
+  const adRequiredLabels = adRequired.map((field) => REQUIRED_FIELD_LABELS[field] ?? field);
   const todayIso = getTodayLocalIso();
   const springSuggestion = form.bindingType === "Пружина" ? buildSpringSuggestion(form) : null;
   const springDiameterIsCustomOrder = springSuggestion ? parseWeight(springSuggestion.diameter) > 16 : false;
   const missingFileLink = !form.fileLink.trim();
+  const adMissingFileLink = !adForm.fileLink.trim();
   const dictSections = [
     {
       key: "managers",
@@ -3774,6 +3913,19 @@ function LegacyApp() {
             return marker ? <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">{marker}</span> : null;
           }}
           onChange={updateManagers}
+        />
+      ),
+    },
+    {
+      key: "adManagers",
+      title: "Менеджеры рекламы",
+      icon: "📣",
+      element: (
+        <DictEditor
+          title="Менеджеры рекламы"
+          icon="📣"
+          items={dicts.adManagers}
+          onChange={updateAdManagers}
         />
       ),
     },
@@ -3864,10 +4016,29 @@ function LegacyApp() {
     });
   }, [showValidation, required]);
 
+  useEffect(() => {
+    const invalidClasses = ["border-red-500", "bg-red-50", "ring-2", "ring-red-200", "shadow-sm", "shadow-red-100"];
+    if (!showAdValidation) return;
+
+    adRequired.forEach((field) => {
+      const element = document.querySelector<HTMLElement>(`[data-field="${field}"]`);
+      if (element) element.classList.add(...invalidClasses);
+    });
+  }, [showAdValidation, adRequired]);
+
   function validateThen(action: () => void) {
     if (required.length > 0) {
       setShowValidation(true);
       focusFirstInvalidField(required);
+      return;
+    }
+    action();
+  }
+
+  function validateAdsThen(action: () => void) {
+    if (adRequired.length > 0) {
+      setShowAdValidation(true);
+      focusFirstInvalidField(adRequired);
       return;
     }
     action();
@@ -3919,8 +4090,13 @@ function LegacyApp() {
   }
 
   function confirmReset() {
-    setForm(createDefaultForm());
-    setShowValidation(false);
+    if (activeTab === "ads") {
+      setAdForm(createDefaultAdForm());
+      setShowAdValidation(false);
+    } else {
+      setForm(createDefaultForm());
+      setShowValidation(false);
+    }
     setSavedMsg(null);
     setPresetMsg(null);
     setSelectedPresetId("");
@@ -3951,17 +4127,36 @@ function LegacyApp() {
   async function handleRealSend() {
     setSendState("loading");
     try {
-      const managerMarker = dicts.managerMarkers[normalizeManagerName(form.managerName)] || "";
-      const result = await (window as any).electronAPI.sendToSheet({
-        formData: form,
-        shortTz: generateShortTZ(form),
-        sheetName: sheetName,
-        managerMarker,
-      });
+      const isAdsTab = activeTab === "ads";
+      const result = await (window as any).electronAPI.sendToSheet(
+        isAdsTab
+          ? {
+              kind: "ads",
+              adData: adForm,
+              shortTz: generateAdShortTZ(adForm),
+              sheetName: sheetName,
+            }
+          : {
+              formData: form,
+              shortTz: generateShortTZ(form),
+              sheetName: sheetName,
+              managerMarker: dicts.managerMarkers[normalizeManagerName(form.managerName)] || "",
+            },
+      );
       if (result.success) {
-        update("orderNumber", result.orderNumber);
-        await rememberClientIfNeeded();
-        update("cellBooking", "");
+        if (isAdsTab) {
+          setAdForm((prev) => ({
+            ...prev,
+            orderNumber: result.orderNumber,
+            fileLink: "",
+            fileCount: "",
+            notes: "",
+          }));
+        } else {
+          update("orderNumber", result.orderNumber);
+          await rememberClientIfNeeded();
+          update("cellBooking", "");
+        }
         setSendState("done");
       } else {
         console.error(result.error);
@@ -3992,6 +4187,7 @@ function LegacyApp() {
   const clientSuggestionItems = getClientSuggestions(clientStore, form.managerName);
 
   const isFormValid = required.length === 0;
+  const isAdFormValid = adRequired.length === 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100 flex flex-col">
@@ -4024,6 +4220,7 @@ function LegacyApp() {
         <div className="flex flex-col lg:flex-row lg:items-stretch gap-3">
           <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-slate-200 w-fit">
             <button onClick={() => setActiveTab("form")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "form" ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><UiIcon name="clipboard" className="h-4 w-4" />Форма ТЗ</button>
+            <button onClick={() => setActiveTab("ads")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "ads" ? "bg-orange-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><UiIcon name="flash" className="h-4 w-4" />Реклама</button>
             <button onClick={() => setActiveTab("dicts")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "dicts" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><UiIcon name="settings" className="h-4 w-4" />Справочники</button>
           </div>
           {activeTab === "form" && (
@@ -4053,7 +4250,8 @@ function LegacyApp() {
             Локально
           </div>
         )}
-        {showValidation && required.length > 0 && <div className="mb-4 bg-red-50 border border-red-300 text-red-700 rounded-xl px-4 py-3 text-sm font-medium"><div>Заполните обязательные поля.</div><div className="mt-1 text-xs text-red-600">{requiredLabels.join(", ")}</div></div>}
+        {activeTab === "form" && showValidation && required.length > 0 && <div className="mb-4 bg-red-50 border border-red-300 text-red-700 rounded-xl px-4 py-3 text-sm font-medium"><div>Заполните обязательные поля.</div><div className="mt-1 text-xs text-red-600">{requiredLabels.join(", ")}</div></div>}
+        {activeTab === "ads" && showAdValidation && adRequired.length > 0 && <div className="mb-4 bg-orange-50 border border-orange-300 text-orange-700 rounded-xl px-4 py-3 text-sm font-medium"><div>Заполните обязательные поля.</div><div className="mt-1 text-xs text-orange-600">{adRequiredLabels.join(", ")}</div></div>}
 
         {activeTab === "form" && (
           <div className="space-y-4">
@@ -4718,6 +4916,106 @@ function LegacyApp() {
           </div>
         )}
 
+        {activeTab === "ads" && (
+          <div className="space-y-4">
+            <Section title="📣 Реклама" accent="from-orange-50 to-white">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <Field label="Заказчик">
+                  <input
+                    type="text"
+                    className="bg-slate-50"
+                    value={adForm.clientName}
+                    readOnly
+                  />
+                </Field>
+                <Field label="Менеджер" required>
+                  <select
+                    data-field="adManagerName"
+                    className={selectFieldClass(showAdValidation && adRequired.includes("adManagerName"))}
+                    value={adForm.managerName}
+                    onChange={(e) => updateAd("managerName", e.target.value)}
+                  >
+                    {(dicts.adManagers.length ? dicts.adManagers : DEFAULT_AD_MANAGERS).map((manager) => (
+                      <option key={manager}>{manager}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Номер заказа">
+                  <input type="text" className="bg-yellow-50 font-bold" placeholder="подставится автоматически" value={adForm.orderNumber} readOnly />
+                </Field>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-[0.9fr_1.1fr] gap-4 items-start">
+                <Field label="Количество файлов">
+                  <input
+                    data-field="adFileCount"
+                    type="number"
+                    min={1}
+                    className={inputClass}
+                    placeholder="Например: 3"
+                    value={adForm.fileCount}
+                    onChange={(e) => updateAd("fileCount", e.target.value)}
+                  />
+                </Field>
+                <Field label="Срок сдачи" required>
+                  <DateTimeField
+                    dateFieldName="adDeadline"
+                    timeFieldName="adDeadlineTime"
+                    dateValue={adForm.deadline}
+                    timeValue={adForm.deadlineTime}
+                    invalidDate={showAdValidation && adRequired.includes("adDeadline")}
+                    invalidTime={showAdValidation && adRequired.includes("adDeadlineTime")}
+                    onDateChange={(value) => updateAd("deadline", value)}
+                    onTimeChange={(value) => updateAd("deadlineTime", value)}
+                  />
+                </Field>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-100 space-y-4">
+                <Field label="Ссылка на файлы" required>
+                  <input
+                    data-field="adFileLink"
+                    type="text"
+                    className={fieldClass(showAdValidation && adRequired.includes("adFileLink"))}
+                    placeholder="https://..."
+                    value={adForm.fileLink}
+                    onChange={(e) => updateAd("fileLink", e.target.value)}
+                  />
+                </Field>
+
+                <Field label="Дополнительные примечания">
+                  <textarea
+                    rows={3}
+                    className={`${inputClass} resize-none`}
+                    placeholder="Любые уточнения по рекламному заказу..."
+                    value={adForm.notes}
+                    onChange={(e) => updateAd("notes", e.target.value)}
+                  />
+                </Field>
+              </div>
+            </Section>
+
+            <AdShortTZPanel form={adForm} />
+
+            <div className="flex flex-wrap gap-3 pb-8">
+              <button
+                type="button"
+                onClick={() => validateAdsThen(() => setShowSend(true))}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isAdFormValid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}
+              >
+                <UiIcon name="clipboard" className="h-4 w-4" /> Отправить в таблицу
+              </button>
+              <button
+                type="button"
+                onClick={handleReset}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors shadow-sm"
+              >
+                <UiIcon name="close" className="h-4 w-4" /> Очистить
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ═══ СПРАВОЧНИКИ ══════════════════════════════════════════════════════ */}
         {activeTab === "dicts" && (
           <div className="space-y-4 pb-6">
@@ -4836,24 +5134,51 @@ function LegacyApp() {
             
             {sendState === "idle" && (
               <>
-                <p className="text-sm text-slate-600 mb-4">Данные заказа будут отправлены в Google Таблицу. Проверьте ключевые поля:</p>
-                {missingFileLink && (
-                  <div className="mb-4 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
-                    <div className="font-semibold">Внимание: ссылка на файлы заказа не указана.</div>
-                    <div className="mt-1 text-amber-800">Задание можно отправить в работу, но папка файлов не будет проставлена автоматически.</div>
-                  </div>
+                {activeTab === "ads" ? (
+                  <>
+                    <p className="text-sm text-slate-600 mb-4">Рекламный заказ будет отправлен в Google Таблицу. Проверьте ключевые поля:</p>
+                    {adMissingFileLink && (
+                      <div className="mb-4 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+                        <div className="font-semibold">Внимание: ссылка на файлы не указана.</div>
+                        <div className="mt-1 text-amber-800">Без ссылки отправка невозможна.</div>
+                      </div>
+                    )}
+                    <div className="space-y-2 text-sm mb-6">
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">№ заказа</span><span className="font-medium text-slate-800">{adForm.orderNumber || "—"}</span></div>
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Заказчик</span><span className="font-medium text-slate-800">{adForm.clientName || "—"}</span></div>
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Менеджер</span><span className="font-medium text-slate-800">{adForm.managerName || "—"}</span></div>
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Количество файлов</span><span className="font-medium text-slate-800">{adForm.fileCount ? formatFileCountText(adForm.fileCount) : "—"}</span></div>
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Ссылка</span><span className="font-medium text-slate-800 break-all text-right max-w-[55%]">{adForm.fileLink || "—"}</span></div>
+                      <div className="flex justify-between py-1"><span className="text-slate-500">Срок</span><span className="font-medium text-slate-800">{adForm.deadline ? `${adForm.deadline.split("-").reverse().join(".")}${adForm.deadlineTime ? " " + adForm.deadlineTime : ""}` : "—"}</span></div>
+                    </div>
+                    {adForm.notes.trim() && <div className="mb-6 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 whitespace-pre-wrap">{adForm.notes}</div>}
+                    <div className="flex gap-2">
+                      <button onClick={handleRealSend} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition-colors shadow">Отправить</button>
+                      <button onClick={() => setShowSend(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">Отмена</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-slate-600 mb-4">Данные заказа будут отправлены в Google Таблицу. Проверьте ключевые поля:</p>
+                    {missingFileLink && (
+                      <div className="mb-4 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 px-4 py-3 text-sm text-amber-900 shadow-sm">
+                        <div className="font-semibold">Внимание: ссылка на файлы заказа не указана.</div>
+                        <div className="mt-1 text-amber-800">Задание можно отправить в работу, но папка файлов не будет проставлена автоматически.</div>
+                      </div>
+                    )}
+                    <div className="space-y-2 text-sm mb-6">
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">№ заказа</span><span className="font-medium text-slate-800">{form.orderNumber || "—"}</span></div>
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Заказчик</span><span className="font-medium text-slate-800">{form.clientName || "—"}</span></div>
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Изделие</span><span className="font-medium text-slate-800">{form.productType === "Другое..." ? form.productTypeCustom : form.productType || "—"}</span></div>
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Тираж</span><span className="font-medium text-slate-800">{form.quantity ? `${formatQuantityText(form.quantity)} шт.` : "—"}</span></div>
+                      <div className="flex justify-between py-1"><span className="text-slate-500">Срок</span><span className="font-medium text-slate-800">{form.deadline ? `${form.deadline.split("-").reverse().join(".")}${form.deadlineTime ? " " + form.deadlineTime : ""}` : "—"}</span></div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={handleRealSend} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition-colors shadow">{missingFileLink ? "Продолжить" : "Отправить"}</button>
+                      <button onClick={() => setShowSend(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">{missingFileLink ? "Вернуться" : "Отмена"}</button>
+                    </div>
+                  </>
                 )}
-                <div className="space-y-2 text-sm mb-6">
-                  <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">№ заказа</span><span className="font-medium text-slate-800">{form.orderNumber || "—"}</span></div>
-                  <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Заказчик</span><span className="font-medium text-slate-800">{form.clientName || "—"}</span></div>
-                  <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Изделие</span><span className="font-medium text-slate-800">{form.productType === "Другое..." ? form.productTypeCustom : form.productType || "—"}</span></div>
-                  <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Тираж</span><span className="font-medium text-slate-800">{form.quantity ? `${formatQuantityText(form.quantity)} шт.` : "—"}</span></div>
-                  <div className="flex justify-between py-1"><span className="text-slate-500">Срок</span><span className="font-medium text-slate-800">{form.deadline ? `${form.deadline.split("-").reverse().join(".")}${form.deadlineTime ? " " + form.deadlineTime : ""}` : "—"}</span></div>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={handleRealSend} className="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm hover:bg-indigo-700 transition-colors shadow">{missingFileLink ? "Продолжить" : "Отправить"}</button>
-                  <button onClick={() => setShowSend(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">{missingFileLink ? "Вернуться" : "Отмена"}</button>
-                </div>
               </>
             )}
 
@@ -5140,10 +5465,23 @@ function getRequiredFields(form: FormData): string[] {
   return Array.from(new Set(errors));
 }
 
+function getRequiredAdFields(form: AdFormData): string[] {
+  const errors: string[] = [];
+  if (!form.managerName.trim()) errors.push("adManagerName");
+  if (!form.deadline) errors.push("adDeadline");
+  if (isDeadlineTimeInPast(form.deadline, form.deadlineTime)) errors.push("adDeadlineTime");
+  if (!form.fileLink.trim()) errors.push("adFileLink");
+  return Array.from(new Set(errors));
+}
+
 const REQUIRED_FIELD_LABELS: Record<string, string> = {
   clientName: "Заказчик",
   managerName: "Менеджер",
+  adManagerName: "Менеджер",
   deadline: "Дата сдачи",
+  adDeadline: "Дата сдачи",
+  adDeadlineTime: "Время сдачи",
+  adFileLink: "Ссылка на файлы",
   subcontractNote: "Информация подряда",
   subcontractDate: "Дата подряда",
   subcontractTime: "Время подряда",
