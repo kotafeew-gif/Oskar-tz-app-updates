@@ -344,8 +344,8 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Исправлено отображение для кармашкового ламината.",
-  "Добавлена отдельная форма для Оскар-Арт.",
+  "Доработан резерв строки для постановки заявки (теперь после выбора заказчика и менеджера нужно нажать кнопку \"Присвоить\" и дальше заполнять форму как обычно).",
+  "Прочие небольшие исправления.",
 ];
 
 function loadList(key: string, defaults: string[]): string[] {
@@ -824,6 +824,13 @@ interface AdFormData {
   fileCount: string;
   fileLink: string;
   notes: string;
+}
+
+interface ReservedAssignment {
+  rowNumber: number;
+  orderNumber: string;
+  managerMarker: string;
+  sheetName: string;
 }
 
 interface SubcontractWork {
@@ -3735,6 +3742,71 @@ function LegacyApp() {
     }
   }
 
+  function clearReservation() {
+    setReservedAssignment(null);
+    setReserveState("idle");
+    setReserveMsg(null);
+  }
+
+  async function handleReserveAssignment() {
+    try {
+      const isAdsTab = activeTab === "ads";
+      const currentForm = isAdsTab ? adForm : form;
+      const managerName = currentForm.managerName.trim();
+
+      if (!managerName) {
+        setReserveState("error");
+        setReserveMsg("Сначала выберите менеджера.");
+        return;
+      }
+
+      const managerMarker = isAdsTab
+        ? normalizeManagerName(managerName)
+        : (dicts.managerMarkers[normalizeManagerName(managerName)] || "");
+      if (!managerMarker) {
+        setReserveState("error");
+        setReserveMsg("У выбранного менеджера не назначен маркер.");
+        return;
+      }
+
+      setReserveState("saving");
+      setReserveMsg(null);
+
+      const result = await (window as any).electronAPI?.reserveRow?.({
+        kind: isAdsTab ? "ads" : "form",
+        formData: isAdsTab ? undefined : form,
+        adData: isAdsTab ? adForm : undefined,
+        sheetName,
+        managerMarker,
+        reservedRowNumber: reservedAssignment?.rowNumber || 0,
+      });
+
+      if (!result?.success) {
+        setReserveState("error");
+        setReserveMsg(result?.error ? `Не удалось присвоить номер: ${result.error}` : "Не удалось присвоить номер.");
+        return;
+      }
+
+      const nextOrderNumber = String(result.orderNumber || "").trim();
+      if (isAdsTab) {
+        setAdForm((prev) => ({ ...prev, orderNumber: nextOrderNumber || prev.orderNumber }));
+      } else {
+        setForm((prev) => ({ ...prev, orderNumber: nextOrderNumber || prev.orderNumber }));
+      }
+      setReservedAssignment({
+        rowNumber: Number(result.rowNumber) || 0,
+        orderNumber: nextOrderNumber,
+        managerMarker,
+        sheetName,
+      });
+      setReserveState("success");
+      setReserveMsg(`Номер ${nextOrderNumber || "—"} присвоен. Строка № ${result.rowNumber} зарезервирована.`);
+    } catch (error) {
+      setReserveState("error");
+      setReserveMsg(error instanceof Error ? `Не удалось присвоить номер: ${error.message}` : "Не удалось присвоить номер.");
+    }
+  }
+
   function applyPreset(presetId: string) {
     setSelectedPresetId(presetId);
     if (!presetId) return;
@@ -3744,7 +3816,7 @@ function LegacyApp() {
 
     setForm((prev) => ({
       ...mergePresetIntoForm(createDefaultForm(), preset.data),
-      orderNumber: prev.orderNumber,
+      orderNumber: "",
       clientName: prev.clientName,
       managerName: prev.managerName,
       deadline: prev.deadline,
@@ -3752,6 +3824,7 @@ function LegacyApp() {
       cellBooking: prev.cellBooking,
       fileLink: prev.fileLink,
     }));
+    clearReservation();
     setShowValidation(false);
     setSavedMsg(null);
   }
@@ -3831,13 +3904,45 @@ function LegacyApp() {
   const [presetNameDraft, setPresetNameDraft] = useState("");
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [presetSaveStatus, setPresetSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [reservedAssignment, setReservedAssignment] = useState<ReservedAssignment | null>(null);
+  const [reserveState, setReserveState] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [reserveMsg, setReserveMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!reservedAssignment) return;
+    if (reservedAssignment.sheetName === sheetName) return;
+    setForm((prev) => ({ ...prev, orderNumber: "" }));
+    clearReservation();
+  }, [sheetName, reservedAssignment]);
 
   function update<K extends keyof FormData>(key: K, value: FormData[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => {
+      const next = { ...prev, [key]: value } as FormData;
+      if (key === "managerName") {
+        next.orderNumber = "";
+      }
+      return next;
+    });
+    if (key === "managerName") {
+      setReservedAssignment(null);
+      setReserveState("idle");
+      setReserveMsg(null);
+    }
   }
 
   function updateAd<K extends keyof AdFormData>(key: K, value: AdFormData[K]) {
-    setAdForm((prev) => ({ ...prev, [key]: value }));
+    setAdForm((prev) => {
+      const next = { ...prev, [key]: value } as AdFormData;
+      if (key === "managerName") {
+        next.orderNumber = "";
+      }
+      return next;
+    });
+    if (key === "managerName") {
+      setReservedAssignment(null);
+      setReserveState("idle");
+      setReserveMsg(null);
+    }
   }
 
   useEffect(() => {
@@ -4096,6 +4201,7 @@ function LegacyApp() {
     } else {
       setForm(createDefaultForm());
       setShowValidation(false);
+      clearReservation();
     }
     setSavedMsg(null);
     setPresetMsg(null);
@@ -4135,12 +4241,19 @@ function LegacyApp() {
               adData: adForm,
               shortTz: generateAdShortTZ(adForm),
               sheetName: sheetName,
+              managerMarker: normalizeManagerName(adForm.managerName),
+              reservedRowNumber: reservedAssignment?.rowNumber || 0,
+              reservedManagerMarker: reservedAssignment?.managerMarker || normalizeManagerName(adForm.managerName),
+              reservedSheetName: reservedAssignment?.sheetName || "",
             }
           : {
               formData: form,
               shortTz: generateShortTZ(form),
               sheetName: sheetName,
               managerMarker: dicts.managerMarkers[normalizeManagerName(form.managerName)] || "",
+              reservedRowNumber: reservedAssignment?.rowNumber || 0,
+              reservedManagerMarker: reservedAssignment?.managerMarker || "",
+              reservedSheetName: reservedAssignment?.sheetName || "",
             },
       );
       if (result.success) {
@@ -4152,10 +4265,12 @@ function LegacyApp() {
             fileCount: "",
             notes: "",
           }));
+          clearReservation();
         } else {
           update("orderNumber", result.orderNumber);
           await rememberClientIfNeeded();
           update("cellBooking", "");
+          clearReservation();
         }
         setSendState("done");
       } else {
@@ -4280,7 +4395,34 @@ function LegacyApp() {
                   </select>
                 </Field>
                 <Field label="Номер заказа">
-                  <input type="text" className={inputClass + " bg-yellow-50 font-bold"} placeholder="подставится автоматически" value={form.orderNumber} readOnly />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        className={inputClass + " bg-yellow-50 font-bold flex-1 min-w-0"}
+                        placeholder="подставится автоматически"
+                        value={form.orderNumber}
+                        readOnly
+                      />
+                      <button
+                        type="button"
+                        onClick={handleReserveAssignment}
+                        disabled={reserveState === "saving"}
+                        className={`px-4 py-2.5 rounded-xl border text-sm font-medium transition-colors shrink-0 ${
+                          reserveState === "success"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                        } ${reserveState === "saving" ? "opacity-70 cursor-wait" : ""}`}
+                      >
+                        {reserveState === "saving" ? "Присваиваем..." : "Присвоить"}
+                      </button>
+                    </div>
+                    {(reserveMsg || reservedAssignment) && (
+                      <p className={`text-[11px] leading-4 ${reserveState === "error" ? "text-red-500" : "text-emerald-600"}`}>
+                        {reserveMsg || (reservedAssignment ? `Зарезервирована строка № ${reservedAssignment.rowNumber}.` : "")}
+                      </p>
+                    )}
+                  </div>
                 </Field>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-[0.85fr_1.15fr_0.95fr] gap-4 items-start">
@@ -4941,7 +5083,34 @@ function LegacyApp() {
                   </select>
                 </Field>
                 <Field label="Номер заказа">
-                  <input type="text" className="bg-yellow-50 font-bold" placeholder="подставится автоматически" value={adForm.orderNumber} readOnly />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        className="bg-yellow-50 font-bold flex-1 min-w-0"
+                        placeholder="подставится автоматически"
+                        value={adForm.orderNumber}
+                        readOnly
+                      />
+                      <button
+                        type="button"
+                        onClick={handleReserveAssignment}
+                        disabled={reserveState === "saving"}
+                        className={`px-4 py-2.5 rounded-xl border text-sm font-medium transition-colors shrink-0 ${
+                          reserveState === "success"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                        } ${reserveState === "saving" ? "opacity-70 cursor-wait" : ""}`}
+                      >
+                        {reserveState === "saving" ? "Присваиваем..." : "Присвоить"}
+                      </button>
+                    </div>
+                    {(reserveMsg || reservedAssignment) && (
+                      <p className={`text-[11px] leading-4 ${reserveState === "error" ? "text-red-500" : "text-emerald-600"}`}>
+                        {reserveMsg || (reservedAssignment ? `Зарезервирована строка № ${reservedAssignment.rowNumber}.` : "")}
+                      </p>
+                    )}
+                  </div>
                 </Field>
               </div>
 

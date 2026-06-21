@@ -238,6 +238,18 @@ function isRowAvailable(row, managerMarker) {
   return !!managerMarker && markerCell === managerMarker;
 }
 
+function isReservedRowValid(rows, rowNumber, managerMarker) {
+  const parsedRowNumber = Number.parseInt(String(rowNumber || ''), 10);
+  if (!Number.isFinite(parsedRowNumber) || parsedRowNumber < 2) return false;
+
+  const row = rows[parsedRowNumber - 1];
+  if (!row) return false;
+  if (getRowCell(row, 1)) return false;
+
+  const markerCell = getRowCell(row, 25);
+  return !!managerMarker && markerCell === managerMarker;
+}
+
 function findAvailableBlock(rows, managerMarker, blockSize, maxRows) {
   const upperBound = Math.max(Number(maxRows) || 0, rows.length, blockSize);
   const lastStart = Math.max(2, upperBound - blockSize + 1);
@@ -256,6 +268,11 @@ function findAvailableBlock(rows, managerMarker, blockSize, maxRows) {
   }
 
   return -1;
+}
+
+function resolveReservedRow(rows, reservedRowNumber, managerMarker) {
+  if (!isReservedRowValid(rows, reservedRowNumber, managerMarker)) return -1;
+  return Number.parseInt(String(reservedRowNumber), 10);
 }
 
 async function ensureSheetRowCount(sheets, sheetId, currentRowCount, requiredRowCount) {
@@ -768,13 +785,89 @@ ipcMain.handle('save-preset-entry', async (event, { managerName, presetName, pre
   }
 });
 
-ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz, sheetName, managerMarker }) => {
+ipcMain.handle('reserve-row', async (event, { kind, formData, adData, sheetName, managerMarker, reservedRowNumber }) => {
   try {
     const sheets = createSheetsClient();
-    const targetSheet = sheetName || '??????_2026';
+    const targetSheet = sheetName || 'Печать_2026';
+    const normalizedManagerMarker = normalizeSheetCell(managerMarker);
+
+    if (!normalizedManagerMarker) {
+      return { success: false, error: 'Сначала выберите менеджера.' };
+    }
+
+    const [metaResponse, readResponse] = await Promise.all([
+      sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID }),
+      sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${targetSheet}'!A:Z`,
+      }),
+    ]);
+    const sheetMeta = metaResponse.data.sheets?.find((sheet) => sheet.properties?.title === targetSheet);
+    const sheetId = sheetMeta?.properties?.sheetId;
+    let sheetRowCount = sheetMeta?.properties?.gridProperties?.rowCount || readResponse.data.values?.length || 0;
+    let rows = readResponse.data.values || [];
+
+    let rowNumber = resolveReservedRow(rows, reservedRowNumber, normalizedManagerMarker);
+    if (rowNumber <= 0) {
+      rowNumber = findAvailableBlock(rows, normalizedManagerMarker, 1, sheetRowCount);
+    }
+    if (rowNumber <= 0) {
+      rowNumber = Math.max(sheetRowCount + 1, 2);
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await ensureSheetRowCount(sheets, sheetId, sheetRowCount, rowNumber);
+      const checkResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${targetSheet}'!B${rowNumber}:Z${rowNumber}`,
+      });
+      const currentRow = checkResponse.data.values?.[0] || [];
+      const currentClientCell = normalizeSheetCell(currentRow[0] || '');
+      const currentMarkerCell = normalizeSheetCell(currentRow[24] || '');
+
+      if (!currentClientCell && (!currentMarkerCell || currentMarkerCell === normalizedManagerMarker)) {
+        break;
+      }
+
+      const refreshed = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${targetSheet}'!A:Z`,
+      });
+      rows = refreshed.data.values || [];
+      sheetRowCount = sheetMeta?.properties?.gridProperties?.rowCount || refreshed.data.values?.length || sheetRowCount;
+      rowNumber = findAvailableBlock(rows, normalizedManagerMarker, 1, sheetRowCount);
+      if (rowNumber <= 0) {
+        rowNumber = Math.max(sheetRowCount + 1, 2);
+      }
+    }
+
+    const orderNumberFromA = normalizeSheetCell(rows[rowNumber - 1] ? rows[rowNumber - 1][0] : '') || String(rowNumber);
+
+    if (normalizedManagerMarker) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${targetSheet}'!Z${rowNumber}`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [[normalizedManagerMarker]] },
+      });
+    }
+
+    return { success: true, rowNumber, orderNumber: orderNumberFromA };
+  } catch (error) {
+    console.error('reserve-row error:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz, sheetName, managerMarker, reservedRowNumber, reservedManagerMarker, reservedSheetName }) => {
+  try {
+    const sheets = createSheetsClient();
+    const targetSheet = sheetName || 'Печать_2026';
     const isAds = kind === 'ads';
     const sourceData = isAds ? (adData || {}) : (formData || {});
-    const normalizedManagerMarker = normalizeSheetCell(isAds ? '' : managerMarker);
+    const normalizedManagerMarker = normalizeSheetCell(managerMarker);
+    const normalizedReservedMarker = normalizeSheetCell(reservedManagerMarker || managerMarker);
+    const normalizedReservedSheet = normalizeSheetCell(reservedSheetName);
 
     const [metaResponse, readResponse] = await Promise.all([
       sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID }),
@@ -791,14 +884,17 @@ ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz,
     const totalRowsRequested = Math.max(0, Number.parseInt(String(sourceData?.cellBooking || '').replace(/[^\d]/g, ''), 10) || 0);
     const reservationCount = totalRowsRequested > 0 ? Math.max(0, totalRowsRequested - 1) : 0;
     const blockSize = totalRowsRequested > 0 ? totalRowsRequested : 1;
-    const foundRowNumber = findAvailableBlock(rows, normalizedManagerMarker, blockSize, sheetRowCount);
+    const reservedRow = normalizedReservedSheet && normalizedReservedSheet !== targetSheet
+      ? -1
+      : resolveReservedRow(rows, reservedRowNumber, normalizedReservedMarker);
+    const foundRowNumber = reservedRow > 0 ? reservedRow : findAvailableBlock(rows, normalizedManagerMarker, blockSize, sheetRowCount);
     const rowNumber = foundRowNumber > 0 ? foundRowNumber : Math.max(sheetRowCount + 1, 2);
     const requiredRowCount = rowNumber + blockSize - 1;
     const existingMarker = getRowCell(rows[rowNumber - 1], 25);
 
     await ensureSheetRowCount(sheets, sheetId, sheetRowCount, requiredRowCount);
 
-    const orderNumberFromA = rows[rowNumber - 1] ? rows[rowNumber - 1][0] : '???';
+    const orderNumberFromA = normalizeSheetCell(rows[rowNumber - 1] ? rows[rowNumber - 1][0] : '') || String(rowNumber);
 
     const now = new Date();
     const creationCell = `${now.toLocaleDateString('ru-RU')}\n${now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`;
@@ -810,7 +906,7 @@ ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz,
       : [
           sourceData.fileLink?.trim(),
           shortTz?.trim(),
-          `????? : ${sourceData.quantity ? `${formatQuantityCell(sourceData.quantity)} ??.` : '?'}`,
+          `Тираж : ${sourceData.quantity ? `${formatQuantityCell(sourceData.quantity)} экз.` : '—'}`,
         ].filter(Boolean).join('\n\n');
 
     const values = [
@@ -874,7 +970,7 @@ ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz,
       });
     }
 
-    if (sheetId && columnE.includes('??-???')) {
+    if (sheetId && columnE.includes('УФ-лак')) {
       requests.push({
         updateCells: {
           range: {
@@ -909,7 +1005,7 @@ ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz,
     return { success: true, orderNumber: orderNumberFromA };
 
   } catch (error) {
-    console.error('??????:', error.message);
+    console.error('reserve-row/send-to-sheet error:', error.message);
     return { success: false, error: error.message };
   }
 });

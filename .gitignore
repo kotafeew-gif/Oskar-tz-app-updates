@@ -6,3 +6,4 @@ electron-app/google-key.json
 .DS_Store
 *.log
 .ssh/
+_backups/
