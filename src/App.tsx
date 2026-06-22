@@ -344,8 +344,8 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Доработан резерв строки для постановки заявки (теперь после выбора заказчика и менеджера нужно нажать кнопку \"Присвоить\" и дальше заполнять форму как обычно).",
-  "Прочие небольшие исправления.",
+  "Добавлено отверстие в \"Другое\".",
+  "Добавлено поле указания диаметра для круглых отверстий.",
 ];
 
 function loadList(key: string, defaults: string[]): string[] {
@@ -810,7 +810,9 @@ interface FormData {
   stickerMaterial: string; stickerFinish: PaperFinish; stickerPlotterCut: boolean;
   ownReverse: boolean;
   wobblerPlotterCut: boolean; wobblerFootGlue: boolean;
+  otherHoleEnabled: boolean; otherHoleType: string; otherHoleDiameter: string;
   badgeHoleType: string;
+  badgeHoleDiameter: string;
   badgeHoleCount: string;
   fileLink: string; notes: string;
 }
@@ -894,7 +896,9 @@ function createDefaultForm(): FormData {
     stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false,
     ownReverse: false,
     wobblerPlotterCut: false, wobblerFootGlue: false,
+    otherHoleEnabled: false, otherHoleType: "", otherHoleDiameter: "",
     badgeHoleType: "",
+    badgeHoleDiameter: "",
     badgeHoleCount: "1",
     fileLink: "", notes: "",
   };
@@ -1457,6 +1461,23 @@ function formatShortColor(value: string, ownReverse = false): string {
   return ownReverse ? `${base} (свой оборот)` : base;
 }
 
+function formatHoleSelectionText(type: string, diameter = "", count = ""): string {
+  const holeType = type.trim();
+  if (!holeType) return "";
+
+  const diameterText = diameter.trim();
+  const countText = count.trim();
+
+  if (holeType === "Круглое") {
+    const parts = ["круглое отверстие"];
+    if (countText) parts.push(`${countText}шт`);
+    if (diameterText) parts.push(`Ø ${diameterText}`);
+    return parts.join(" ").trim();
+  }
+
+  return `${holeType.toLowerCase()} отверстие`;
+}
+
 function getDisplaySize(form: FormData): string {
   if (isEnvelope(form.productType)) return form.envelopeSize === "Нестандартный" ? form.envelopeSizeCustom : form.envelopeSize;
   if (form.productType === "Визитки") return form.businessCardSize === "Нестандартный" ? form.businessCardSizeCustom : form.businessCardSize;
@@ -1560,9 +1581,7 @@ function generateShortTZ(form: FormData): string {
     if (paperText) parts.push(`${paperText}${form.paperType === "Дизайнерская" ? "" : ` ${form.densityFinish.toLowerCase()}`}`.trim());
     if (form.colorMode) parts.push(formatShortColor(form.colorMode, form.ownReverse));
     if (form.badgeHoleType) {
-      const holeText = form.badgeHoleType === "Круглое"
-        ? `круглое отверстие${form.badgeHoleCount === "2" ? " 2шт" : ""}`
-        : `${form.badgeHoleType.toLowerCase()} отверстие`;
+      const holeText = formatHoleSelectionText(form.badgeHoleType, form.badgeHoleDiameter, form.badgeHoleCount);
       parts.push(holeText);
     }
   } else {
@@ -1575,6 +1594,10 @@ function generateShortTZ(form: FormData): string {
       parts.push(formatShortColor(form.colorMode, form.ownReverse) || "—");
     } else if (templateFlags.showColor && form.colorMode) {
       parts.push(formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки"));
+    }
+    if (form.productType === "Другое..." && form.otherHoleEnabled && form.otherHoleType) {
+      const holeText = formatHoleSelectionText(form.otherHoleType, form.otherHoleDiameter);
+      if (holeText) parts.push(holeText);
     }
   }
 
@@ -1768,9 +1791,7 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     lines.push(` Материал : ${paperLine}`);
     lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse)}`);
     if (form.badgeHoleType) {
-      const holeText = form.badgeHoleType === "Круглое"
-        ? `круглое отверстие${form.badgeHoleCount === "2" ? " 2шт" : ""}`
-        : `${form.badgeHoleType.toLowerCase()} отверстие`;
+      const holeText = formatHoleSelectionText(form.badgeHoleType, form.badgeHoleDiameter, form.badgeHoleCount);
       lines.push(` Отверстие : ${holeText}`);
     } else lines.push(" Отверстие : —");
   } else {
@@ -1787,6 +1808,14 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     }
     if (templateFlags.showColor && !form.kashurovka.enabled) {
       lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки")}`);
+    }
+    if (form.productType === "Другое...") {
+      if (form.otherHoleEnabled && form.otherHoleType) {
+        const holeText = formatHoleSelectionText(form.otherHoleType, form.otherHoleDiameter);
+        lines.push(` Отверстие : ${holeText}`);
+      } else {
+        lines.push(" Отверстие : —");
+      }
     }
   }
   lines.push("");
@@ -4555,6 +4584,47 @@ function LegacyApp() {
                 )}
               </div>
 
+              {pt === "Другое..." && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <Field label="Отверстие">
+                    <YesNo
+                      value={form.otherHoleEnabled}
+                      onChange={(value) => {
+                        update("otherHoleEnabled", value);
+                        if (!value) {
+                          update("otherHoleType", "");
+                          update("otherHoleDiameter", "");
+                        }
+                      }}
+                    />
+                  </Field>
+                  {form.otherHoleEnabled && (
+                    <Field label="Вид отверстия">
+                      <select
+                        value={form.otherHoleType}
+                        className={selectClass}
+                        onChange={(e) => {
+                          update("otherHoleType", e.target.value);
+                          if (e.target.value !== "Круглое") update("otherHoleDiameter", "");
+                        }}
+                      >
+                        <option value="">— выберите —</option>
+                        {["Круглое", "Овальное", "Евро"].map((item) => <option key={item}>{item}</option>)}
+                      </select>
+                      {form.otherHoleType === "Круглое" && (
+                        <input
+                          type="text"
+                          className={`${inputClass} mt-2`}
+                          placeholder="Диаметр, например 5 мм"
+                          value={form.otherHoleDiameter}
+                          onChange={(e) => update("otherHoleDiameter", e.target.value)}
+                        />
+                      )}
+                    </Field>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <Field label="Цветопроба">
                   <div className="inline-flex flex-wrap rounded-lg border border-slate-200 bg-white p-1 shadow-sm gap-1">
@@ -4646,7 +4716,10 @@ function LegacyApp() {
                       className={selectFieldClass(showValidation && required.includes("badgeHoleType"))}
                       onChange={(e) => {
                         update("badgeHoleType", e.target.value);
-                        if (e.target.value !== "Круглое") update("badgeHoleCount", "");
+                        if (e.target.value !== "Круглое") {
+                          update("badgeHoleCount", "");
+                          update("badgeHoleDiameter", "");
+                        }
                         else if (!form.badgeHoleCount) update("badgeHoleCount", "1");
                       }}
                     >
@@ -4654,19 +4727,32 @@ function LegacyApp() {
                       {["Круглое", "Овальное", "Евро"].map((item) => <option key={item}>{item}</option>)}
                     </select>
                   </Field>
-                  {form.badgeHoleType === "Круглое" && (
-                    <Field label="Количество отверстий" required>
-                      <select
-                        data-field="badgeHoleCount"
-                        value={form.badgeHoleCount}
-                        className={selectFieldClass(showValidation && required.includes("badgeHoleCount"))}
-                        onChange={(e) => update("badgeHoleCount", e.target.value)}
-                      >
-                        <option value="">— выберите —</option>
-                        {["1", "2"].map((item) => <option key={item}>{item}</option>)}
-                      </select>
-                    </Field>
-                  )}
+                  <div className="space-y-4">
+                    {form.badgeHoleType === "Круглое" && (
+                      <>
+                        <Field label="Количество отверстий" required>
+                          <select
+                            data-field="badgeHoleCount"
+                            value={form.badgeHoleCount}
+                            className={selectFieldClass(showValidation && required.includes("badgeHoleCount"))}
+                            onChange={(e) => update("badgeHoleCount", e.target.value)}
+                          >
+                            <option value="">— выберите —</option>
+                            {["1", "2"].map((item) => <option key={item}>{item}</option>)}
+                          </select>
+                        </Field>
+                        <Field label="Диаметр отверстия">
+                          <input
+                            type="text"
+                            className={inputClass}
+                            placeholder="Например: 5 мм"
+                            value={form.badgeHoleDiameter}
+                            onChange={(e) => update("badgeHoleDiameter", e.target.value)}
+                          />
+                        </Field>
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
 
