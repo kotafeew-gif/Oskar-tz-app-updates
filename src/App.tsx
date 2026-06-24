@@ -353,8 +353,10 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Добавлено отверстие в \"Другое\".",
-  "Добавлено поле указания диаметра для круглых отверстий.",
+  "Сверление отверстий вынесено в послепечатную обработку.",
+  "Добавлена прикатка к магниту.",
+  "В наклейки добавлен пункт выбора стикерпаки или обычные наклейки.",
+  "Прочие небольшие исправления.",
 ];
 
 function loadList(key: string, defaults: string[]): string[] {
