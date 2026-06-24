@@ -76,7 +76,15 @@ const AUTO_REVERSE_COLOR = "4+4 (полноцвет, две стороны)";
 const STICKER_COLOR_MODES = ["1+0", "4+0", "5+0"];
 
 const DEFAULT_POST_PROCESSING = [
-  "Перфорация", "Тиснение фольгой", "Фольгирование", "УФ-лак", "Скругление углов", "Раскрой IECHO", "Сортировка/упаковка",
+  "Перфорация",
+  "Сверление отверстий",
+  "Тиснение фольгой",
+  "Фольгирование",
+  "УФ-лак",
+  "Прикатка магнита",
+  "Скругление углов",
+  "Раскрой IECHO",
+  "Сортировка/упаковка",
 ];
 
 const DEFAULT_BINDING_TYPES = [
@@ -95,6 +103,7 @@ const SPRING_DIAMETERS = [
   "6 мм", "8 мм", "10 мм", "12 мм", "14 мм", "16 мм", "19 мм",
   "22 мм", "25 мм", "28 мм", "32 мм", "38 мм", "45 мм", "51 мм",
 ];
+const DRILL_DIAMETERS = ["2 мм", "3 мм", "4 мм", "5 мм", "6 мм", "8 мм", "10 мм", "12 мм"];
 const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голубой", "3в1 (серый)"];
 const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
 const STICKER_MATERIALS = [
@@ -668,7 +677,7 @@ function normalizeDictsPayload(payload: any): Dicts {
     envelopeSizes: normalizeList(payload?.envelopeSizes),
     densities: normalizeList(payload?.densities),
     colors: normalizeList(payload?.colors),
-    postProcessing: normalizeList(payload?.postProcessing),
+    postProcessing: mergeUniqueStrings(normalizeList(payload?.postProcessing), DEFAULT_POST_PROCESSING),
     bindingTypes: normalizeList(payload?.bindingTypes),
     laminationKinds: normalizeList(payload?.laminationKinds),
     laminationThickness: normalizeList(payload?.laminationThickness),
@@ -721,7 +730,7 @@ function createInitialDicts(): Dicts {
     envelopeSizes: loadList(LS_KEYS.envelopeSizes, DEFAULT_ENVELOPE_SIZES),
     densities: loadList(LS_KEYS.densities, DEFAULT_DENSITIES),
     colors: loadList(LS_KEYS.colors, DEFAULT_COLORS),
-    postProcessing: loadList(LS_KEYS.postProcessing, DEFAULT_POST_PROCESSING),
+    postProcessing: mergeUniqueStrings(loadList(LS_KEYS.postProcessing, DEFAULT_POST_PROCESSING), DEFAULT_POST_PROCESSING),
     bindingTypes: loadList(LS_KEYS.bindingTypes, DEFAULT_BINDING_TYPES),
     laminationKinds: loadList(LS_KEYS.laminationKinds, DEFAULT_LAMINATION_KINDS),
     laminationThickness: loadList(LS_KEYS.laminationThickness, DEFAULT_LAMINATION_THICKNESS),
@@ -801,13 +810,13 @@ interface FormData {
   adBlocks: string; calendarKind: string; wallMountType: string; wallMountDesc: string; gridType: string; hasPlanka: boolean; plankaDesc: string; hasRigel: boolean;
   calendarBaseUseKash: boolean; calendarBaseMaterial: string; calendarBaseFinish: PaperFinish; calendarBaseLamination: LaminationBlock; calendarBaseBigovkaLines: string; calendarGridMaterial: string; calendarGridFinish: PaperFinish; calendarGridColorMode: string; calendarOffsetColor: string;
   calendarHeaderPaperType: PaperTypeOption | ""; calendarHeaderPaperCustomName: string; calendarHeaderPaperDensity: string; calendarHeaderPaperFinish: PaperFinish;
-  postProcessing: string[]; foilColor: string; uvType: string; bigkovka: boolean; bigkovkaLines: string;
+  postProcessing: string[]; foilColor: string; uvType: string; bigkovka: boolean; bigkovkaLines: string; drillingDiameter: string;
   falcovka: boolean;
   lamination: LaminationBlock; kashurovka: KashurovkaBlock;
   binding: boolean; bindingType: string; stapleCount: string; staplePosition: string; springColor: string; springColorCustom: string; springDiameter: string; springPosition: string; springHidden: boolean;
   subcontractWorks: SubcontractWork[];
   bagPaperType: BagPaperTypeOption | ""; bagHeight: string; bagWidth: string; bagDepth: string; bagPartsCount: string; bagExternalSheets: boolean; bagEyeletColor: string; bagEyeletColorCustom: string; bagHandleColor: string; bagHandleColorCustom: string; bagHandlePipsik: string;
-  stickerMaterial: string; stickerFinish: PaperFinish; stickerPlotterCut: boolean;
+  stickerMaterial: string; stickerFinish: PaperFinish; stickerPlotterCut: boolean; stickerPacks: boolean;
   ownReverse: boolean;
   wobblerPlotterCut: boolean; wobblerFootGlue: boolean;
   otherHoleEnabled: boolean; otherHoleType: string; otherHoleDiameter: string;
@@ -888,12 +897,12 @@ function createDefaultForm(): FormData {
     adBlocks: "3", calendarKind: "Настенный", wallMountType: "Ригель", wallMountDesc: "", gridType: "Цифра", hasPlanka: false, plankaDesc: "", hasRigel: false,
     calendarBaseUseKash: false, calendarBaseMaterial: "", calendarBaseFinish: "Матовая", calendarBaseLamination: defaultLaminationBlock(), calendarBaseBigovkaLines: "", calendarGridMaterial: "", calendarGridFinish: "Матовая", calendarGridColorMode: "", calendarOffsetColor: "Серый",
     calendarHeaderPaperType: "", calendarHeaderPaperCustomName: "", calendarHeaderPaperDensity: "", calendarHeaderPaperFinish: "Матовая",
-    postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1", falcovka: false,
+    postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1", drillingDiameter: "", falcovka: false,
     lamination: defaultLaminationBlock(), kashurovka: defaultKashurovkaBlock(),
     binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springDiameter: "8 мм", springPosition: "По широкой стороне", springHidden: false,
     subcontractWorks: [],
     bagPaperType: "", bagHeight: "", bagWidth: "", bagDepth: "", bagPartsCount: "Из 2-х частей", bagExternalSheets: false, bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleColor: "Белый", bagHandleColorCustom: "", bagHandlePipsik: "Без пипсика",
-    stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false,
+    stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false, stickerPacks: false,
     ownReverse: false,
     wobblerPlotterCut: false, wobblerFootGlue: false,
     otherHoleEnabled: false, otherHoleType: "", otherHoleDiameter: "",
@@ -1103,6 +1112,15 @@ function ensureProductTypes(list: string[]): string[] {
 
 function resolveProductName(form: FormData): string {
   return form.productType === "Другое..." ? form.productTypeCustom.trim() : form.productType;
+}
+
+function formatProductNameForTZ(form: FormData, lower = false): string {
+  const product = resolveProductName(form);
+  if (!product) return "";
+  const text = isSticker(form.productType) && form.stickerPacks
+    ? product.replace(/наклейки/gi, "Стикерпаки")
+    : product;
+  return lower ? text.toLowerCase() : text;
 }
 
 function normalizeMaterial(material: string): string {
@@ -1478,6 +1496,28 @@ function formatHoleSelectionText(type: string, diameter = "", count = ""): strin
   return `${holeType.toLowerCase()} отверстие`;
 }
 
+function formatPostProcessingShortText(item: string, form: FormData): string {
+  if (item.includes("Перфорация")) return "перфор.";
+  if (item.includes("Сверление отверстий")) return `сверление отверстий${form.drillingDiameter ? ` Ø ${form.drillingDiameter}` : ""}`;
+  if (item.includes("Тиснение")) return `тиснение${form.foilColor ? " " + form.foilColor : ""}`;
+  if (item.includes("Фольгирование")) return `фольгирование${form.foilColor ? " " + form.foilColor : ""}`;
+  if (item.includes("УФ-лак")) return form.uvType === "Текстурный" ? "УФ-лак текстурный" : "УФ-лак";
+  if (item.includes("Прикатка магнита")) return "прикатка магнита";
+  if (item.includes("Скругление")) return "скругл. углов";
+  return item.toLowerCase();
+}
+
+function formatPostProcessingFullText(item: string, form: FormData): string {
+  if (item.includes("Перфорация")) return " [x] Перфорация";
+  if (item.includes("Сверление отверстий")) return ` [x] Сверление отверстий${form.drillingDiameter ? ` — Ø ${form.drillingDiameter}` : ""}`;
+  if (item.includes("Тиснение")) return ` [x] Тиснение фольгой${form.foilColor ? ` — цвет фольги: ${form.foilColor}` : ""}`;
+  if (item.includes("Фольгирование")) return ` [x] Фольгирование${form.foilColor ? ` — цвет фольги: ${form.foilColor}` : ""}`;
+  if (item.includes("УФ-лак")) return ` [x] ${form.uvType === "Текстурный" ? "УФ-лак текстурный" : "УФ-лак"}`;
+  if (item.includes("Прикатка магнита")) return " [x] Прикатка магнита";
+  if (item.includes("Скругление")) return " [x] Скругление углов";
+  return ` [x] ${item}`;
+}
+
 function getDisplaySize(form: FormData): string {
   if (isEnvelope(form.productType)) return form.envelopeSize === "Нестандартный" ? form.envelopeSizeCustom : form.envelopeSize;
   if (form.productType === "Визитки") return form.businessCardSize === "Нестандартный" ? form.businessCardSizeCustom : form.businessCardSize;
@@ -1491,9 +1531,9 @@ function getDisplaySize(form: FormData): string {
 
 function generateShortTZ(form: FormData): string {
   const parts: string[] = [];
-  const product = resolveProductName(form);
+  const product = formatProductNameForTZ(form, true);
   const templateFlags = getProductTemplate(form.productType).flags;
-  if (product) parts.push(product.toLowerCase());
+  if (product) parts.push(product);
   const size = getDisplaySize(form);
   if (size) parts.push(size.split(/\s*[(/]/)[0].trim());
 
@@ -1569,6 +1609,7 @@ function generateShortTZ(form: FormData): string {
     if (handleText) parts.push(`ручки: ${handleText.toLowerCase()}`);
   } else if (isSticker(form.productType)) {
     if (form.stickerMaterial) parts.push(`${normalizeMaterial(form.stickerMaterial)} ${form.stickerFinish.toLowerCase()}`.toLowerCase());
+    if (form.colorMode) parts.push(formatShortColor(form.colorMode));
     if (form.stickerPlotterCut) parts.push("плоттерная резка");
   } else if (form.productType === "Воблеры") {
     const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
@@ -1595,22 +1636,15 @@ function generateShortTZ(form: FormData): string {
     } else if (templateFlags.showColor && form.colorMode) {
       parts.push(formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки"));
     }
-    if (form.productType === "Другое..." && form.otherHoleEnabled && form.otherHoleType) {
-      const holeText = formatHoleSelectionText(form.otherHoleType, form.otherHoleDiameter);
-      if (holeText) parts.push(holeText);
-    }
+  }
+
+  if (form.lamination.enabled && !isMultiBlock(form.productType) && !isNotebook(form.productType) && !isCalendar(form.productType)) {
+    parts.push(getLaminationShort(form.lamination));
   }
 
   if (templateFlags.showPostProcessing && form.postProcessing.length > 0) {
-    const ppShort = form.postProcessing.map((p) => {
-      if (p.includes("Перфорация")) return "перфор.";
-      if (p.includes("Тиснение")) return `тиснение${form.foilColor ? " " + form.foilColor : ""}`;
-      if (p.includes("Фольгирование")) return `фольгирование${form.foilColor ? " " + form.foilColor : ""}`;
-      if (p.includes("УФ-лак")) return form.uvType === "Текстурный" ? "УФ-лак текстурный" : "УФ-лак";
-      if (p.includes("Скругление")) return "скругл. углов";
-      return p.toLowerCase();
-    });
-    parts.push(ppShort.join(", "));
+    const ppShort = form.postProcessing.map((p) => formatPostProcessingShortText(p, form));
+    parts.push(...ppShort);
   }
 
   if (form.bigkovka) {
@@ -1623,10 +1657,6 @@ function generateShortTZ(form: FormData): string {
 
   if (isCalendar(form.productType) && form.calendarKind === "Настольный" && form.calendarBaseBigovkaLines) {
     parts.push(`${form.calendarBaseBigovkaLines} биговк основания`);
-  }
-
-  if (form.lamination.enabled && !isMultiBlock(form.productType) && !isNotebook(form.productType) && !isCalendar(form.productType)) {
-    parts.push(getLaminationShort(form.lamination));
   }
 
   if (form.kashurovka.enabled) parts.push(getKashShortTZ(form));
@@ -1663,7 +1693,7 @@ function generateShortTZ(form: FormData): string {
 
 function generateTZ(form: FormData, _tzNumber: number): string {
   const deadlineFormatted = form.deadline ? (form.deadlineTime ? `${form.deadline.split("-").reverse().join(".")} в ${form.deadlineTime}` : form.deadline.split("-").reverse().join(".")) : "—";
-  const product = resolveProductName(form);
+  const product = formatProductNameForTZ(form);
   const size = getDisplaySize(form);
   const cleanSize = size ? stripParentheticalNote(size) : "";
   const activeSubcontractWorks = getActiveSubcontractWorks(form);
@@ -1809,14 +1839,6 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     if (templateFlags.showColor && !form.kashurovka.enabled) {
       lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки")}`);
     }
-    if (form.productType === "Другое...") {
-      if (form.otherHoleEnabled && form.otherHoleType) {
-        const holeText = formatHoleSelectionText(form.otherHoleType, form.otherHoleDiameter);
-        lines.push(` Отверстие : ${holeText}`);
-      } else {
-        lines.push(" Отверстие : —");
-      }
-    }
   }
   lines.push("");
 
@@ -1831,10 +1853,7 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     lines.push(" ОБРАБОТКА");
     lines.push(" ---------");
     form.postProcessing.forEach((p) => {
-      if (p.includes("Тиснение") && form.foilColor) lines.push(` [x] ${p} — цвет фольги: ${form.foilColor}`);
-      else if (p.includes("Фольгирование") && form.foilColor) lines.push(` [x] ${p} — цвет фольги: ${form.foilColor}`);
-      else if (p.includes("УФ-лак")) lines.push(` [x] ${form.uvType === "Текстурный" ? "УФ-лак текстурный" : "УФ-лак"}`);
-      else lines.push(` [x] ${p}`);
+      lines.push(formatPostProcessingFullText(p, form));
     });
     lines.push("");
   }
@@ -4184,6 +4203,9 @@ function LegacyApp() {
       postProcessing: prev.postProcessing.includes(item)
         ? prev.postProcessing.filter((x) => x !== item)
         : [...prev.postProcessing, item],
+      drillingDiameter: prev.postProcessing.includes("Сверление отверстий") && item === "Сверление отверстий"
+        ? ""
+        : prev.drillingDiameter,
     }));
   }
 
@@ -4584,47 +4606,6 @@ function LegacyApp() {
                 )}
               </div>
 
-              {pt === "Другое..." && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <Field label="Отверстие">
-                    <YesNo
-                      value={form.otherHoleEnabled}
-                      onChange={(value) => {
-                        update("otherHoleEnabled", value);
-                        if (!value) {
-                          update("otherHoleType", "");
-                          update("otherHoleDiameter", "");
-                        }
-                      }}
-                    />
-                  </Field>
-                  {form.otherHoleEnabled && (
-                    <Field label="Вид отверстия">
-                      <select
-                        value={form.otherHoleType}
-                        className={selectClass}
-                        onChange={(e) => {
-                          update("otherHoleType", e.target.value);
-                          if (e.target.value !== "Круглое") update("otherHoleDiameter", "");
-                        }}
-                      >
-                        <option value="">— выберите —</option>
-                        {["Круглое", "Овальное", "Евро"].map((item) => <option key={item}>{item}</option>)}
-                      </select>
-                      {form.otherHoleType === "Круглое" && (
-                        <input
-                          type="text"
-                          className={`${inputClass} mt-2`}
-                          placeholder="Диаметр, например 5 мм"
-                          value={form.otherHoleDiameter}
-                          onChange={(e) => update("otherHoleDiameter", e.target.value)}
-                        />
-                      )}
-                    </Field>
-                  )}
-                </div>
-              )}
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                 <Field label="Цветопроба">
                   <div className="inline-flex flex-wrap rounded-lg border border-slate-200 bg-white p-1 shadow-sm gap-1">
@@ -4640,6 +4621,11 @@ function LegacyApp() {
                     ))}
                   </div>
                 </Field>
+                {sticker && (
+                  <Field label="Стикерпаки">
+                    <YesNo value={form.stickerPacks} onChange={(value) => update("stickerPacks", value)} />
+                  </Field>
+                )}
               </div>
 
               {templateFlags.showPaper && !multiBlock && !notebook && !calendar && !bag && !form.kashurovka.enabled && pt && (
@@ -5042,6 +5028,21 @@ function LegacyApp() {
                     </label>
                   ))}
                 </div>
+                {form.postProcessing.includes("Сверление отверстий") && (
+                  <div className="mt-3">
+                    <Field label="Диаметр сверления" required>
+                      <select
+                        data-field="drillingDiameter"
+                        value={form.drillingDiameter}
+                        className={selectFieldClass(showValidation && required.includes("drillingDiameter"))}
+                        onChange={(e) => update("drillingDiameter", e.target.value)}
+                      >
+                        <option value="">— выберите —</option>
+                        {DRILL_DIAMETERS.map((diameter) => <option key={diameter}>{diameter}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                )}
                 {(form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && <div className="mt-3"><Field label="Цвет фольги"><input type="text" className={`${inputClass} max-w-xs`} placeholder="Например: золото, серебро, красная..." value={form.foilColor} onChange={(e) => update("foilColor", e.target.value)} /></Field></div>}
                 {form.postProcessing.includes("УФ-лак") && <div className="mt-3"><Field label="Вид УФ-лака"><div className="flex gap-2">{["Обычный", "Текстурный"].map((t) => (<button key={t} type="button" onClick={() => update("uvType", t)} className={`px-4 py-1.5 rounded-lg text-sm font-medium border transition-all ${form.uvType === t ? "bg-blue-600 text-white border-blue-600 shadow" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}>{t}</button>))}</div></Field></div>}
               </Section>
@@ -5717,6 +5718,7 @@ function getRequiredFields(form: FormData): string[] {
   }
   if (form.binding && form.bindingType === "Пружина" && !form.springDiameter) errors.push("springDiameter");
   if (templateFlags.showPostProcessing && (form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && !form.foilColor.trim()) errors.push("foilColor");
+  if (templateFlags.showPostProcessing && form.postProcessing.includes("Сверление отверстий") && !form.drillingDiameter.trim()) errors.push("drillingDiameter");
   return Array.from(new Set(errors));
 }
 
@@ -5801,6 +5803,7 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   kashSlimPaperBottomPaperCustomName: "Название дизайнерской бумаги 2 в слим-кашировке",
   springDiameter: "Диаметр пружины",
   foilColor: "Цвет фольги",
+  drillingDiameter: "Диаметр сверления",
   deadlineTime: "Время сдачи",
 };
 
