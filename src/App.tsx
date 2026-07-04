@@ -353,10 +353,9 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Сверление отверстий вынесено в послепечатную обработку.",
-  "Добавлена прикатка к магниту.",
-  "В наклейки добавлен пункт выбора стикерпаки или обычные наклейки.",
-  "Прочие небольшие исправления.",
+  "Убрана кнопка сохранения текстового ТЗ в папку с заказом. (Файл теперь автоматически сохраняется при публикации заявки)",
+  "В блокноты добавлена возможность выбора материалов отдельно для подложки.",
+  "Прочие Исправления и доработки.",
 ];
 
 function loadList(key: string, defaults: string[]): string[] {
@@ -806,6 +805,7 @@ interface FormData {
   productType: string; productTypeCustom: string; paperSize: string; paperSizeCustom: string; envelopeSize: string; envelopeSizeCustom: string;
   businessCardSize: string; businessCardSizeCustom: string;
   paperType: PaperTypeOption | ""; paperCustomName: string; density: string; densityFinish: PaperFinish; colorProof: string; colorMode: string; pageCount: string; coverUseKash: boolean; coverPaperType: PaperTypeOption | ""; coverPaperCustomName: string; coverDensity: string; coverFinish: PaperFinish; coverColor: string; coverLamination: LaminationBlock;
+  backingEnabled: boolean; backingPaperType: PaperTypeOption | ""; backingPaperCustomName: string; backingDensity: string; backingFinish: PaperFinish; backingColor: string; backingLamination: LaminationBlock;
   catalogFormat: string; catalogFormatCustom: string;
   brochureFormat: string; brochureFormatCustom: string;
   blockPaperType: PaperTypeOption | ""; blockPaperCustomName: string; blockDensity: string; blockFinish: PaperFinish; blockColor: string; blockLamination: LaminationBlock; blockPages: string;
@@ -893,6 +893,7 @@ function createDefaultForm(): FormData {
     productType: "", productTypeCustom: "", paperSize: "", paperSizeCustom: "", envelopeSize: "", envelopeSizeCustom: "",
     businessCardSize: "", businessCardSizeCustom: "",
     paperType: "", paperCustomName: "", density: "", densityFinish: "Матовая", colorProof: "Не надо", colorMode: "", pageCount: "", coverUseKash: false, coverPaperType: "", coverPaperCustomName: "", coverDensity: "", coverFinish: "Матовая", coverColor: "", coverLamination: defaultLaminationBlock(),
+    backingEnabled: false, backingPaperType: "", backingPaperCustomName: "", backingDensity: "", backingFinish: "Матовая", backingColor: "", backingLamination: defaultLaminationBlock(),
     catalogFormat: "", catalogFormatCustom: "",
     brochureFormat: "", brochureFormatCustom: "",
     blockPaperType: "", blockPaperCustomName: "", blockDensity: "", blockFinish: "Матовая", blockColor: "", blockLamination: defaultLaminationBlock(), blockPages: "",
@@ -1123,6 +1124,13 @@ function formatProductNameForTZ(form: FormData, lower = false): string {
     ? product.replace(/наклейки/gi, "Стикерпаки")
     : product;
   return lower ? text.toLowerCase() : text;
+}
+
+function formatNotebookColorText(value: string): string {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return "";
+  if (trimmed === "Без печати") return "без печати";
+  return normalizeColorMode(trimmed);
 }
 
 function normalizeMaterial(material: string): string {
@@ -1558,21 +1566,22 @@ function generateShortTZ(form: FormData): string {
     if (blkParts.length) parts.push(samePaper ? blkParts.join(" ") : `блок: ${blkParts.join(" ")}`);
   } else if (isNotebook(form.productType)) {
     if (form.blockPages) parts.push(`${form.blockPages} листов в блоке`);
-    const coverSelection = { type: form.coverPaperType, value: form.coverDensity, customName: form.coverPaperCustomName, finish: form.coverFinish };
-    const blockSelection = { type: form.blockPaperType, value: form.blockDensity, customName: form.blockPaperCustomName, finish: form.blockFinish };
-    const samePaper = isSamePaperSelection(coverSelection, blockSelection);
-    const covParts = [
+    const coverParts = [
       formatPaperSelectionWithFinishForTZ(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish),
-      form.coverColor.split(/\s/)[0],
+      formatNotebookColorText(form.coverColor),
       form.coverLamination.enabled ? getLaminationShort(form.coverLamination) : "",
     ].filter(Boolean);
-    const blkParts = [
-      samePaper ? "" : formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish),
-      form.blockColor.split(/\s/)[0],
-      form.blockLamination.enabled ? getLaminationShort(form.blockLamination) : "",
-    ].filter(Boolean);
-    if (covParts.length) parts.push(samePaper ? covParts.join(" ") : `обложка: ${covParts.join(" ")}`);
-    if (blkParts.length) parts.push(samePaper ? blkParts.join(" ") : `блок: ${blkParts.join(" ")}`);
+    if (coverParts.length) {
+      parts.push(form.backingEnabled ? `обложка: ${coverParts.join(" ")}` : `обложка/подложка: ${coverParts.join(" ")}`);
+    }
+    if (form.backingEnabled) {
+      const backingParts = [
+        formatPaperSelectionWithFinishForTZ(form.backingPaperType, form.backingDensity, form.backingPaperCustomName, form.backingFinish),
+        formatNotebookColorText(form.backingColor) || "без печати",
+        form.backingLamination.enabled ? getLaminationShort(form.backingLamination) : "",
+      ].filter(Boolean);
+      if (backingParts.length) parts.push(`подложка: ${backingParts.join(" ")}`);
+    }
   } else if (isCalendar(form.productType)) {
     parts.push(form.calendarKind.toLowerCase());
     if (form.calendarKind === "Настенный" && form.adBlocks) parts.push(`${form.adBlocks} рекл. блока`);
@@ -1745,17 +1754,23 @@ function generateTZ(form: FormData, _tzNumber: number): string {
   } else if (isNotebook(form.productType)) {
     lines.push(` Листов в блоке : ${form.blockPages || "—"}`);
     lines.push("");
-    lines.push(" ОБЛОЖКА");
+    lines.push(form.backingEnabled ? " ОБЛОЖКА" : " ОБЛОЖКА/ПОДЛОЖКА");
     if (form.coverUseKash) lines.push(" Обложка задаётся в блоке кашировки");
     else {
       lines.push(` Бумага : ${formatPaperSelectionWithFinishForTZ(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish) || "—"}`);
-      lines.push(` Цветность : ${normalizeColorMode(form.coverColor) || "—"}`);
+      lines.push(` Цветность : ${formatNotebookColorText(form.coverColor) || "—"}`);
       if (form.coverLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.coverLamination)}`);
     }
+    if (form.backingEnabled) {
+      lines.push("");
+      lines.push(" ПОДЛОЖКА");
+      lines.push(` Бумага : ${formatPaperSelectionWithFinishForTZ(form.backingPaperType, form.backingDensity, form.backingPaperCustomName, form.backingFinish) || "—"}`);
+      lines.push(` Цветность : ${formatNotebookColorText(form.backingColor) || "без печати"}`);
+      if (form.backingLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.backingLamination)}`);
+    }
+    lines.push("");
     lines.push(" БЛОК");
-    const coverSelection = { type: form.coverPaperType, value: form.coverDensity, customName: form.coverPaperCustomName, finish: form.coverFinish };
-    const blockSelection = { type: form.blockPaperType, value: form.blockDensity, customName: form.blockPaperCustomName, finish: form.blockFinish };
-    lines.push(` Бумага : ${isSamePaperSelection(coverSelection, blockSelection) ? "как у обложки" : (formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish) || "—")}`);
+    lines.push(` Бумага : ${formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish) || "—"}`);
     lines.push(` Цветность : ${normalizeColorMode(form.blockColor) || "—"}`);
     if (form.blockLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.blockLamination)}`);
   } else if (isCalendar(form.productType)) {
@@ -3948,6 +3963,7 @@ function LegacyApp() {
   const [showPresetSaveModal, setShowPresetSaveModal] = useState(false);
   const [showUpdateSummaryModal, setShowUpdateSummaryModal] = useState(false);
   const [sendState, setSendState] = useState<"idle" | "loading" | "done" | "error">("idle");
+  const [sendAutoSaveMsg, setSendAutoSaveMsg] = useState("");
   const [previewText, setPreviewText] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [cellBookingDraftCount, setCellBookingDraftCount] = useState("");
@@ -4219,28 +4235,20 @@ function LegacyApp() {
     window.setTimeout(() => setShowPreview(true), 0);
   }
 
-  async function handleSave() {
+  async function saveTzFile(targetForm: FormData) {
     const n = getTZNumber();
-    const text = generateTZ(form, n);
-    const orderTag = form.orderNumber.trim()
-      ? form.orderNumber.trim()
-      : (form.clientName.trim() || `TZ-${String(n).padStart(4, "0")}`);
+    const text = generateTZ(targetForm, n);
+    const orderTag = targetForm.orderNumber.trim()
+      ? targetForm.orderNumber.trim()
+      : (targetForm.clientName.trim() || `TZ-${String(n).padStart(4, "0")}`);
     const safeOrderTag = orderTag.replace(/[/:*?"<>|]/g, "_");
     const filename = `TZ-${safeOrderTag} от ${getCurrentDateTimeForFilename()}.txt`;
     const result = await (window as any).electronAPI?.saveTxt?.({
       text,
       filename,
-      preferredDir: form.fileLink,
+      preferredDir: targetForm.fileLink,
     });
-    if (!result?.success) {
-      setSavedMsg(result?.error ? `Ошибка сохранения: ${result.error}` : "Не удалось сохранить ТЗ");
-      setTimeout(() => setSavedMsg(null), 5000);
-      return;
-    }
-    await rememberClientIfNeeded();
-    setShowPreview(false);
-    setSavedMsg(result.autoSaved ? `Файл с ТЗ сохранён в папку заказа: ${result.filePath}` : `Файл с ТЗ сохранён: ${result.filePath || filename}`);
-    setTimeout(() => setSavedMsg(null), 4000);
+    return { ...result, filename };
   }
 
   function handleReset() {
@@ -4285,6 +4293,7 @@ function LegacyApp() {
 
   async function handleRealSend() {
     setSendState("loading");
+    setSendAutoSaveMsg("");
     try {
       const isAdsTab = activeTab === "ads";
       const result = await (window as any).electronAPI.sendToSheet(
@@ -4320,8 +4329,23 @@ function LegacyApp() {
           }));
           clearReservation();
         } else {
-          update("orderNumber", result.orderNumber);
+          const nextOrderNumber = result.orderNumber || form.orderNumber;
+          const nextForm = { ...form, orderNumber: nextOrderNumber };
+          update("orderNumber", nextOrderNumber);
           await rememberClientIfNeeded();
+          const saveResult = await saveTzFile(nextForm);
+          if (saveResult?.success) {
+            const saveText = saveResult.autoSaved
+              ? `ТЗ автоматически сохранено в папку заказа: ${saveResult.filePath}`
+              : `ТЗ автоматически сохранено: ${saveResult.filePath || saveResult.filename}`;
+            setSavedMsg(saveText);
+            setSendAutoSaveMsg(saveText);
+          } else {
+            const errorText = saveResult?.error ? `Заявка отправлена, но ТЗ не сохранилось: ${saveResult.error}` : "Заявка отправлена, но ТЗ не сохранилось";
+            setSavedMsg(errorText);
+            setSendAutoSaveMsg(errorText);
+          }
+          setTimeout(() => setSavedMsg(null), 5000);
           update("cellBooking", "");
           clearReservation();
         }
@@ -4329,9 +4353,11 @@ function LegacyApp() {
       } else {
         console.error(result.error);
         setSendState("error");
+        setSendAutoSaveMsg("");
       }
     } catch (e) {
       setSendState("error");
+      setSendAutoSaveMsg("");
     }
   }
 
@@ -4825,6 +4851,55 @@ function LegacyApp() {
                         <LaminationBlockComponent label="Ламинация обложки" value={form.coverLamination} onChange={(v: any) => update("coverLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
                       </div>
                       {form.coverUseKash && <p className="text-xs text-slate-500">Бумага, цветность и ламинация обложки задаются в блоке кашировки.</p>}
+                      {notebook && (
+                        <div className="pt-2 border-t border-blue-100 space-y-3">
+                          <div>
+                            <h4 className="text-sm font-semibold text-blue-700">Подложка</h4>
+                            <p className="text-xs text-slate-500 mt-1">Выбирать только если подложка отличается от обложки.</p>
+                          </div>
+                          <Field label="Подложка">
+                            <YesNo value={form.backingEnabled} onChange={(value) => update("backingEnabled", value)} />
+                          </Field>
+                          {form.backingEnabled && (
+                            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4 space-y-3">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div className="md:col-span-2">
+                                  <PaperSelectionField
+                                    label="Бумага подложки"
+                                    typeValue={form.backingPaperType}
+                                    materialValue={form.backingDensity}
+                                    customValue={form.backingPaperCustomName}
+                                    library={dicts.paperLibrary}
+                                    productType={form.productType}
+                                    onTypeChange={(value) => {
+                                      update("backingPaperType", value);
+                                      update("backingDensity", "");
+                                      update("backingPaperCustomName", "");
+                                    }}
+                                    onMaterialChange={(value) => update("backingDensity", value)}
+                                    onCustomChange={(value) => update("backingPaperCustomName", value)}
+                                    typeFieldName="backingPaperType"
+                                    materialFieldName="backingDensity"
+                                    customFieldName="backingPaperCustomName"
+                                    showValidation={showValidation}
+                                    invalidType={showValidation && required.includes("backingPaperType")}
+                                    invalidMaterial={showValidation && required.includes("backingDensity")}
+                                    invalidCustom={showValidation && required.includes("backingPaperCustomName")}
+                                  />
+                                </div>
+                                <PaperFinishField label="Поверхность подложки" value={form.backingFinish} options={paperFinishOptionsForSelection(form.backingPaperType, form.backingDensity)} onChange={(value) => update("backingFinish", value)} />
+                                <Field label="Цветность подложки">
+                                  <select value={form.backingColor} className={selectClass} onChange={(e) => update("backingColor", e.target.value)}>
+                                    <option value="">Без печати</option>
+                                    {dicts.colors.map((c) => <option key={c}>{c}</option>)}
+                                  </select>
+                                </Field>
+                              </div>
+                              <LaminationBlockComponent label="Ламинация подложки" value={form.backingLamination} onChange={(v: any) => update("backingLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 space-y-3">
                       <h3 className="text-sm font-semibold text-indigo-700 flex items-center gap-1.5"><UiIcon name="book" className="h-4 w-4" />Блок</h3>
@@ -5139,7 +5214,6 @@ function LegacyApp() {
             <div className="flex flex-wrap gap-3 pb-8">
               <button type="button" onClick={() => validateThen(handlePreview)} className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors shadow-sm"><UiIcon name="eye" className="h-4 w-4" /> Предпросмотр</button>
               <button type="button" onClick={() => validateThen(() => setShowSend(true))} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><UiIcon name="clipboard" className="h-4 w-4" /> Отправить в таблицу</button>
-              <button type="button" onClick={() => validateThen(handleSave)} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700 shadow-blue-200" : "bg-slate-200 text-slate-500 hover:bg-slate-300"}`}><UiIcon name="save" className="h-4 w-4" /> Сохранить ТЗ в TXT</button>
               <button type="button" onClick={openPresetSaveModal} className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold shadow transition-all bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200"><UiIcon name="save" className="h-4 w-4" /> Сохранить пресет</button>
               {savedMsg && <div className={`self-center rounded-xl border px-4 py-2 text-sm font-medium ${savedMsg.startsWith("Ошибка") ? "border-red-200 bg-red-50 text-red-700" : "border-green-200 bg-green-50 text-green-700"}`}>{savedMsg}</div>}
               {!isFormValid && <p className="text-xs text-slate-500 self-center">* Заполните обязательные поля</p>}
@@ -5374,7 +5448,6 @@ function LegacyApp() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
               <h2 className="font-semibold text-slate-800 flex items-center gap-2"><UiIcon name="eye" className="h-4 w-4" /> Предпросмотр ТЗ</h2>
               <div className="flex gap-2">
-                <button onClick={async () => { await handleSave(); }} disabled={!isFormValid} className={`flex items-center gap-2 text-sm px-4 py-1.5 rounded-lg font-medium transition-colors ${isFormValid ? "bg-blue-600 text-white hover:bg-blue-700" : "bg-slate-200 text-slate-400 cursor-not-allowed"}`}><UiIcon name="save" className="h-4 w-4" />Сохранить TXT</button>
                 <button onClick={() => setShowPreview(false)} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 transition-colors"><UiIcon name="close" className="h-4 w-4" /></button>
               </div>
             </div>
@@ -5385,7 +5458,7 @@ function LegacyApp() {
 
       {/* МОДАЛКА ОТПРАВКИ */}
       {showSend && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { if(sendState === "idle" || sendState === "done" || sendState === "error") setShowSend(false); }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { if(sendState === "idle" || sendState === "done" || sendState === "error") { setSendAutoSaveMsg(""); setShowSend(false); } }}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 z-10 p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-semibold text-slate-800 text-lg mb-4 flex items-center gap-2"><UiIcon name="clipboard" className="h-5 w-5" /> Отправить в таблицу</h2>
@@ -5451,7 +5524,8 @@ function LegacyApp() {
               <div className="flex flex-col items-center py-8 gap-4">
                 <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center"><UiIcon name="check" className="h-7 w-7 text-emerald-600" /></div>
                 <p className="text-sm text-emerald-700 font-semibold">Данные успешно отправлены!</p>
-                <button onClick={() => { setSendState("idle"); setShowSend(false); }} className="px-6 py-2 w-full rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Отлично</button>
+                {sendAutoSaveMsg && <p className="text-xs text-slate-500 text-center leading-5 px-2">{sendAutoSaveMsg}</p>}
+                <button onClick={() => { setSendState("idle"); setSendAutoSaveMsg(""); setShowSend(false); }} className="px-6 py-2 w-full rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Отлично</button>
               </div>
             )}
 
@@ -5648,6 +5722,12 @@ function getRequiredFields(form: FormData): string[] {
       }
     }
     if (!form.coverUseKash && !form.coverColor && !isPaperlessPaperType(form.coverPaperType)) errors.push("coverColor");
+    if (isNotebook(form.productType) && form.backingEnabled) {
+      if (!form.backingPaperType) errors.push("backingPaperType");
+      else if (form.backingPaperType === "Дизайнерская" ? !form.backingPaperCustomName.trim() : requiresPaperDensity(form.backingPaperType) && !form.backingDensity.trim()) {
+        errors.push(form.backingPaperType === "Дизайнерская" ? "backingPaperCustomName" : "backingDensity");
+      }
+    }
     if (!form.blockPaperType) errors.push("blockPaperType");
     else if (form.blockPaperType === "Дизайнерская" ? !form.blockPaperCustomName.trim() : requiresPaperDensity(form.blockPaperType) && !form.blockDensity.trim()) {
       errors.push(form.blockPaperType === "Дизайнерская" ? "blockPaperCustomName" : "blockDensity");
@@ -5769,6 +5849,10 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   coverPaperType: "Тип бумаги обложки",
   coverPaperCustomName: "Название дизайнерской бумаги обложки",
   coverColor: "Цветность обложки",
+  backingPaperType: "Тип бумаги подложки",
+  backingDensity: "Плотность бумаги подложки",
+  backingPaperCustomName: "Название дизайнерской бумаги подложки",
+  backingColor: "Цветность подложки",
   blockDensity: "Плотность бумаги блока",
   blockPaperType: "Тип бумаги блока",
   blockPaperCustomName: "Название дизайнерской бумаги блока",
