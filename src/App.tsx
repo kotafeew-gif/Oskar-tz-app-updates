@@ -355,9 +355,9 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Убрана кнопка сохранения текстового ТЗ в папку с заказом. (Файл теперь автоматически сохраняется при публикации заявки)",
-  "В блокноты добавлена возможность выбора материалов отдельно для подложки.",
-  "Прочие Исправления и доработки.",
+  "Добавлен выбор ручек из ленты в пакетах.",
+  "В сохраненных пресетах теперь есть быстрый поиск.",
+  "Прочие исправления.",
 ];
 
 function loadList(key: string, defaults: string[]): string[] {
