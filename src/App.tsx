@@ -106,6 +106,8 @@ const SPRING_DIAMETERS = [
 const DRILL_DIAMETERS = ["2 мм", "3 мм", "4 мм", "5 мм", "6 мм", "8 мм", "10 мм", "12 мм"];
 const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голубой", "3в1 (серый)"];
 const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
+const BAG_HANDLE_TYPES = ["Верёвка", "Лента"];
+const CAT_IMAGE_SRC = `${import.meta.env.BASE_URL}Cat.png`;
 const STICKER_MATERIALS = [
   "Самоклеящаяся бумага без просечки",
   "Самоклеящаяся бумага с просечкой",
@@ -825,6 +827,7 @@ interface FormData {
   badgeHoleType: string;
   badgeHoleDiameter: string;
   badgeHoleCount: string;
+  bagHandleType: string;
   fileLink: string; notes: string;
 }
 
@@ -904,7 +907,7 @@ function createDefaultForm(): FormData {
     lamination: defaultLaminationBlock(), kashurovka: defaultKashurovkaBlock(),
     binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springDiameter: "8 мм", springPosition: "По широкой стороне", springHidden: false,
     subcontractWorks: [],
-    bagPaperType: "", bagHeight: "", bagWidth: "", bagDepth: "", bagPartsCount: "Из 2-х частей", bagExternalSheets: false, bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleColor: "Белый", bagHandleColorCustom: "", bagHandlePipsik: "Без пипсика",
+    bagPaperType: "", bagHeight: "", bagWidth: "", bagDepth: "", bagPartsCount: "Из 2-х частей", bagExternalSheets: false, bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleType: "Верёвка", bagHandleColor: "Белый", bagHandleColorCustom: "", bagHandlePipsik: "Без пипсика",
     stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false, stickerPacks: false,
     ownReverse: false,
     wobblerPlotterCut: false, wobblerFootGlue: false,
@@ -1433,6 +1436,9 @@ function getBagColor(value: string, custom: string): string {
 
 function getBagHandleText(form: FormData): string {
   const color = getBagColor(form.bagHandleColor, form.bagHandleColorCustom);
+  if (form.bagHandleType === "Лента") {
+    return color ? `лента, ${color}` : "лента";
+  }
   const pipsik = form.bagHandlePipsik.trim().toLowerCase();
   if (!color) return pipsik;
   return pipsik ? `${color}, ${pipsik}` : color;
@@ -1614,8 +1620,10 @@ function generateShortTZ(form: FormData): string {
     }
     if (form.bagPartsCount) parts.push(form.bagPartsCount.toLowerCase());
     if (form.bagExternalSheets) parts.push("сборка из сторонних листов");
-    const eyeletColor = getBagColor(form.bagEyeletColor, form.bagEyeletColorCustom);
-    if (eyeletColor) parts.push(`люверсы: ${eyeletColor.toLowerCase()}`);
+    if (form.bagHandleType !== "Лента") {
+      const eyeletColor = getBagColor(form.bagEyeletColor, form.bagEyeletColorCustom);
+      if (eyeletColor) parts.push(`люверсы: ${eyeletColor.toLowerCase()}`);
+    }
     const handleText = getBagHandleText(form);
     if (handleText) parts.push(`ручки: ${handleText.toLowerCase()}`);
   } else if (isSticker(form.productType)) {
@@ -1815,7 +1823,9 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     lines.push(` Размер Ш×В×Г : ${size || "—"}`);
     lines.push(` Количество частей : ${form.bagPartsCount || "—"}`);
     if (form.bagExternalSheets) lines.push(" Сборка из сторонних листов : Да");
-    lines.push(` Цвет люверсов : ${getBagColor(form.bagEyeletColor, form.bagEyeletColorCustom) || "—"}`);
+    if (form.bagHandleType !== "Лента") {
+      lines.push(` Цвет люверсов : ${getBagColor(form.bagEyeletColor, form.bagEyeletColorCustom) || "—"}`);
+    }
     lines.push(` Цвет ручек : ${getBagHandleText(form) || "—"}`);
   } else if (isSticker(form.productType)) {
     lines.push(` Материал : ${formatMaterialWithFinish(form.stickerMaterial, form.stickerFinish) || "—"}`);
@@ -3798,6 +3808,7 @@ function LegacyApp() {
         .flat()
         .find((preset: PresetEntry) => preset.name.toLowerCase() === presetName.toLowerCase());
       setSelectedPresetId(savedPreset?.id || "");
+      setPresetSearchDraft(savedPreset?.name || presetName);
       setPresetNameDraft("");
       setPresetMsg(`Пресет "${presetName}" сохранён.`);
       setPresetSaveStatus("success");
@@ -3878,6 +3889,7 @@ function LegacyApp() {
 
     const preset = availablePresets.find((item) => item.id === presetId);
     if (!preset) return;
+    setPresetSearchDraft(preset.name);
 
     setForm((prev) => ({
       ...mergePresetIntoForm(createDefaultForm(), preset.data),
@@ -3968,6 +3980,7 @@ function LegacyApp() {
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [cellBookingDraftCount, setCellBookingDraftCount] = useState("");
   const [presetNameDraft, setPresetNameDraft] = useState("");
+  const [presetSearchDraft, setPresetSearchDraft] = useState("");
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const [presetSaveStatus, setPresetSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [reservedAssignment, setReservedAssignment] = useState<ReservedAssignment | null>(null);
@@ -4042,8 +4055,9 @@ function LegacyApp() {
     setShowCellBookingModal(false);
   }
 
-  const availablePresets = Object.values(presetStore.byManager || {}).flat();
-  const selectedPreset = availablePresets.find((preset) => preset.id === selectedPresetId) || null;
+  const availablePresets = Object.entries(presetStore.byManager || {}).flatMap(([managerName, presets]) =>
+    presets.map((preset) => ({ ...preset, managerName }))
+  );
 
   useEffect(() => {
     if (!selectedPresetId) return;
@@ -4267,6 +4281,7 @@ function LegacyApp() {
     setSavedMsg(null);
     setPresetMsg(null);
     setSelectedPresetId("");
+    setPresetSearchDraft("");
     setShowResetConfirm(false);
   }
 
@@ -4421,18 +4436,35 @@ function LegacyApp() {
             <div className="w-full lg:flex-1 bg-white rounded-xl px-3 py-2.5 shadow-sm border border-slate-200 min-w-0">
               <div className="flex items-center gap-3 w-full">
                 <label className="text-xs font-medium text-slate-600 uppercase tracking-wide whitespace-nowrap">Пресет</label>
-                <select
-                  value={selectedPresetId}
-                  className={`${selectFieldClass(false)} min-w-0 flex-1 w-full`}
-                  onChange={(e) => applyPreset(e.target.value)}
-                  disabled={availablePresets.length === 0}
-                >
-                  <option value="">{availablePresets.length > 0 ? "— выберите пресет —" : "Пока нет сохранённых пресетов"}</option>
-                  {availablePresets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>{preset.name}</option>
-                  ))}
-                </select>
+                <div className="min-w-0 flex-1 w-full">
+                  <input
+                    value={presetSearchDraft}
+                    list="presetSuggestions"
+                    autoComplete="off"
+                    className={`${inputClass} min-w-0 w-full`}
+                    placeholder={availablePresets.length > 0 ? "Начните вводить название пресета" : "Пока нет сохранённых пресетов"}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setPresetSearchDraft(nextValue);
+                      const trimmed = nextValue.trim().toLowerCase();
+                      if (!trimmed) {
+                        setSelectedPresetId("");
+                        return;
+                      }
+                      const exactPreset = availablePresets.find((preset) => preset.name.trim().toLowerCase() === trimmed);
+                      if (exactPreset) applyPreset(exactPreset.id);
+                      else setSelectedPresetId("");
+                    }}
+                    disabled={availablePresets.length === 0}
+                  />
+                  <datalist id="presetSuggestions">
+                    {availablePresets.map((preset) => (
+                      <option key={preset.id} value={preset.name} label={preset.managerName ? `${preset.name} · ${preset.managerName}` : preset.name} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
+              <p className="mt-1 text-[11px] text-slate-400">Подсказки фильтруются автоматически по введённым буквам.</p>
             </div>
           )}
         </div>
@@ -5075,17 +5107,28 @@ function LegacyApp() {
                         <option value="Из 4-х частей">Из 4-х частей</option>
                       </select>
                     </Field>
+                    <Field label="Тип ручек">
+                      <select value={form.bagHandleType} className={selectClass} onChange={(e) => update("bagHandleType", e.target.value)}>
+                        {BAG_HANDLE_TYPES.map((item) => <option key={item}>{item}</option>)}
+                      </select>
+                    </Field>
                     <Field label="Сборка из сторонних листов">
                       <YesNo value={form.bagExternalSheets} onChange={(v) => update("bagExternalSheets", v)} />
                     </Field>
-                    <Field label="Цвет люверсов"><select value={form.bagEyeletColor} className={selectClass} onChange={(e) => update("bagEyeletColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagEyeletColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagEyeletColorCustom} onChange={(e) => update("bagEyeletColorCustom", e.target.value)} />}</Field>
-                    <Field label="Цвет ручек"><select value={form.bagHandleColor} className={selectClass} onChange={(e) => update("bagHandleColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagHandleColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagHandleColorCustom} onChange={(e) => update("bagHandleColorCustom", e.target.value)} />}</Field>
-                    <Field label="Пипсик на ручках" required>
-                      <select value={form.bagHandlePipsik} className={selectFieldClass(showValidation && required.includes("bagHandlePipsik"))} onChange={(e) => update("bagHandlePipsik", e.target.value)}>
-                        <option value="Без пипсика">Без пипсика</option>
-                        <option value="С пипсиком">С пипсиком</option>
-                      </select>
-                    </Field>
+                    {form.bagHandleType !== "Лента" ? (
+                      <>
+                        <Field label="Цвет люверсов"><select value={form.bagEyeletColor} className={selectClass} onChange={(e) => update("bagEyeletColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagEyeletColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagEyeletColorCustom} onChange={(e) => update("bagEyeletColorCustom", e.target.value)} />}</Field>
+                        <Field label="Цвет ручек"><select value={form.bagHandleColor} className={selectClass} onChange={(e) => update("bagHandleColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagHandleColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagHandleColorCustom} onChange={(e) => update("bagHandleColorCustom", e.target.value)} />}</Field>
+                        <Field label="Пипсик на ручках" required>
+                          <select value={form.bagHandlePipsik} className={selectFieldClass(showValidation && required.includes("bagHandlePipsik"))} onChange={(e) => update("bagHandlePipsik", e.target.value)}>
+                            <option value="Без пипсика">Без пипсика</option>
+                            <option value="С пипсиком">С пипсиком</option>
+                          </select>
+                        </Field>
+                      </>
+                    ) : (
+                      <Field label="Цвет ленты"><select value={form.bagHandleColor} className={selectClass} onChange={(e) => update("bagHandleColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagHandleColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagHandleColorCustom} onChange={(e) => update("bagHandleColorCustom", e.target.value)} />}</Field>
+                    )}
                   </div>
                 </div>
               )}
@@ -5460,7 +5503,7 @@ function LegacyApp() {
       {showSend && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { if(sendState === "idle" || sendState === "done" || sendState === "error") { setSendAutoSaveMsg(""); setShowSend(false); } }}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 z-10 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 z-10 p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-semibold text-slate-800 text-lg mb-4 flex items-center gap-2"><UiIcon name="clipboard" className="h-5 w-5" /> Отправить в таблицу</h2>
             
             {sendState === "idle" && (
@@ -5521,11 +5564,19 @@ function LegacyApp() {
             )}
 
             {sendState === "done" && (
-              <div className="flex flex-col items-center py-8 gap-4">
-                <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center"><UiIcon name="check" className="h-7 w-7 text-emerald-600" /></div>
-                <p className="text-sm text-emerald-700 font-semibold">Данные успешно отправлены!</p>
-                {sendAutoSaveMsg && <p className="text-xs text-slate-500 text-center leading-5 px-2">{sendAutoSaveMsg}</p>}
-                <button onClick={() => { setSendState("idle"); setSendAutoSaveMsg(""); setShowSend(false); }} className="px-6 py-2 w-full rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Отлично</button>
+              <div className="flex flex-col items-center py-8 gap-5">
+                <div className="w-full max-w-md overflow-hidden rounded-[2rem] border border-emerald-100 bg-emerald-50 shadow-lg">
+                  <div className="aspect-square w-full">
+                    <img
+                      src={CAT_IMAGE_SRC}
+                      alt="Кот"
+                      className="h-full w-full object-contain p-4"
+                    />
+                  </div>
+                </div>
+                <p className="text-sm text-emerald-700 font-semibold text-center">Данные успешно отправлены!</p>
+                {sendAutoSaveMsg && <p className="text-xs text-slate-500 text-center leading-5 px-2 max-w-md">{sendAutoSaveMsg}</p>}
+                <button onClick={() => { setSendState("idle"); setSendAutoSaveMsg(""); setShowSend(false); }} className="px-6 py-2 w-full max-w-sm rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Отлично</button>
               </div>
             )}
 
@@ -5753,7 +5804,7 @@ function getRequiredFields(form: FormData): string[] {
       if (templateColorRequired && !form.colorMode) errors.push("colorMode");
     }
     if (!form.bagPartsCount) errors.push("bagPartsCount");
-    if (!form.bagHandlePipsik) errors.push("bagHandlePipsik");
+    if (form.bagHandleType !== "Лента" && !form.bagHandlePipsik) errors.push("bagHandlePipsik");
     if (templateSizeRequired) {
       if (!form.bagHeight) errors.push("bagHeight");
       if (!form.bagWidth) errors.push("bagWidth");
