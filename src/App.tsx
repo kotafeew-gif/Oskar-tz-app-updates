@@ -107,7 +107,8 @@ const DRILL_DIAMETERS = ["2 мм", "3 мм", "4 мм", "5 мм", "6 мм", "8 м
 const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голубой", "3в1 (серый)"];
 const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
 const BAG_HANDLE_TYPES = ["Верёвка", "Лента"];
-const CAT_IMAGE_SRC = `${import.meta.env.BASE_URL}Cat.png`;
+const SUCCESS_IMAGE_NAMES = ["Cat.png", "1.png", "2.png", "3.png", "4.png", "5.png", "6.png", "7.png", "8.png"];
+const SUCCESS_IMAGE_SRCS = SUCCESS_IMAGE_NAMES.map((name) => `${import.meta.env.BASE_URL}${name}`);
 const STICKER_MATERIALS = [
   "Самоклеящаяся бумага без просечки",
   "Самоклеящаяся бумага с просечкой",
@@ -251,7 +252,7 @@ const DEFAULT_PRODUCT_TEMPLATE_FLAGS: Record<ProductLayoutKind, ProductTemplateF
   notebook: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
   envelope: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
   bag: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
-  sticker: { showSize: true, showPaper: true, showColor: true, showLamination: false, showPostProcessing: true },
+  sticker: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
   wobbler: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
   badge: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
 };
@@ -355,10 +356,17 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Добавлен выбор ручек из ленты в пакетах.",
-  "В сохраненных пресетах теперь есть быстрый поиск.",
-  "Прочие исправления.",
+  "Исправление отображения блока для блокнотов в таблице",
+  "Поправлена возможность ручной правки диаметра пружины",
+  "Добавление ламинации в наклейки.",
+  "Прочие исправления и доработки.",
 ];
+
+function getRandomSuccessImageSrc(previousSrc = ""): string {
+  if (SUCCESS_IMAGE_SRCS.length <= 1) return SUCCESS_IMAGE_SRCS[0] || "";
+  const pool = SUCCESS_IMAGE_SRCS.filter((src) => src !== previousSrc);
+  return pool[Math.floor(Math.random() * pool.length)] || SUCCESS_IMAGE_SRCS[0] || "";
+}
 
 function loadList(key: string, defaults: string[]): string[] {
   try {
@@ -636,6 +644,19 @@ function createProductTemplateConfig(kind: ProductLayoutKind, base?: Partial<Pro
   };
 }
 
+function applyProductTemplateMigrations(name: string, template: ProductTemplateConfig): ProductTemplateConfig {
+  if (normalizeTemplateName(name) === "Наклейки" && template.kind === "sticker" && !template.flags.showLamination) {
+    return {
+      ...template,
+      flags: {
+        ...template.flags,
+        showLamination: true,
+      },
+    };
+  }
+  return template;
+}
+
 function syncProductTemplatesToTypes(templates: ProductTemplateStore, productTypes: string[]): ProductTemplateStore {
   const next: ProductTemplateStore = {};
   const types = new Set(productTypes.map((name) => normalizeTemplateName(name)).filter(Boolean));
@@ -643,12 +664,15 @@ function syncProductTemplatesToTypes(templates: ProductTemplateStore, productTyp
   productTypes.forEach((name) => {
     const cleanName = normalizeTemplateName(name);
     if (!cleanName) return;
-    next[cleanName] = createProductTemplateConfig(DEFAULT_PRODUCT_TEMPLATE_KINDS[cleanName] || templates[cleanName]?.kind || "standard", templates[cleanName]);
+    next[cleanName] = applyProductTemplateMigrations(
+      cleanName,
+      createProductTemplateConfig(DEFAULT_PRODUCT_TEMPLATE_KINDS[cleanName] || templates[cleanName]?.kind || "standard", templates[cleanName]),
+    );
   });
 
   Object.keys(templates).forEach((name) => {
     if (!types.has(name)) return;
-    if (!next[name]) next[name] = createProductTemplateConfig(templates[name].kind, templates[name]);
+    if (!next[name]) next[name] = applyProductTemplateMigrations(name, createProductTemplateConfig(templates[name].kind, templates[name]));
   });
 
   return next;
@@ -1588,6 +1612,12 @@ function generateShortTZ(form: FormData): string {
       ].filter(Boolean);
       if (backingParts.length) parts.push(`подложка: ${backingParts.join(" ")}`);
     }
+    const blockParts = [
+      formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish),
+      normalizeColorMode(form.blockColor),
+      form.blockLamination.enabled ? getLaminationShort(form.blockLamination) : "",
+    ].filter(Boolean);
+    if (blockParts.length) parts.push(`блок: ${blockParts.join(" ")}`);
   } else if (isCalendar(form.productType)) {
     parts.push(form.calendarKind.toLowerCase());
     if (form.calendarKind === "Настенный" && form.adBlocks) parts.push(`${form.adBlocks} рекл. блока`);
@@ -3976,12 +4006,14 @@ function LegacyApp() {
   const [showUpdateSummaryModal, setShowUpdateSummaryModal] = useState(false);
   const [sendState, setSendState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [sendAutoSaveMsg, setSendAutoSaveMsg] = useState("");
+  const [sendSuccessImageSrc, setSendSuccessImageSrc] = useState(() => getRandomSuccessImageSrc());
   const [previewText, setPreviewText] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [cellBookingDraftCount, setCellBookingDraftCount] = useState("");
   const [presetNameDraft, setPresetNameDraft] = useState("");
   const [presetSearchDraft, setPresetSearchDraft] = useState("");
   const [selectedPresetId, setSelectedPresetId] = useState("");
+  const springDiameterManuallyEditedRef = useRef(false);
   const [presetSaveStatus, setPresetSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [reservedAssignment, setReservedAssignment] = useState<ReservedAssignment | null>(null);
   const [reserveState, setReserveState] = useState<"idle" | "saving" | "success" | "error">("idle");
@@ -4152,10 +4184,10 @@ function LegacyApp() {
 
   useEffect(() => {
     const suggestion = buildSpringSuggestion(form);
-    if (suggestion && form.bindingType === "Пружина" && form.springDiameter !== suggestion.diameter) {
+    if (suggestion && form.bindingType === "Пружина" && !springDiameterManuallyEditedRef.current && form.springDiameter !== suggestion.diameter) {
       setForm((prev) => ({ ...prev, springDiameter: suggestion.diameter }));
     }
-  }, [form.productType, form.bindingType, form.pageCount, form.blockPages, form.density, form.densityFinish, form.blockDensity, form.blockFinish, form.coverDensity, form.coverFinish, form.coverUseKash, form.kashurovka.linerType, form.kashurovka.linerFinish, form.springDiameter]);
+  }, [form.productType, form.bindingType, form.pageCount, form.blockPages, form.density, form.densityFinish, form.blockDensity, form.blockFinish, form.coverDensity, form.coverFinish, form.coverUseKash, form.kashurovka.linerType, form.kashurovka.linerFinish]);
 
   useEffect(() => {
     const next: Partial<FormData> = {};
@@ -4278,6 +4310,7 @@ function LegacyApp() {
       setShowValidation(false);
       clearReservation();
     }
+    springDiameterManuallyEditedRef.current = false;
     setSavedMsg(null);
     setPresetMsg(null);
     setSelectedPresetId("");
@@ -4364,6 +4397,7 @@ function LegacyApp() {
           update("cellBooking", "");
           clearReservation();
         }
+        setSendSuccessImageSrc((prev) => getRandomSuccessImageSrc(prev));
         setSendState("done");
       } else {
         console.error(result.error);
@@ -5223,7 +5257,7 @@ function LegacyApp() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <Field label="Цвет пружины"><select value={form.springColor} className={selectClass} onChange={(e) => update("springColor", e.target.value)}><option value="">— выберите —</option>{SPRING_COLORS.map((c) => <option key={c}>{c}</option>)}</select>{form.springColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} placeholder="Укажите цвет" value={form.springColorCustom} onChange={(e) => update("springColorCustom", e.target.value)} />}</Field>
                           <Field label="Диаметр пружины">
-                            <select value={form.springDiameter} className={selectClass} onChange={(e) => update("springDiameter", e.target.value)}><option value="">— выберите —</option>{SPRING_DIAMETERS.map((d) => <option key={d}>{d}</option>)}</select>
+                            <select value={form.springDiameter} className={selectClass} onChange={(e) => { springDiameterManuallyEditedRef.current = true; update("springDiameter", e.target.value); }}><option value="">— выберите —</option>{SPRING_DIAMETERS.map((d) => <option key={d}>{d}</option>)}</select>
                             {springSuggestion && <p className="text-xs text-slate-500 mt-1">Диаметр подбирается автоматически по толщине блока и обложки, но его можно скорректировать вручную.</p>}
                             {springDiameterIsCustomOrder && <p className="text-xs font-semibold text-amber-700 mt-1">Внимание, пружина ЗАКАЗНАЯ, перфорация 2:1</p>}
                           </Field>
@@ -5568,8 +5602,8 @@ function LegacyApp() {
                 <div className="w-full max-w-md overflow-hidden rounded-[2rem] border border-emerald-100 bg-emerald-50 shadow-lg">
                   <div className="aspect-square w-full">
                     <img
-                      src={CAT_IMAGE_SRC}
-                      alt="Кот"
+                      src={sendSuccessImageSrc}
+                      alt="Случайная картинка успеха"
                       className="h-full w-full object-contain p-4"
                     />
                   </div>
