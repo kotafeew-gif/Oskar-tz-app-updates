@@ -87,6 +87,15 @@ const DEFAULT_POST_PROCESSING = [
   "Сортировка/упаковка",
 ];
 
+const NOTEBOOK_COMPOSITION_PART_TYPES = [
+  "Подложка",
+  "Листы блока",
+  "Вкладыш",
+  "Разделитель",
+  "Фотостраница",
+  "Другое",
+] as const;
+
 const DEFAULT_BINDING_TYPES = [
   "Скоба", "Термобиндер", "PUR-клей", "Пружина",
 ];
@@ -107,8 +116,16 @@ const DRILL_DIAMETERS = ["2 мм", "3 мм", "4 мм", "5 мм", "6 мм", "8 м
 const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голубой", "3в1 (серый)"];
 const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
 const BAG_HANDLE_TYPES = ["Верёвка", "Лента"];
+// Картинки успеха: "обычные" с весом 1 и "редкие" с меньшим весом (Exclusive — 1 к 20).
 const SUCCESS_IMAGE_NAMES = ["Cat.png", "1.png", "2.png", "3.png", "4.png", "5.png", "6.png", "7.png", "8.png"];
-const SUCCESS_IMAGE_SRCS = SUCCESS_IMAGE_NAMES.map((name) => `${import.meta.env.BASE_URL}${name}`);
+const RARE_SUCCESS_IMAGE_NAMES = ["Exclusive.png"];
+const SUCCESS_IMAGE_WEIGHTS: Record<string, number> = (() => {
+  const map: Record<string, number> = {};
+  SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = 1; });
+  RARE_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = 0.1; });
+  return map;
+})();
+const SUCCESS_IMAGE_SRCS = [...SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => `${import.meta.env.BASE_URL}${name}`);
 const STICKER_MATERIALS = [
   "Самоклеящаяся бумага без просечки",
   "Самоклеящаяся бумага с просечкой",
@@ -356,16 +373,27 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Исправление отображения блока для блокнотов в таблице",
-  "Поправлена возможность ручной правки диаметра пружины",
-  "Добавление ламинации в наклейки.",
+  "В составном блокноте убран тип «Обложка верхняя» — нижняя обложка теперь описывается как «Подложка».",
+  "Количество в составном блокноте показывается только для листов и вкладышей.",
+  "Переключатель «Составной блокнот» перенесён в начало секции блокнота.",
   "Прочие исправления и доработки.",
 ];
 
 function getRandomSuccessImageSrc(previousSrc = ""): string {
-  if (SUCCESS_IMAGE_SRCS.length <= 1) return SUCCESS_IMAGE_SRCS[0] || "";
+  if (SUCCESS_IMAGE_SRCS.length === 0) return "";
+  if (SUCCESS_IMAGE_SRCS.length === 1) return SUCCESS_IMAGE_SRCS[0];
+
   const pool = SUCCESS_IMAGE_SRCS.filter((src) => src !== previousSrc);
-  return pool[Math.floor(Math.random() * pool.length)] || SUCCESS_IMAGE_SRCS[0] || "";
+  if (pool.length === 0) return SUCCESS_IMAGE_SRCS[0];
+
+  const totalWeight = pool.reduce((sum, src) => sum + (SUCCESS_IMAGE_WEIGHTS[src.split("/").pop() || ""] ?? 1), 0);
+  let pick = Math.random() * totalWeight;
+  for (const src of pool) {
+    const weight = SUCCESS_IMAGE_WEIGHTS[src.split("/").pop() || ""] ?? 1;
+    if (pick < weight) return src;
+    pick -= weight;
+  }
+  return pool[pool.length - 1];
 }
 
 function loadList(key: string, defaults: string[]): string[] {
@@ -843,6 +871,7 @@ interface FormData {
   lamination: LaminationBlock; kashurovka: KashurovkaBlock;
   binding: boolean; bindingType: string; stapleCount: string; staplePosition: string; springColor: string; springColorCustom: string; springDiameter: string; springPosition: string; springHidden: boolean;
   subcontractWorks: SubcontractWork[];
+  notebookCompositionEnabled: boolean; notebookParts: NotebookPart[];
   bagPaperType: BagPaperTypeOption | ""; bagHeight: string; bagWidth: string; bagDepth: string; bagPartsCount: string; bagExternalSheets: boolean; bagEyeletColor: string; bagEyeletColorCustom: string; bagHandleColor: string; bagHandleColorCustom: string; bagHandlePipsik: string;
   stickerMaterial: string; stickerFinish: PaperFinish; stickerPlotterCut: boolean; stickerPacks: boolean;
   ownReverse: boolean;
@@ -880,6 +909,19 @@ interface SubcontractWork {
   time: string;
 }
 
+interface NotebookPart {
+  id: string;
+  type: string;
+  quantity: string;
+  paperType: PaperTypeOption | "";
+  paperCustomName: string;
+  density: string;
+  finish: PaperFinish;
+  color: string;
+  lamination: LaminationBlock;
+  note: string;
+}
+
 interface ClientStore {
   byManager: Record<string, string[]>;
 }
@@ -902,6 +944,21 @@ function createSubcontractWork(): SubcontractWork {
     note: "",
     date: "",
     time: "",
+  };
+}
+
+function createNotebookPart(): NotebookPart {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    type: "Листы блока",
+    quantity: "",
+    paperType: "",
+    paperCustomName: "",
+    density: "",
+    finish: "Матовая",
+    color: "Без печати",
+    lamination: defaultLaminationBlock(),
+    note: "",
   };
 }
 
@@ -930,7 +987,7 @@ function createDefaultForm(): FormData {
     postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1", drillingDiameter: "", falcovka: false,
     lamination: defaultLaminationBlock(), kashurovka: defaultKashurovkaBlock(),
     binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springDiameter: "8 мм", springPosition: "По широкой стороне", springHidden: false,
-    subcontractWorks: [],
+    subcontractWorks: [], notebookCompositionEnabled: false, notebookParts: [],
     bagPaperType: "", bagHeight: "", bagWidth: "", bagDepth: "", bagPartsCount: "Из 2-х частей", bagExternalSheets: false, bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleType: "Верёвка", bagHandleColor: "Белый", bagHandleColorCustom: "", bagHandlePipsik: "Без пипсика",
     stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false, stickerPacks: false,
     ownReverse: false,
@@ -1569,6 +1626,17 @@ function getDisplaySize(form: FormData): string {
   return "";
 }
 
+function formatNotebookPartForTZ(part: NotebookPart): string {
+  const details = [
+    formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish),
+    formatNotebookColorText(part.color),
+    part.lamination.enabled ? getLaminationShort(part.lamination) : "",
+    part.note.trim(),
+  ].filter(Boolean);
+  const quantity = part.quantity ? `${part.quantity} шт.` : "";
+  return [part.type || "Часть", quantity, details.join(", ")].filter(Boolean).join(" — ");
+}
+
 function generateShortTZ(form: FormData): string {
   const parts: string[] = [];
   const product = formatProductNameForTZ(form, true);
@@ -1595,29 +1663,37 @@ function generateShortTZ(form: FormData): string {
     if (covParts.length) parts.push(samePaper ? covParts.join(" ") : `обложка: ${covParts.join(" ")}`);
     if (blkParts.length) parts.push(samePaper ? blkParts.join(" ") : `блок: ${blkParts.join(" ")}`);
   } else if (isNotebook(form.productType)) {
-    if (form.blockPages) parts.push(`${form.blockPages} листов в блоке`);
-    const coverParts = [
-      formatPaperSelectionWithFinishForTZ(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish),
-      formatNotebookColorText(form.coverColor),
-      form.coverLamination.enabled ? getLaminationShort(form.coverLamination) : "",
-    ].filter(Boolean);
-    if (coverParts.length) {
-      parts.push(form.backingEnabled ? `обложка: ${coverParts.join(" ")}` : `обложка/подложка: ${coverParts.join(" ")}`);
+    if (form.notebookCompositionEnabled) {
+      parts.push("составной");
+      const composition = form.notebookParts.map(formatNotebookPartForTZ).filter(Boolean);
+      if (composition.length) parts.push(composition.join("; "));
+    } else if (form.blockPages) {
+      parts.push(`${form.blockPages} листов в блоке`);
     }
-    if (form.backingEnabled) {
-      const backingParts = [
-        formatPaperSelectionWithFinishForTZ(form.backingPaperType, form.backingDensity, form.backingPaperCustomName, form.backingFinish),
-        formatNotebookColorText(form.backingColor) || "без печати",
-        form.backingLamination.enabled ? getLaminationShort(form.backingLamination) : "",
+    if (!form.notebookCompositionEnabled) {
+      const coverParts = [
+        formatPaperSelectionWithFinishForTZ(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish),
+        formatNotebookColorText(form.coverColor),
+        form.coverLamination.enabled ? getLaminationShort(form.coverLamination) : "",
       ].filter(Boolean);
-      if (backingParts.length) parts.push(`подложка: ${backingParts.join(" ")}`);
+      if (coverParts.length) {
+        parts.push(form.backingEnabled ? `обложка: ${coverParts.join(" ")}` : `обложка/подложка: ${coverParts.join(" ")}`);
+      }
+      if (form.backingEnabled) {
+        const backingParts = [
+          formatPaperSelectionWithFinishForTZ(form.backingPaperType, form.backingDensity, form.backingPaperCustomName, form.backingFinish),
+          formatNotebookColorText(form.backingColor) || "без печати",
+          form.backingLamination.enabled ? getLaminationShort(form.backingLamination) : "",
+        ].filter(Boolean);
+        if (backingParts.length) parts.push(`подложка: ${backingParts.join(" ")}`);
+      }
+      const blockParts = [
+        formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish),
+        normalizeColorMode(form.blockColor),
+        form.blockLamination.enabled ? getLaminationShort(form.blockLamination) : "",
+      ].filter(Boolean);
+      if (blockParts.length) parts.push(`блок: ${blockParts.join(" ")}`);
     }
-    const blockParts = [
-      formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish),
-      normalizeColorMode(form.blockColor),
-      form.blockLamination.enabled ? getLaminationShort(form.blockLamination) : "",
-    ].filter(Boolean);
-    if (blockParts.length) parts.push(`блок: ${blockParts.join(" ")}`);
   } else if (isCalendar(form.productType)) {
     parts.push(form.calendarKind.toLowerCase());
     if (form.calendarKind === "Настенный" && form.adBlocks) parts.push(`${form.adBlocks} рекл. блока`);
@@ -1790,27 +1866,40 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     lines.push(` Цветность : ${normalizeColorMode(form.blockColor) || "—"}`);
     if (form.blockLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.blockLamination)}`);
   } else if (isNotebook(form.productType)) {
-    lines.push(` Листов в блоке : ${form.blockPages || "—"}`);
-    lines.push("");
-    lines.push(form.backingEnabled ? " ОБЛОЖКА" : " ОБЛОЖКА/ПОДЛОЖКА");
-    if (form.coverUseKash) lines.push(" Обложка задаётся в блоке кашировки");
-    else {
-      lines.push(` Бумага : ${formatPaperSelectionWithFinishForTZ(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish) || "—"}`);
-      lines.push(` Цветность : ${formatNotebookColorText(form.coverColor) || "—"}`);
-      if (form.coverLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.coverLamination)}`);
-    }
-    if (form.backingEnabled) {
+    if (form.notebookCompositionEnabled) {
+      lines.push(" СОСТАВ БЛОКНОТА");
+      lines.push(" -----------------");
+      if (form.notebookParts.length === 0) lines.push(" Части не добавлены");
+      form.notebookParts.forEach((part, index) => {
+        lines.push(` ${index + 1}. ${part.type || "Часть"}${part.quantity ? ` — ${part.quantity} шт.` : ""}`);
+        lines.push(`    Бумага : ${formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish) || "—"}`);
+        lines.push(`    Цветность : ${formatNotebookColorText(part.color) || "—"}`);
+        if (part.lamination.enabled) lines.push(`    Ламинация : ${formatLamination(part.lamination)}`);
+        if (part.note.trim()) lines.push(`    Примечание : ${part.note.trim()}`);
+      });
+    } else {
+      lines.push(` Листов в блоке : ${form.blockPages || "—"}`);
       lines.push("");
-      lines.push(" ПОДЛОЖКА");
-      lines.push(` Бумага : ${formatPaperSelectionWithFinishForTZ(form.backingPaperType, form.backingDensity, form.backingPaperCustomName, form.backingFinish) || "—"}`);
-      lines.push(` Цветность : ${formatNotebookColorText(form.backingColor) || "без печати"}`);
-      if (form.backingLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.backingLamination)}`);
+      lines.push(form.backingEnabled ? " ОБЛОЖКА" : " ОБЛОЖКА/ПОДЛОЖКА");
+      if (form.coverUseKash) lines.push(" Обложка задаётся в блоке кашировки");
+      else {
+        lines.push(` Бумага : ${formatPaperSelectionWithFinishForTZ(form.coverPaperType, form.coverDensity, form.coverPaperCustomName, form.coverFinish) || "—"}`);
+        lines.push(` Цветность : ${formatNotebookColorText(form.coverColor) || "—"}`);
+        if (form.coverLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.coverLamination)}`);
+      }
+      if (form.backingEnabled) {
+        lines.push("");
+        lines.push(" ПОДЛОЖКА");
+        lines.push(` Бумага : ${formatPaperSelectionWithFinishForTZ(form.backingPaperType, form.backingDensity, form.backingPaperCustomName, form.backingFinish) || "—"}`);
+        lines.push(` Цветность : ${formatNotebookColorText(form.backingColor) || "без печати"}`);
+        if (form.backingLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.backingLamination)}`);
+      }
+      lines.push("");
+      lines.push(" БЛОК");
+      lines.push(` Бумага : ${formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish) || "—"}`);
+      lines.push(` Цветность : ${normalizeColorMode(form.blockColor) || "—"}`);
+      if (form.blockLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.blockLamination)}`);
     }
-    lines.push("");
-    lines.push(" БЛОК");
-    lines.push(` Бумага : ${formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish) || "—"}`);
-    lines.push(` Цветность : ${normalizeColorMode(form.blockColor) || "—"}`);
-    if (form.blockLamination.enabled) lines.push(` Ламинация : ${formatLamination(form.blockLamination)}`);
   } else if (isCalendar(form.productType)) {
     lines.push(` Вид календаря : ${form.calendarKind || "—"}`);
     if (form.calendarKind === "Настенный") {
@@ -1824,7 +1913,7 @@ function generateTZ(form: FormData, _tzNumber: number): string {
       if (headerPaper) lines.push(` Шапка : ${headerPaper}`);
       lines.push(` Крепление : ${form.wallMountType || "—"}`);
       lines.push(` Описание крепления : ${form.wallMountDesc || "—"}`);
-    } else {
+    } else if (form.calendarKind === "Настольный") {
       if (form.calendarBaseUseKash) lines.push(" Основание задаётся в блоке кашировки");
       else {
         lines.push(` Основание : ${formatMaterialWithFinish(form.calendarBaseMaterial, form.calendarBaseFinish) || "—"}`);
@@ -4019,6 +4108,25 @@ function LegacyApp() {
   const [reserveState, setReserveState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [reserveMsg, setReserveMsg] = useState<string | null>(null);
 
+  function closeSendSuccess() {
+    setSendState("idle");
+    setSendAutoSaveMsg("");
+    setShowSend(false);
+  }
+
+  useEffect(() => {
+    if (!showSend || sendState !== "done") return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.isComposing) return;
+      event.preventDefault();
+      closeSendSuccess();
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showSend, sendState]);
+
   useEffect(() => {
     if (!reservedAssignment) return;
     if (reservedAssignment.sheetName === sheetName) return;
@@ -4075,6 +4183,32 @@ function LegacyApp() {
 
   function removeSubcontractWork(id: string) {
     setForm((prev) => ({ ...prev, subcontractWorks: prev.subcontractWorks.filter((work) => work.id !== id) }));
+  }
+
+  function updateNotebookPart(id: string, patch: Partial<NotebookPart>) {
+    setForm((prev) => ({
+      ...prev,
+      notebookParts: prev.notebookParts.map((part) => (part.id === id ? { ...part, ...patch } : part)),
+    }));
+  }
+
+  function addNotebookPart() {
+    setForm((prev) => ({ ...prev, notebookParts: [...prev.notebookParts, createNotebookPart()] }));
+  }
+
+  function removeNotebookPart(id: string) {
+    setForm((prev) => ({ ...prev, notebookParts: prev.notebookParts.filter((part) => part.id !== id) }));
+  }
+
+  function moveNotebookPart(id: string, direction: -1 | 1) {
+    setForm((prev) => {
+      const index = prev.notebookParts.findIndex((part) => part.id === id);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= prev.notebookParts.length) return prev;
+      const notebookParts = [...prev.notebookParts];
+      [notebookParts[index], notebookParts[nextIndex]] = [notebookParts[nextIndex], notebookParts[index]];
+      return { ...prev, notebookParts };
+    });
   }
 
   function openCellBookingModal() {
@@ -4838,6 +4972,26 @@ function LegacyApp() {
 
               {(multiBlock || notebook) && (
                 <div className="mt-4 space-y-4">
+                  {notebook && (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h3 className="text-sm font-semibold text-violet-800">Составной блокнот</h3>
+                          <p className="mt-1 text-xs text-violet-700">Включите, если блокнот состоит из нескольких частей (подложка, листы, вкладыши и т.д.).</p>
+                        </div>
+                        <YesNo
+                          value={form.notebookCompositionEnabled}
+                          onChange={(value) => setForm((prev) => ({
+                            ...prev,
+                            notebookCompositionEnabled: value,
+                            notebookParts: value && prev.notebookParts.length === 0 ? [createNotebookPart()] : prev.notebookParts,
+                          }))}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {(!notebook || !form.notebookCompositionEnabled) && (
+                    <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Field label={multiBlock ? "Количество страниц с обложкой" : "Количество листов в блоке"} required={!multiBlock}>
                       <input data-field={multiBlock ? "pageCount" : "blockPages"} type="number" min={2} className={`${fieldClass(showValidation && required.includes(multiBlock ? "pageCount" : "blockPages"))} max-w-xs`} value={multiBlock ? form.pageCount : form.blockPages} onChange={(e) => update(multiBlock ? "pageCount" : "blockPages", e.target.value as never)} />
@@ -5000,6 +5154,96 @@ function LegacyApp() {
                       <LaminationBlockComponent label="Ламинация блока" value={form.blockLamination} onChange={(v: any) => update("blockLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
                     </div>
                   </div>
+                    </>
+                  )}
+
+                  {notebook && (
+                    <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 space-y-4">
+                      {form.notebookCompositionEnabled && (
+                        <div className="space-y-3 border-t border-violet-200 pt-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <h4 className="text-sm font-semibold text-violet-800">Части и порядок сборки</h4>
+                              <p className="mt-1 text-xs text-violet-700">Карточки выводятся в ТЗ в том же порядке.</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={addNotebookPart}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-100"
+                            >
+                              <span className="text-base leading-none">＋</span> Добавить часть
+                            </button>
+                          </div>
+
+                          {form.notebookParts.map((part, index) => {
+                            const partNeedsQuantity = part.type === "Листы блока" || part.type === "Вкладыш";
+                            const invalidPart = showValidation && (!part.type || (partNeedsQuantity && !part.quantity) || !part.paperType || (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()));
+                            return (
+                              <div key={part.id} className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
+                                <div className="mb-3 flex items-center justify-between gap-2">
+                                  <div className="text-xs font-semibold uppercase tracking-wide text-violet-500">Часть {index + 1}</div>
+                                  <div className="flex items-center gap-2">
+                                    <button type="button" aria-label="Переместить выше" disabled={index === 0} onClick={() => moveNotebookPart(part.id, -1)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-50">↑</button>
+                                    <button type="button" aria-label="Переместить ниже" disabled={index === form.notebookParts.length - 1} onClick={() => moveNotebookPart(part.id, 1)} className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 disabled:cursor-not-allowed disabled:opacity-40 hover:bg-slate-50">↓</button>
+                                    <button type="button" onClick={() => removeNotebookPart(part.id)} className="rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50">Удалить</button>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                  <Field label="Тип части" required>
+                                    <select value={part.type} className={selectFieldClass(showValidation && !part.type)} onChange={(e) => updateNotebookPart(part.id, { type: e.target.value })}>
+                                      <option value="">— выберите —</option>
+                                      {NOTEBOOK_COMPOSITION_PART_TYPES.map((type) => <option key={type}>{type}</option>)}
+                                    </select>
+                                  </Field>
+                                  {partNeedsQuantity && (
+                                    <Field label="Количество, шт." required>
+                                      <input type="number" min={1} className={fieldClass(showValidation && !part.quantity)} value={part.quantity} onChange={(e) => updateNotebookPart(part.id, { quantity: e.target.value })} />
+                                    </Field>
+                                  )}
+                                  <div className="md:col-span-2">
+                                    <PaperSelectionField
+                                      label="Бумага / материал"
+                                      typeValue={part.paperType}
+                                      materialValue={part.density}
+                                      customValue={part.paperCustomName}
+                                      library={dicts.paperLibrary}
+                                      productType={form.productType}
+                                      onTypeChange={(value) => updateNotebookPart(part.id, { paperType: value, density: "", paperCustomName: "" })}
+                                      onMaterialChange={(value) => updateNotebookPart(part.id, { density: value })}
+                                      onCustomChange={(value) => updateNotebookPart(part.id, { paperCustomName: value })}
+                                      typeFieldName={`notebookPartPaperType-${part.id}`}
+                                      materialFieldName={`notebookPartDensity-${part.id}`}
+                                      customFieldName={`notebookPartCustom-${part.id}`}
+                                      showValidation={showValidation}
+                                      invalidType={showValidation && !part.paperType}
+                                      invalidMaterial={showValidation && part.paperType !== "Дизайнерская" && !!part.paperType && requiresPaperDensity(part.paperType) && !part.density.trim()}
+                                      invalidCustom={showValidation && part.paperType === "Дизайнерская" && !part.paperCustomName.trim()}
+                                    />
+                                  </div>
+                                  <PaperFinishField label="Поверхность" value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateNotebookPart(part.id, { finish: value })} />
+                                  <Field label="Цветность">
+                                    <select value={part.color} className={selectClass} onChange={(e) => updateNotebookPart(part.id, { color: e.target.value })}>
+                                      <option>Без печати</option>
+                                      {dicts.colors.map((color) => <option key={color}>{color}</option>)}
+                                    </select>
+                                  </Field>
+                                  <div className="md:col-span-2">
+                                    <LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateNotebookPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                                  </div>
+                                  <div className="md:col-span-2">
+                                    <Field label="Примечание к части">
+                                      <input type="text" className={fieldClass(false)} placeholder="Например: печать на цифре" value={part.note} onChange={(e) => updateNotebookPart(part.id, { note: e.target.value })} />
+                                    </Field>
+                                  </div>
+                                </div>
+                                {invalidPart && <p className="mt-3 text-xs text-red-500">Заполните тип части, материал и количество для листов или вкладышей.</p>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -5101,6 +5345,9 @@ function LegacyApp() {
                       />
                       <PaperFinishField value={form.densityFinish} onChange={(value) => update("densityFinish", value)} />
                       <Field label={templateColorLabel} required><select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
+                      <div className="md:col-span-2">
+                        <LaminationBlockComponent label="Ламинация" value={form.lamination} onChange={(value) => update("lamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                      </div>
                     </div>
                   )}
                 </div>
@@ -5535,9 +5782,10 @@ function LegacyApp() {
 
       {/* МОДАЛКА ОТПРАВКИ */}
       {showSend && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => { if(sendState === "idle" || sendState === "done" || sendState === "error") { setSendAutoSaveMsg(""); setShowSend(false); } }}>
+        <div className="fixed inset-0 z-50 overflow-y-auto p-3 sm:p-4" onClick={() => { if(sendState === "idle" || sendState === "done" || sendState === "error") { setSendAutoSaveMsg(""); setShowSend(false); } }}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl border border-slate-200 z-10 p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="relative z-10 flex min-h-full items-center justify-center">
+            <div className="w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl sm:p-6" onClick={(e) => e.stopPropagation()}>
             <h2 className="font-semibold text-slate-800 text-lg mb-4 flex items-center gap-2"><UiIcon name="clipboard" className="h-5 w-5" /> Отправить в таблицу</h2>
             
             {sendState === "idle" && (
@@ -5610,7 +5858,7 @@ function LegacyApp() {
                 </div>
                 <p className="text-sm text-emerald-700 font-semibold text-center">Данные успешно отправлены!</p>
                 {sendAutoSaveMsg && <p className="text-xs text-slate-500 text-center leading-5 px-2 max-w-md">{sendAutoSaveMsg}</p>}
-                <button onClick={() => { setSendState("idle"); setSendAutoSaveMsg(""); setShowSend(false); }} className="px-6 py-2 w-full max-w-sm rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Отлично</button>
+                <button autoFocus onClick={closeSendSuccess} className="px-6 py-2 w-full max-w-sm rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 transition-colors">Отлично</button>
               </div>
             )}
 
@@ -5624,6 +5872,7 @@ function LegacyApp() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -5799,25 +6048,37 @@ function getRequiredFields(form: FormData): string[] {
     }
   }
   if (isMultiBlock(form.productType) || isNotebook(form.productType)) {
-    if (isNotebook(form.productType) && !form.blockPages) errors.push("blockPages");
-    if (!form.coverUseKash) {
-      if (!form.coverPaperType) errors.push("coverPaperType");
-      else if (form.coverPaperType === "Дизайнерская" ? !form.coverPaperCustomName.trim() : requiresPaperDensity(form.coverPaperType) && !form.coverDensity.trim()) {
-        errors.push(form.coverPaperType === "Дизайнерская" ? "coverPaperCustomName" : "coverDensity");
+    if (isNotebook(form.productType) && form.notebookCompositionEnabled) {
+      if (form.notebookParts.length === 0) errors.push("notebookParts");
+      form.notebookParts.forEach((part) => {
+        if (!part.type) errors.push("notebookPartType");
+        if (!part.quantity || Number(part.quantity) <= 0) errors.push("notebookPartQuantity");
+        if (!part.paperType) errors.push("notebookPartPaperType");
+        else if (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()) {
+          errors.push(part.paperType === "Дизайнерская" ? "notebookPartCustom" : "notebookPartDensity");
+        }
+      });
+    } else {
+      if (isNotebook(form.productType) && !form.blockPages) errors.push("blockPages");
+      if (!form.coverUseKash) {
+        if (!form.coverPaperType) errors.push("coverPaperType");
+        else if (form.coverPaperType === "Дизайнерская" ? !form.coverPaperCustomName.trim() : requiresPaperDensity(form.coverPaperType) && !form.coverDensity.trim()) {
+          errors.push(form.coverPaperType === "Дизайнерская" ? "coverPaperCustomName" : "coverDensity");
+        }
       }
-    }
-    if (!form.coverUseKash && !form.coverColor && !isPaperlessPaperType(form.coverPaperType)) errors.push("coverColor");
-    if (isNotebook(form.productType) && form.backingEnabled) {
-      if (!form.backingPaperType) errors.push("backingPaperType");
-      else if (form.backingPaperType === "Дизайнерская" ? !form.backingPaperCustomName.trim() : requiresPaperDensity(form.backingPaperType) && !form.backingDensity.trim()) {
-        errors.push(form.backingPaperType === "Дизайнерская" ? "backingPaperCustomName" : "backingDensity");
+      if (!form.coverUseKash && !form.coverColor && !isPaperlessPaperType(form.coverPaperType)) errors.push("coverColor");
+      if (isNotebook(form.productType) && form.backingEnabled) {
+        if (!form.backingPaperType) errors.push("backingPaperType");
+        else if (form.backingPaperType === "Дизайнерская" ? !form.backingPaperCustomName.trim() : requiresPaperDensity(form.backingPaperType) && !form.backingDensity.trim()) {
+          errors.push(form.backingPaperType === "Дизайнерская" ? "backingPaperCustomName" : "backingDensity");
+        }
       }
+      if (!form.blockPaperType) errors.push("blockPaperType");
+      else if (form.blockPaperType === "Дизайнерская" ? !form.blockPaperCustomName.trim() : requiresPaperDensity(form.blockPaperType) && !form.blockDensity.trim()) {
+        errors.push(form.blockPaperType === "Дизайнерская" ? "blockPaperCustomName" : "blockDensity");
+      }
+      if (!form.blockColor && !isPaperlessPaperType(form.blockPaperType)) errors.push("blockColor");
     }
-    if (!form.blockPaperType) errors.push("blockPaperType");
-    else if (form.blockPaperType === "Дизайнерская" ? !form.blockPaperCustomName.trim() : requiresPaperDensity(form.blockPaperType) && !form.blockDensity.trim()) {
-      errors.push(form.blockPaperType === "Дизайнерская" ? "blockPaperCustomName" : "blockDensity");
-    }
-    if (!form.blockColor && !isPaperlessPaperType(form.blockPaperType)) errors.push("blockColor");
   } else if (isCalendar(form.productType)) {
     if (!form.calendarKind) errors.push("calendarKind");
     if (form.calendarKind === "Настенный" && !form.adBlocks) errors.push("adBlocks");
