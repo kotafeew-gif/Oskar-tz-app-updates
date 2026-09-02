@@ -1,0 +1,8 @@
+version: 2.5.10
+files:
+  - url: oscar-print-app-setup-2.5.10.exe
+    sha512: YAoHkV6tiNwrGNjHiKniYBckD4aYKM1aYXUNEV4DbnIOPq1glz7xfhUc1z63WCoPWAxbsYmPUwUNhpRVofoDHA==
+    size: 107135810
+path: oscar-print-app-setup-2.5.10.exe
+sha512: YAoHkV6tiNwrGNjHiKniYBckD4aYKM1aYXUNEV4DbnIOPq1glz7xfhUc1z63WCoPWAxbsYmPUwUNhpRVofoDHA==
+releaseDate: '2026-09-02T23:18:23.250Z'
