@@ -87,7 +87,8 @@ const DEFAULT_POST_PROCESSING = [
   "Сортировка/упаковка",
 ];
 
-const NOTEBOOK_COMPOSITION_PART_TYPES = [
+const DEFAULT_NOTEBOOK_COMPOSITION_PART_TYPES = [
+  "Обложка",
   "Подложка",
   "Листы блока",
   "Вкладыш",
@@ -206,6 +207,7 @@ const LS_KEYS = {
   bindingTypes: "dict_bindingTypes",
   laminationKinds: "dict_laminationKinds",
   laminationThickness: "dict_laminationThickness",
+  notebookCompositionPartTypes: "dict_notebookCompositionPartTypes",
   managers: "dict_managers",
   adManagers: "dict_adManagers",
   managerMarkerState: "dict_managerMarkerState",
@@ -734,6 +736,9 @@ function normalizeDictsPayload(payload: any): Dicts {
     colors: normalizeList(payload?.colors),
     postProcessing: mergeUniqueStrings(normalizeList(payload?.postProcessing), DEFAULT_POST_PROCESSING),
     bindingTypes: normalizeList(payload?.bindingTypes),
+    notebookCompositionPartTypes: Array.isArray(payload?.notebookCompositionPartTypes)
+      ? normalizeList(payload.notebookCompositionPartTypes)
+      : [...DEFAULT_NOTEBOOK_COMPOSITION_PART_TYPES],
     laminationKinds: normalizeList(payload?.laminationKinds),
     laminationThickness: normalizeList(payload?.laminationThickness),
     managers: normalizeList(payload?.managers),
@@ -757,6 +762,7 @@ interface Dicts {
   businessCardSizes: string[];
   densities: string[]; colors: string[]; postProcessing: string[];
   bindingTypes: string[]; laminationKinds: string[]; laminationThickness: string[];
+  notebookCompositionPartTypes: string[];
   managers: string[];
   adManagers: string[];
   managerMarkers: Record<string, string>;
@@ -789,6 +795,7 @@ function createInitialDicts(): Dicts {
     bindingTypes: loadList(LS_KEYS.bindingTypes, DEFAULT_BINDING_TYPES),
     laminationKinds: loadList(LS_KEYS.laminationKinds, DEFAULT_LAMINATION_KINDS),
     laminationThickness: loadList(LS_KEYS.laminationThickness, DEFAULT_LAMINATION_THICKNESS),
+    notebookCompositionPartTypes: mergeUniqueStrings(loadList(LS_KEYS.notebookCompositionPartTypes, DEFAULT_NOTEBOOK_COMPOSITION_PART_TYPES), DEFAULT_NOTEBOOK_COMPOSITION_PART_TYPES),
     managers: normalizeStringList(managers),
     adManagers: normalizeStringList(adManagers),
     managerMarkers: normalizedManagers.managerMarkers,
@@ -817,6 +824,7 @@ function createResetDicts(): Dicts {
     bindingTypes: [...DEFAULT_BINDING_TYPES],
     laminationKinds: [...DEFAULT_LAMINATION_KINDS],
     laminationThickness: [...DEFAULT_LAMINATION_THICKNESS],
+    notebookCompositionPartTypes: [...DEFAULT_NOTEBOOK_COMPOSITION_PART_TYPES],
     managers: [...DEFAULT_MANAGERS],
     adManagers: [...DEFAULT_AD_MANAGERS],
     managerMarkers: managerState.managerMarkers,
@@ -913,6 +921,7 @@ interface NotebookPart {
   id: string;
   type: string;
   quantity: string;
+  offsetPrinting: boolean;
   paperType: PaperTypeOption | "";
   paperCustomName: string;
   density: string;
@@ -952,6 +961,7 @@ function createNotebookPart(): NotebookPart {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     type: "Листы блока",
     quantity: "",
+    offsetPrinting: false,
     paperType: "",
     paperCustomName: "",
     density: "",
@@ -1628,7 +1638,7 @@ function getDisplaySize(form: FormData): string {
 
 function formatNotebookPartForTZ(part: NotebookPart): string {
   const details = [
-    formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish),
+    part.offsetPrinting ? "печать на офсете" : formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish),
     formatNotebookColorText(part.color),
     part.lamination.enabled ? getLaminationShort(part.lamination) : "",
     part.note.trim(),
@@ -1872,7 +1882,7 @@ function generateTZ(form: FormData, _tzNumber: number): string {
       if (form.notebookParts.length === 0) lines.push(" Части не добавлены");
       form.notebookParts.forEach((part, index) => {
         lines.push(` ${index + 1}. ${part.type || "Часть"}${part.quantity ? ` — ${part.quantity} шт.` : ""}`);
-        lines.push(`    Бумага : ${formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish) || "—"}`);
+        lines.push(`    Бумага : ${part.offsetPrinting ? "печать на офсете (бумага не указана)" : formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish) || "—"}`);
         lines.push(`    Цветность : ${formatNotebookColorText(part.color) || "—"}`);
         if (part.lamination.enabled) lines.push(`    Ламинация : ${formatLamination(part.lamination)}`);
         if (part.note.trim()) lines.push(`    Примечание : ${part.note.trim()}`);
@@ -3725,6 +3735,7 @@ function LegacyApp() {
   useEffect(() => { saveList(LS_KEYS.bindingTypes, dicts.bindingTypes); }, [dicts.bindingTypes]);
   useEffect(() => { saveList(LS_KEYS.laminationKinds, dicts.laminationKinds); }, [dicts.laminationKinds]);
   useEffect(() => { saveList(LS_KEYS.laminationThickness, dicts.laminationThickness); }, [dicts.laminationThickness]);
+  useEffect(() => { saveList(LS_KEYS.notebookCompositionPartTypes, dicts.notebookCompositionPartTypes); }, [dicts.notebookCompositionPartTypes]);
   useEffect(() => { saveList(LS_KEYS.managers, dicts.managers); }, [dicts.managers]);
   useEffect(() => { saveList(LS_KEYS.adManagers, dicts.adManagers); }, [dicts.adManagers]);
   useEffect(() => { saveManagerMarkerState({ managerMarkers: dicts.managerMarkers, managerMarkerCounter: dicts.managerMarkerCounter }); }, [dicts.managerMarkers, dicts.managerMarkerCounter]);
@@ -4296,6 +4307,7 @@ function LegacyApp() {
     { key: "bindingTypes", title: "Типы сшивки / переплёта", icon: "📚", element: <DictEditor title="Типы сшивки / переплёта" icon="📚" items={dicts.bindingTypes} onChange={(v) => updateDict("bindingTypes", v)} /> },
     { key: "laminationKinds", title: "Виды ламинации", icon: "✨", element: <DictEditor title="Виды ламинации" icon="✨" items={dicts.laminationKinds} onChange={(v) => updateDict("laminationKinds", v)} /> },
     { key: "laminationThickness", title: "Толщина ламинации", icon: "📏", element: <DictEditor title="Толщина ламинации" icon="📏" items={dicts.laminationThickness} onChange={(v) => updateDict("laminationThickness", v)} /> },
+    { key: "notebookCompositionPartTypes", title: "Составные части блокнота", icon: "🧩", element: <DictEditor title="Составные части блокнота" icon="🧩" items={dicts.notebookCompositionPartTypes} onChange={(v) => updateDict("notebookCompositionPartTypes", v)} /> },
     ...(Object.keys(PAPER_PROFILE_LABELS) as PaperProfileKey[]).map((key) => ({
       key,
       title: PAPER_PROFILE_LABELS[key],
@@ -5177,7 +5189,8 @@ function LegacyApp() {
 
                           {form.notebookParts.map((part, index) => {
                             const partNeedsQuantity = part.type === "Листы блока" || part.type === "Вкладыш";
-                            const invalidPart = showValidation && (!part.type || (partNeedsQuantity && !part.quantity) || !part.paperType || (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()));
+                            const partUsesOffsetPrinting = part.type === "Листы блока" && part.offsetPrinting;
+                            const invalidPart = showValidation && (!part.type || (partNeedsQuantity && (!part.quantity || Number(part.quantity) <= 0)) || (!partUsesOffsetPrinting && (!part.paperType || (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()))));
                             return (
                               <div key={part.id} className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
                                 <div className="mb-3 flex items-center justify-between gap-2">
@@ -5192,7 +5205,7 @@ function LegacyApp() {
                                   <Field label="Тип части" required>
                                     <select value={part.type} className={selectFieldClass(showValidation && !part.type)} onChange={(e) => updateNotebookPart(part.id, { type: e.target.value })}>
                                       <option value="">— выберите —</option>
-                                      {NOTEBOOK_COMPOSITION_PART_TYPES.map((type) => <option key={type}>{type}</option>)}
+                                      {dicts.notebookCompositionPartTypes.map((type) => <option key={type}>{type}</option>)}
                                     </select>
                                   </Field>
                                   {partNeedsQuantity && (
@@ -5208,18 +5221,30 @@ function LegacyApp() {
                                       customValue={part.paperCustomName}
                                       library={dicts.paperLibrary}
                                       productType={form.productType}
-                                      onTypeChange={(value) => updateNotebookPart(part.id, { paperType: value, density: "", paperCustomName: "" })}
+                                      onTypeChange={(value) => updateNotebookPart(part.id, { paperType: value, density: "", paperCustomName: "", offsetPrinting: false })}
                                       onMaterialChange={(value) => updateNotebookPart(part.id, { density: value })}
                                       onCustomChange={(value) => updateNotebookPart(part.id, { paperCustomName: value })}
                                       typeFieldName={`notebookPartPaperType-${part.id}`}
                                       materialFieldName={`notebookPartDensity-${part.id}`}
                                       customFieldName={`notebookPartCustom-${part.id}`}
                                       showValidation={showValidation}
-                                      invalidType={showValidation && !part.paperType}
-                                      invalidMaterial={showValidation && part.paperType !== "Дизайнерская" && !!part.paperType && requiresPaperDensity(part.paperType) && !part.density.trim()}
-                                      invalidCustom={showValidation && part.paperType === "Дизайнерская" && !part.paperCustomName.trim()}
+                                      disabled={partUsesOffsetPrinting}
+                                      invalidType={showValidation && !partUsesOffsetPrinting && !part.paperType}
+                                      invalidMaterial={showValidation && !partUsesOffsetPrinting && part.paperType !== "Дизайнерская" && !!part.paperType && requiresPaperDensity(part.paperType) && !part.density.trim()}
+                                      invalidCustom={showValidation && !partUsesOffsetPrinting && part.paperType === "Дизайнерская" && !part.paperCustomName.trim()}
                                     />
                                   </div>
+                                  {part.type === "Листы блока" && (
+                                    <label className="md:col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                                      <input
+                                        type="checkbox"
+                                        checked={part.offsetPrinting}
+                                        onChange={(e) => updateNotebookPart(part.id, { offsetPrinting: e.target.checked })}
+                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                      />
+                                      Печатается на офсете
+                                    </label>
+                                  )}
                                   <PaperFinishField label="Поверхность" value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateNotebookPart(part.id, { finish: value })} />
                                   <Field label="Цветность">
                                     <select value={part.color} className={selectClass} onChange={(e) => updateNotebookPart(part.id, { color: e.target.value })}>
@@ -5236,7 +5261,7 @@ function LegacyApp() {
                                     </Field>
                                   </div>
                                 </div>
-                                {invalidPart && <p className="mt-3 text-xs text-red-500">Заполните тип части, материал и количество для листов или вкладышей.</p>}
+                                {invalidPart && <p className="mt-3 text-xs text-red-500">Заполните тип части, бумагу и количество только для листов или вкладышей. Для листов можно выбрать печать на офсете без указания бумаги.</p>}
                               </div>
                             );
                           })}
@@ -6052,10 +6077,14 @@ function getRequiredFields(form: FormData): string[] {
       if (form.notebookParts.length === 0) errors.push("notebookParts");
       form.notebookParts.forEach((part) => {
         if (!part.type) errors.push("notebookPartType");
-        if (!part.quantity || Number(part.quantity) <= 0) errors.push("notebookPartQuantity");
-        if (!part.paperType) errors.push("notebookPartPaperType");
-        else if (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()) {
-          errors.push(part.paperType === "Дизайнерская" ? "notebookPartCustom" : "notebookPartDensity");
+        const partNeedsQuantity = part.type === "Листы блока" || part.type === "Вкладыш";
+        if (partNeedsQuantity && (!part.quantity || Number(part.quantity) <= 0)) errors.push("notebookPartQuantity");
+        const partUsesOffsetPrinting = part.type === "Листы блока" && part.offsetPrinting;
+        if (!partUsesOffsetPrinting) {
+          if (!part.paperType) errors.push("notebookPartPaperType");
+          else if (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()) {
+            errors.push(part.paperType === "Дизайнерская" ? "notebookPartCustom" : "notebookPartDensity");
+          }
         }
       });
     } else {
@@ -6244,6 +6273,3 @@ function CompactApp() {
 }
 
 export default LegacyApp;
-
-
-
