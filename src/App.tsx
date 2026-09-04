@@ -117,13 +117,14 @@ const DRILL_DIAMETERS = ["2 мм", "3 мм", "4 мм", "5 мм", "6 мм", "8 м
 const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голубой", "3в1 (серый)"];
 const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
 const BAG_HANDLE_TYPES = ["Верёвка", "Лента"];
-// Картинки успеха: "обычные" с весом 1 и "редкие" с меньшим весом (Exclusive — 1 к 20).
+// Картинки успеха: обычные с весом 1, Exclusive — 1 к 10, Legendary — 1 к 50.
 const SUCCESS_IMAGE_NAMES = ["Cat.png", "1.png", "2.png", "3.png", "4.png", "5.png", "6.png", "7.png", "8.png"];
-const RARE_SUCCESS_IMAGE_NAMES = ["Exclusive.png"];
+const RARE_SUCCESS_IMAGE_NAMES = ["Exclusive.png", "Legendary.png"];
 const SUCCESS_IMAGE_WEIGHTS: Record<string, number> = (() => {
   const map: Record<string, number> = {};
   SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = 1; });
-  RARE_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = 0.1; });
+  map["Exclusive.png"] = 0.1;
+  map["Legendary.png"] = 0.02;
   return map;
 })();
 const SUCCESS_IMAGE_SRCS = [...SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => `${import.meta.env.BASE_URL}${name}`);
@@ -1119,7 +1120,14 @@ function mergePresetIntoForm(base: FormData, presetData: Partial<FormData>): For
     return patch;
   };
 
-  return mergeValue(base, presetData) as FormData;
+  const normalizedPresetData: Partial<FormData> = {
+    ...presetData,
+    notebookParts: Array.isArray(presetData.notebookParts)
+      ? presetData.notebookParts.map((part) => mergeValue(createNotebookPart(), part))
+      : presetData.notebookParts,
+  };
+
+  return mergeValue(base, normalizedPresetData) as FormData;
 }
 
 // ─── Вспомогательные функции ────────────────────────────────────────────────
@@ -1544,6 +1552,30 @@ function formatBagPaperSelection(form: FormData): string {
 function buildSpringSuggestion(form: FormData): { thickness: number; diameter: string } | null {
   if (form.bindingType !== "Пружина") return null;
 
+  if (isNotebook(form.productType) && form.notebookCompositionEnabled) {
+    let thickness = 0;
+    let hasKnownPart = false;
+
+    form.notebookParts.forEach((part) => {
+      const partThickness = estimateThicknessMm(part.density, part.finish);
+      // Если офсет выбран без бумаги, часть не добавляет толщину. Если бумага указана,
+      // её плотность всё равно должна участвовать в подборе пружины.
+      if (part.offsetPrinting && !partThickness) return;
+      if (!partThickness) return;
+      const count = part.type === "Листы блока" || part.type === "Вкладыш"
+        ? Number(part.quantity)
+        : 1;
+      if (!count) return;
+      thickness += partThickness * count;
+      hasKnownPart = true;
+    });
+
+    if (!hasKnownPart) return null;
+    const target = Math.ceil(thickness + 2);
+    const nearest = SPRING_DIAMETERS.find((item) => parseWeight(item) >= target) ?? SPRING_DIAMETERS[SPRING_DIAMETERS.length - 1];
+    return { thickness, diameter: nearest };
+  }
+
   const sheetCount = isNotebook(form.productType)
     ? Number(form.blockPages)
     : isMultiBlock(form.productType)
@@ -1676,7 +1708,7 @@ function generateShortTZ(form: FormData): string {
     if (form.notebookCompositionEnabled) {
       parts.push("составной");
       const composition = form.notebookParts.map(formatNotebookPartForTZ).filter(Boolean);
-      if (composition.length) parts.push(composition.join("; "));
+      if (composition.length) parts.push(composition.join("\n"));
     } else if (form.blockPages) {
       parts.push(`${form.blockPages} листов в блоке`);
     }
@@ -4330,10 +4362,11 @@ function LegacyApp() {
 
   useEffect(() => {
     const suggestion = buildSpringSuggestion(form);
-    if (suggestion && form.bindingType === "Пружина" && !springDiameterManuallyEditedRef.current && form.springDiameter !== suggestion.diameter) {
+    const shouldAutoUpdate = form.notebookCompositionEnabled || !springDiameterManuallyEditedRef.current;
+    if (suggestion && form.bindingType === "Пружина" && shouldAutoUpdate && form.springDiameter !== suggestion.diameter) {
       setForm((prev) => ({ ...prev, springDiameter: suggestion.diameter }));
     }
-  }, [form.productType, form.bindingType, form.pageCount, form.blockPages, form.density, form.densityFinish, form.blockDensity, form.blockFinish, form.coverDensity, form.coverFinish, form.coverUseKash, form.kashurovka.linerType, form.kashurovka.linerFinish]);
+  }, [form.productType, form.bindingType, form.pageCount, form.blockPages, form.density, form.densityFinish, form.blockDensity, form.blockFinish, form.coverDensity, form.coverFinish, form.coverUseKash, form.kashurovka.linerType, form.kashurovka.linerFinish, form.notebookCompositionEnabled, form.notebookParts]);
 
   useEffect(() => {
     const next: Partial<FormData> = {};
