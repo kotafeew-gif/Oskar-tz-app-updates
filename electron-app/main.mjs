@@ -212,6 +212,8 @@ function buildDeadlineCell(formData) {
 // ТВОЙ ID ТАБЛИЦЫ
 const SPREADSHEET_ID = '1TZkMbDMhx0XhK3Y-DOS4AgpbakmotaugXEPGKF_xLok'; 
 const CONFIG_SHEET_TITLE = '__CONFIG__';
+const CARD_STATS_SHEET_TITLE = '__CARD_STATS__';
+const RARE_CARD_NAMES = new Set(['Exclusive.png', 'Legendary.png', 'Mific.png']);
 
 // УНИВЕРСАЛЬНЫЙ ПУТЬ К КЛЮЧУ:
 // Если программа собрана (.exe), она ищет ключ в папке рядом с .exe.
@@ -563,6 +565,86 @@ async function ensureConfigSheet(sheets) {
   return addedSheet?.sheetId;
 }
 
+function aggregateCardStats(rows) {
+  const byImage = {};
+  const byManager = {};
+  (rows || []).forEach((row, index) => {
+    if (index === 0 && getRowCell(row, 0).toLowerCase() === 'дата') return;
+    if (getRowCell(row, 0).toUpperCase() === 'ИТОГО') {
+      const image = getRowCell(row, 1);
+      const count = Number.parseInt(getRowCell(row, 2), 10) || 0;
+      if (image && count > 0) byImage[image] = (byImage[image] || 0) + count;
+      return;
+    }
+    const manager = getRowCell(row, 1) || 'Не указан';
+    const image = getRowCell(row, 2);
+    if (!image) return;
+    byImage[image] = (byImage[image] || 0) + 1;
+    byManager[manager] = { ...(byManager[manager] || {}), [image]: (byManager[manager]?.[image] || 0) + 1 };
+  });
+  return { byImage, byManager };
+}
+
+async function loadCardStatsFromSheet(sheets) {
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `'${CARD_STATS_SHEET_TITLE}'!A:C`,
+  });
+  return aggregateCardStats(response.data.values || []);
+}
+
+async function recordCardStatOnSheet(sheets, managerName, imageName) {
+  const meta = await getSpreadsheetMeta(sheets);
+  const sheet = meta.sheets?.find((item) => item.properties?.title === CARD_STATS_SHEET_TITLE);
+  if (!sheet) throw new Error(`Лист ${CARD_STATS_SHEET_TITLE} не найден`);
+
+  const existing = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `'${CARD_STATS_SHEET_TITLE}'!A:C`,
+  });
+  const rows = existing.data.values || [];
+  if (!rows.length) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `'${CARD_STATS_SHEET_TITLE}'!A1:C1`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['Дата', 'Менеджер', 'Карточка / ИТОГО', 'Количество']] },
+    });
+  }
+
+  const normalizedImage = normalizeSheetCell(imageName);
+  if (RARE_CARD_NAMES.has(normalizedImage)) {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `'${CARD_STATS_SHEET_TITLE}'!A:C`,
+      valueInputOption: 'USER_ENTERED',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [[new Date().toISOString(), normalizeSheetCell(managerName) || 'Не указан', normalizedImage]] },
+    });
+  } else {
+    const summaryIndex = rows.findIndex((row) => getRowCell(row, 0).toUpperCase() === 'ИТОГО' && getRowCell(row, 1) === normalizedImage);
+    const currentCount = summaryIndex >= 0 ? Number.parseInt(getRowCell(rows[summaryIndex], 2), 10) || 0 : 0;
+    const nextCount = currentCount + 1;
+    if (summaryIndex >= 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${CARD_STATS_SHEET_TITLE}'!A${summaryIndex + 1}:D${summaryIndex + 1}`,
+        valueInputOption: 'RAW',
+        requestBody: { values: [['ИТОГО', normalizedImage, nextCount, '']] },
+      });
+    } else {
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${CARD_STATS_SHEET_TITLE}'!A:D`,
+        valueInputOption: 'RAW',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: [['ИТОГО', normalizedImage, nextCount, '']] },
+      });
+    }
+  }
+  return loadCardStatsFromSheet(sheets);
+}
+
 function resolvePreferredDirectory(link) {
   if (!link || typeof link !== 'string') return null;
 
@@ -746,6 +828,24 @@ ipcMain.handle('save-config-sheet', async (event, { config, appVersion }) => {
     });
 
     return { success: true, updatedAt, appVersion: resolvedAppVersion };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('load-card-stats', async () => {
+  try {
+    const sheets = createSheetsClient();
+    return { success: true, stats: await loadCardStatsFromSheet(sheets) };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('record-card-stat', async (event, { managerName, imageName }) => {
+  try {
+    const sheets = createSheetsClient();
+    return { success: true, stats: await recordCardStatOnSheet(sheets, managerName, imageName) };
   } catch (error) {
     return { success: false, error: error.message };
   }

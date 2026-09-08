@@ -119,12 +119,13 @@ const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Крас
 const BAG_HANDLE_TYPES = ["Верёвка", "Лента"];
 // Картинки успеха: обычные с весом 1, Exclusive — 1 к 10, Legendary — 1 к 50.
 const SUCCESS_IMAGE_NAMES = ["Cat.png", "1.png", "2.png", "3.png", "4.png", "5.png", "6.png", "7.png", "8.png"];
-const RARE_SUCCESS_IMAGE_NAMES = ["Exclusive.png", "Legendary.png"];
+const RARE_SUCCESS_IMAGE_NAMES = ["Exclusive.png", "Legendary.png", "Mific.png"];
 const SUCCESS_IMAGE_WEIGHTS: Record<string, number> = (() => {
   const map: Record<string, number> = {};
   SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = 1; });
   map["Exclusive.png"] = 0.1;
   map["Legendary.png"] = 0.02;
+  map["Mific.png"] = 0.0005;
   return map;
 })();
 const SUCCESS_IMAGE_SRCS = [...SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => `${import.meta.env.BASE_URL}${name}`);
@@ -215,6 +216,7 @@ const LS_KEYS = {
   paperProfiles: "dict_paperProfiles",
   sheetName: "config_sheetName",
   updateSummaryVersion: "update_summary_version",
+  successImageStats: "success_image_stats",
 };
 
 type ProductLayoutKind =
@@ -376,10 +378,8 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "В составном блокноте убран тип «Обложка верхняя» — нижняя обложка теперь описывается как «Подложка».",
-  "Количество в составном блокноте показывается только для листов и вкладышей.",
-  "Переключатель «Составной блокнот» перенесён в начало секции блокнота.",
-  "Прочие исправления и доработки.",
+  "Переработана форма для квартальных календарей.",
+  "Прочие доработки и улучшения.",
 ];
 
 function getRandomSuccessImageSrc(previousSrc = ""): string {
@@ -873,6 +873,7 @@ interface FormData {
   brochureFormat: string; brochureFormatCustom: string;
   blockPaperType: PaperTypeOption | ""; blockPaperCustomName: string; blockDensity: string; blockFinish: PaperFinish; blockColor: string; blockLamination: LaminationBlock; blockPages: string;
   adBlocks: string; calendarKind: string; wallMountType: string; wallMountDesc: string; gridType: string; hasPlanka: boolean; plankaDesc: string; hasRigel: boolean;
+  quarterPosterSize: string; quarterPosterPaperType: PaperTypeOption | ""; quarterPosterPaperCustomName: string; quarterPosterDensity: string; quarterPosterFinish: PaperFinish; quarterPosterColorMode: string; quarterPosterLamination: LaminationBlock; quarterAdBlocks: string; quarterAdFieldsSame: boolean; quarterAdParts: QuarterAdPart[]; quarterGridStandard: boolean; quarterGridName: string; quarterGridSize: string; quarterGridPaperType: PaperTypeOption | ""; quarterGridPaperCustomName: string; quarterGridDensity: string; quarterGridFinish: PaperFinish; quarterGridColorMode: string; quarterGridPrintMode: string; quarterBackingEnabled: boolean; quarterBackingSize: string; quarterBackingPaperType: PaperTypeOption | ""; quarterBackingPaperCustomName: string; quarterBackingDensity: string; quarterBackingFinish: PaperFinish; quarterBackingColorMode: string; quarterMountType: string; quarterMountColor: string; quarterSpringColor: string; quarterCursorColor: string; quarterCursorType: string;
   calendarBaseUseKash: boolean; calendarBaseMaterial: string; calendarBaseFinish: PaperFinish; calendarBaseLamination: LaminationBlock; calendarBaseBigovkaLines: string; calendarGridMaterial: string; calendarGridFinish: PaperFinish; calendarGridColorMode: string; calendarOffsetColor: string;
   calendarHeaderPaperType: PaperTypeOption | ""; calendarHeaderPaperCustomName: string; calendarHeaderPaperDensity: string; calendarHeaderPaperFinish: PaperFinish;
   postProcessing: string[]; foilColor: string; uvType: string; bigkovka: boolean; bigkovkaLines: string; drillingDiameter: string;
@@ -932,6 +933,22 @@ interface NotebookPart {
   note: string;
 }
 
+interface QuarterAdPart {
+  id: string;
+  size: string;
+  paperType: PaperTypeOption | "";
+  paperCustomName: string;
+  density: string;
+  finish: PaperFinish;
+  lamination: LaminationBlock;
+  colorMode: string;
+}
+
+interface SuccessImageStats {
+  byImage: Record<string, number>;
+  byManager: Record<string, Record<string, number>>;
+}
+
 interface ClientStore {
   byManager: Record<string, string[]>;
 }
@@ -955,6 +972,37 @@ function createSubcontractWork(): SubcontractWork {
     date: "",
     time: "",
   };
+}
+
+function createQuarterAdPart(): QuarterAdPart {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    size: "",
+    paperType: "Мелованная",
+    paperCustomName: "",
+    density: "",
+    finish: "Матовая",
+    lamination: defaultLaminationBlock(),
+    colorMode: "",
+  };
+}
+
+function createEmptySuccessImageStats(): SuccessImageStats {
+  return { byImage: {}, byManager: {} };
+}
+
+function loadSuccessImageStats(): SuccessImageStats {
+  try {
+    const raw = localStorage.getItem(LS_KEYS.successImageStats);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (!parsed || typeof parsed !== "object") return createEmptySuccessImageStats();
+    return {
+      byImage: parsed.byImage && typeof parsed.byImage === "object" ? parsed.byImage : {},
+      byManager: parsed.byManager && typeof parsed.byManager === "object" ? parsed.byManager : {},
+    };
+  } catch {
+    return createEmptySuccessImageStats();
+  }
 }
 
 function createNotebookPart(): NotebookPart {
@@ -993,6 +1041,7 @@ function createDefaultForm(): FormData {
     brochureFormat: "", brochureFormatCustom: "",
     blockPaperType: "", blockPaperCustomName: "", blockDensity: "", blockFinish: "Матовая", blockColor: "", blockLamination: defaultLaminationBlock(), blockPages: "",
     adBlocks: "3", calendarKind: "Настенный", wallMountType: "Ригель", wallMountDesc: "", gridType: "Цифра", hasPlanka: false, plankaDesc: "", hasRigel: false,
+    quarterPosterSize: "", quarterPosterPaperType: "Мелованная", quarterPosterPaperCustomName: "", quarterPosterDensity: "", quarterPosterFinish: "Матовая", quarterPosterColorMode: "", quarterPosterLamination: defaultLaminationBlock(), quarterAdBlocks: "1", quarterAdFieldsSame: false, quarterAdParts: [createQuarterAdPart()], quarterGridStandard: true, quarterGridName: "", quarterGridSize: "", quarterGridPaperType: "Мелованная", quarterGridPaperCustomName: "", quarterGridDensity: "", quarterGridFinish: "Матовая", quarterGridColorMode: "", quarterGridPrintMode: "У себя", quarterBackingEnabled: false, quarterBackingSize: "", quarterBackingPaperType: "Мелованная", quarterBackingPaperCustomName: "", quarterBackingDensity: "", quarterBackingFinish: "Матовая", quarterBackingColorMode: "", quarterMountType: "Планка", quarterMountColor: "Серебро", quarterSpringColor: "Белая", quarterCursorColor: "Красный", quarterCursorType: "Без резинки",
     calendarBaseUseKash: false, calendarBaseMaterial: "", calendarBaseFinish: "Матовая", calendarBaseLamination: defaultLaminationBlock(), calendarBaseBigovkaLines: "", calendarGridMaterial: "", calendarGridFinish: "Матовая", calendarGridColorMode: "", calendarOffsetColor: "Серый",
     calendarHeaderPaperType: "", calendarHeaderPaperCustomName: "", calendarHeaderPaperDensity: "", calendarHeaderPaperFinish: "Матовая",
     postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1", drillingDiameter: "", falcovka: false,
@@ -1679,6 +1728,36 @@ function formatNotebookPartForTZ(part: NotebookPart): string {
   return [part.type || "Часть", quantity, details.join(", ")].filter(Boolean).join(" — ");
 }
 
+function formatQuarterCalendarShortLines(form: FormData): string[] {
+  const lines = ["квартальный"];
+  lines.push(`постер: ${[form.quarterPosterSize, formatPaperSelectionWithFinishForTZ(form.quarterPosterPaperType, form.quarterPosterDensity, form.quarterPosterPaperCustomName, form.quarterPosterFinish), normalizeColorMode(form.quarterPosterColorMode), form.quarterPosterLamination.enabled ? getLaminationShort(form.quarterPosterLamination) : ""].filter(Boolean).join(", ") || "—"}`);
+
+  if (form.quarterAdParts.length) {
+    lines.push(`рекламных полей: ${form.quarterAdParts.length}${form.quarterAdFieldsSame ? " (поля одинаковые)" : ""}`);
+    const partsToShow = form.quarterAdFieldsSame ? form.quarterAdParts.slice(0, 1) : form.quarterAdParts;
+    partsToShow.forEach((part, index) => {
+      lines.push(`рекламное поле${form.quarterAdFieldsSame ? "" : ` ${index + 1}`}: ${[part.size, formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish), normalizeColorMode(part.colorMode), part.lamination.enabled ? getLaminationShort(part.lamination) : ""].filter(Boolean).join(", ") || "—"}`);
+    });
+  } else {
+    lines.push("рекламных полей: —");
+  }
+
+  if (form.quarterGridStandard) {
+    lines.push(`сетка стандартная: ${form.quarterGridName || "—"}`);
+  } else {
+    lines.push(`сетка индивидуальная: ${[form.quarterGridSize, formatPaperSelectionWithFinishForTZ(form.quarterGridPaperType, form.quarterGridDensity, form.quarterGridPaperCustomName, form.quarterGridFinish), normalizeColorMode(form.quarterGridColorMode), form.quarterGridPrintMode === "Офсет" ? "приедет с офсета" : form.quarterGridPrintMode].filter(Boolean).join(", ") || "—"}`);
+  }
+
+  const quarterFinishing = [
+    form.quarterBackingEnabled ? `подложки ${form.quarterBackingSize || "—"}` : "",
+    `крепление: ${[form.quarterMountType, form.quarterMountColor].filter(Boolean).join(", ") || "—"}`,
+    `пружина: ${form.quarterSpringColor || "—"}`,
+    `курсор: ${[form.quarterCursorColor, form.quarterCursorType].filter(Boolean).join(", ") || "—"}`,
+  ].filter(Boolean);
+  lines.push(quarterFinishing.join(" / "));
+  return lines;
+}
+
 function generateShortTZ(form: FormData): string {
   const parts: string[] = [];
   const product = formatProductNameForTZ(form, true);
@@ -1737,9 +1816,13 @@ function generateShortTZ(form: FormData): string {
       if (blockParts.length) parts.push(`блок: ${blockParts.join(" ")}`);
     }
   } else if (isCalendar(form.productType)) {
-    parts.push(form.calendarKind.toLowerCase());
-    if (form.calendarKind === "Настенный" && form.adBlocks) parts.push(`${form.adBlocks} рекл. блока`);
-    if (form.calendarKind === "Настенный") {
+    if (form.calendarKind === "Квартальный") {
+      parts.push(formatQuarterCalendarShortLines(form).join("\n"));
+    } else {
+      parts.push(form.calendarKind.toLowerCase());
+    }
+    if (form.calendarKind !== "Квартальный" && form.calendarKind === "Настенный" && form.adBlocks) parts.push(`${form.adBlocks} рекл. блока`);
+    if (form.calendarKind !== "Квартальный" && form.calendarKind === "Настенный") {
       const headerPaper = formatPaperSelectionWithFinishForTZ(
         form.calendarHeaderPaperType,
         form.calendarHeaderPaperDensity,
@@ -1748,16 +1831,16 @@ function generateShortTZ(form: FormData): string {
       );
       if (headerPaper) parts.push(`шапка ${headerPaper}`);
     }
-    if (form.gridType === "Цифра") {
+    if (form.calendarKind !== "Квартальный" && form.gridType === "Цифра") {
       const gridMaterial = normalizeMaterial(form.calendarGridMaterial);
       const gridColor = form.calendarGridColorMode ? form.calendarGridColorMode.split(/\s/)[0] : "";
       if (gridMaterial || gridColor) parts.push(`Сетка: ${[gridMaterial, gridColor].filter(Boolean).join(" ")}`);
-    } else if (form.gridType === "Офсет") {
+    } else if (form.calendarKind !== "Квартальный" && form.gridType === "Офсет") {
       const gridMaterial = normalizeMaterial(form.calendarGridMaterial);
       const gridColor = form.calendarOffsetColor || "";
       parts.push(`Сетка: офсет${gridMaterial || gridColor ? `, ${[gridMaterial, gridColor].filter(Boolean).join(" ")}` : ""}`);
     }
-    if (form.calendarKind === "Настольный" && form.calendarBaseMaterial) {
+    if (form.calendarKind !== "Квартальный" && form.calendarKind === "Настольный" && form.calendarBaseMaterial) {
       parts.push(`Основание: ${normalizeMaterial(form.calendarBaseMaterial)} ${form.calendarBaseFinish.toLowerCase()}`);
     }
   } else if (isBag(form.productType)) {
@@ -1944,7 +2027,34 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     }
   } else if (isCalendar(form.productType)) {
     lines.push(` Вид календаря : ${form.calendarKind || "—"}`);
-    if (form.calendarKind === "Настенный") {
+    if (form.calendarKind === "Квартальный") {
+      lines.push(` Количество рекламных полей : ${form.quarterAdParts.length}`);
+      lines.push(` Постер : ${form.quarterPosterSize || "—"}`);
+      lines.push(` Бумага постера : ${formatPaperSelectionWithFinishForTZ(form.quarterPosterPaperType, form.quarterPosterDensity, form.quarterPosterPaperCustomName, form.quarterPosterFinish) || "—"}`);
+      lines.push(` Цветность постера : ${normalizeColorMode(form.quarterPosterColorMode) || "—"}`);
+      if (form.quarterPosterLamination.enabled) lines.push(` Ламинация постера : ${formatLamination(form.quarterPosterLamination)}`);
+      const quarterAdPartsToShow = form.quarterAdFieldsSame ? form.quarterAdParts.slice(0, 1) : form.quarterAdParts;
+      quarterAdPartsToShow.forEach((part, index) => {
+        lines.push(` Рекламное поле${form.quarterAdFieldsSame ? "" : ` ${index + 1}`} : ${part.size || "—"}`);
+        lines.push(`  Бумага : ${formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish) || "—"}`);
+        lines.push(`  Цветность : ${normalizeColorMode(part.colorMode) || "—"}`);
+        if (part.lamination.enabled) lines.push(`  Ламинация : ${formatLamination(part.lamination)}`);
+      });
+      lines.push(` Сетка : ${form.quarterGridStandard ? `стандартная, ${form.quarterGridName || "—"}` : `индивидуальная, ${form.quarterGridSize || "—"}`}`);
+      if (!form.quarterGridStandard) {
+        lines.push(` Бумага сетки : ${formatPaperSelectionWithFinishForTZ(form.quarterGridPaperType, form.quarterGridDensity, form.quarterGridPaperCustomName, form.quarterGridFinish) || "—"}`);
+        lines.push(` Цветность сетки : ${normalizeColorMode(form.quarterGridColorMode) || "—"}`);
+        lines.push(` Печать сетки : ${form.quarterGridPrintMode || "—"}${form.quarterGridPrintMode === "Офсет" ? " (сетка приедет с офсета)" : ""}`);
+      }
+      if (form.quarterBackingEnabled) {
+        lines.push(` Подложки под сетку : ${form.quarterBackingSize || "—"}`);
+        lines.push(` Бумага подложек : ${formatPaperSelectionWithFinishForTZ(form.quarterBackingPaperType, form.quarterBackingDensity, form.quarterBackingPaperCustomName, form.quarterBackingFinish) || "—"}`);
+        lines.push(` Цветность подложек : ${normalizeColorMode(form.quarterBackingColorMode) || "—"}`);
+      }
+      lines.push(` Крепление : ${form.quarterMountType || "—"}${form.quarterMountColor ? `, ${form.quarterMountColor}` : ""}`);
+      lines.push(` Цвет пружины : ${form.quarterSpringColor || "—"}`);
+      lines.push(` Курсор : ${form.quarterCursorColor || "—"}, ${form.quarterCursorType || "—"}`);
+    } else if (form.calendarKind === "Настенный") {
       lines.push(` Рекламных блоков : ${form.adBlocks || "—"}`);
       const headerPaper = formatPaperSelectionWithFinishForTZ(
         form.calendarHeaderPaperType,
@@ -4139,6 +4249,7 @@ function LegacyApp() {
   const [sendState, setSendState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [sendAutoSaveMsg, setSendAutoSaveMsg] = useState("");
   const [sendSuccessImageSrc, setSendSuccessImageSrc] = useState(() => getRandomSuccessImageSrc());
+  const [successImageStats, setSuccessImageStats] = useState<SuccessImageStats>(() => loadSuccessImageStats());
   const [previewText, setPreviewText] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [cellBookingDraftCount, setCellBookingDraftCount] = useState("");
@@ -4150,6 +4261,31 @@ function LegacyApp() {
   const [reservedAssignment, setReservedAssignment] = useState<ReservedAssignment | null>(null);
   const [reserveState, setReserveState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [reserveMsg, setReserveMsg] = useState<string | null>(null);
+
+  async function recordSuccessImage(imageSrc: string, managerName: string) {
+    const imageName = imageSrc.split("/").pop() || imageSrc;
+    const manager = managerName.trim() || "Не указан";
+    setSuccessImageStats((prev) => {
+      const next: SuccessImageStats = {
+        byImage: { ...prev.byImage, [imageName]: (prev.byImage[imageName] || 0) + 1 },
+        byManager: Object.fromEntries(Object.entries(prev.byManager).map(([name, cards]) => [name, { ...cards }])),
+      };
+      next.byManager[manager] = { ...(next.byManager[manager] || {}), [imageName]: (next.byManager[manager]?.[imageName] || 0) + 1 };
+      localStorage.setItem(LS_KEYS.successImageStats, JSON.stringify(next));
+      return next;
+    });
+    const result = await (window as any).electronAPI?.recordCardStat?.({ managerName: manager, imageName });
+    if (result?.success && result.stats) setSuccessImageStats(result.stats);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const result = await (window as any).electronAPI?.loadCardStats?.();
+      if (!cancelled && result?.success && result.stats) setSuccessImageStats(result.stats);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   function closeSendSuccess() {
     setSendState("idle");
@@ -4254,6 +4390,39 @@ function LegacyApp() {
     });
   }
 
+  function updateQuarterAdPart(id: string, patch: Partial<QuarterAdPart>) {
+    setForm((prev) => ({
+      ...prev,
+      quarterAdParts: prev.quarterAdParts.map((part) => (prev.quarterAdFieldsSame || part.id === id ? { ...part, ...patch } : part)),
+    }));
+  }
+
+  function addQuarterAdPart() {
+    setForm((prev) => ({ ...prev, quarterAdBlocks: String(prev.quarterAdParts.length + 1), quarterAdParts: [...prev.quarterAdParts, createQuarterAdPart()] }));
+  }
+
+  function removeQuarterAdPart(id: string) {
+    setForm((prev) => ({ ...prev, quarterAdBlocks: String(Math.max(0, prev.quarterAdParts.length - 1)), quarterAdParts: prev.quarterAdParts.filter((part) => part.id !== id) }));
+  }
+
+  function setQuarterAdBlocks(value: string) {
+    const count = Math.max(1, Number(value) || 1);
+    setForm((prev) => {
+      const parts = [...prev.quarterAdParts];
+      while (parts.length < count) parts.push(createQuarterAdPart());
+      return { ...prev, quarterAdBlocks: String(count), quarterAdParts: parts.slice(0, count) };
+    });
+  }
+
+  function toggleQuarterAdFieldsSame() {
+    setForm((prev) => {
+      const nextSame = !prev.quarterAdFieldsSame;
+      if (!nextSame || prev.quarterAdParts.length < 2) return { ...prev, quarterAdFieldsSame: nextSame };
+      const template = prev.quarterAdParts[0];
+      return { ...prev, quarterAdFieldsSame: true, quarterAdParts: prev.quarterAdParts.map((part) => ({ ...template, id: part.id })) };
+    });
+  }
+
   function openCellBookingModal() {
     setCellBookingDraftCount(form.cellBooking);
     setShowCellBookingModal(true);
@@ -4340,6 +4509,32 @@ function LegacyApp() {
     { key: "laminationKinds", title: "Виды ламинации", icon: "✨", element: <DictEditor title="Виды ламинации" icon="✨" items={dicts.laminationKinds} onChange={(v) => updateDict("laminationKinds", v)} /> },
     { key: "laminationThickness", title: "Толщина ламинации", icon: "📏", element: <DictEditor title="Толщина ламинации" icon="📏" items={dicts.laminationThickness} onChange={(v) => updateDict("laminationThickness", v)} /> },
     { key: "notebookCompositionPartTypes", title: "Составные части блокнота", icon: "🧩", element: <DictEditor title="Составные части блокнота" icon="🧩" items={dicts.notebookCompositionPartTypes} onChange={(v) => updateDict("notebookCompositionPartTypes", v)} /> },
+    {
+      key: "successImageStats",
+      title: "Статистика карточек успеха",
+      icon: "🏆",
+      element: (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">Статистика карточек успеха</h3>
+              <p className="mt-1 text-xs text-slate-500">Общая статистика из листа __CARD_STATS__ для всех менеджеров.</p>
+            </div>
+            <button type="button" onClick={() => { if (confirm("Сбросить статистику карточек?")) { const empty = createEmptySuccessImageStats(); localStorage.setItem(LS_KEYS.successImageStats, JSON.stringify(empty)); setSuccessImageStats(empty); } }} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">Сбросить</button>
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div>
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Всего выпадений</h4>
+              <div className="space-y-1 text-sm">{[...SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => <div key={name} className="flex justify-between border-b border-slate-100 py-1"><span>{name}</span><span className="font-semibold">{successImageStats.byImage[name] || 0}</span></div>)}</div>
+            </div>
+            <div>
+              <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">По менеджерам</h4>
+              {Object.keys(successImageStats.byManager).length === 0 ? <p className="text-sm text-slate-400">Пока нет данных.</p> : <div className="space-y-3">{Object.entries(successImageStats.byManager).map(([manager, cards]) => <div key={manager}><div className="mb-1 text-sm font-semibold text-slate-700">{manager}</div><div className="space-y-1 text-xs text-slate-600">{Object.entries(cards).map(([name, count]) => <div key={name} className="flex justify-between"><span>{name}</span><span>{count}</span></div>)}</div></div>)}</div>}
+            </div>
+          </div>
+        </div>
+      ),
+    },
     ...(Object.keys(PAPER_PROFILE_LABELS) as PaperProfileKey[]).map((key) => ({
       key,
       title: PAPER_PROFILE_LABELS[key],
@@ -4576,7 +4771,9 @@ function LegacyApp() {
           update("cellBooking", "");
           clearReservation();
         }
-        setSendSuccessImageSrc((prev) => getRandomSuccessImageSrc(prev));
+        const nextSuccessImage = getRandomSuccessImageSrc(sendSuccessImageSrc);
+        setSendSuccessImageSrc(nextSuccessImage);
+        recordSuccessImage(nextSuccessImage, isAdsTab ? adForm.managerName : form.managerName);
         setSendState("done");
       } else {
         console.error(result.error);
@@ -5308,9 +5505,59 @@ function LegacyApp() {
               {calendar && (
                 <div className="mt-4 space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Field label="Вид календаря" required><select data-field="calendarKind" value={form.calendarKind} className={selectFieldClass(showValidation && required.includes("calendarKind"))} onChange={(e) => update("calendarKind", e.target.value)}><option>Настенный</option><option>Настольный</option><option>Карманный</option></select></Field>
+                    <Field label="Вид календаря" required><select data-field="calendarKind" value={form.calendarKind} className={selectFieldClass(showValidation && required.includes("calendarKind"))} onChange={(e) => update("calendarKind", e.target.value)}><option>Квартальный</option><option>Настенный</option><option>Настольный</option><option>Карманный</option></select></Field>
                     {form.calendarKind === "Настенный" && <Field label="Количество рекламных блоков" required><input data-field="adBlocks" type="number" min={1} className={fieldClass(showValidation && required.includes("adBlocks"))} value={form.adBlocks} onChange={(e) => update("adBlocks", e.target.value)} /></Field>}
                   </div>
+                  {form.calendarKind === "Квартальный" && (
+                    <div className="space-y-5 rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field label="Количество рекламных полей" required><input data-field="quarterAdParts" type="number" min={1} className={fieldClass(showValidation && required.includes("quarterAdParts"))} value={form.quarterAdBlocks} onChange={(e) => setQuarterAdBlocks(e.target.value)} /></Field>
+                        <Field label="Размер постера" required><input data-field="quarterPosterSize" className={fieldClass(showValidation && required.includes("quarterPosterSize"))} placeholder="Например: 297×210 мм" value={form.quarterPosterSize} onChange={(e) => update("quarterPosterSize", e.target.value)} /></Field>
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-white p-3 space-y-3">
+                        <h4 className="text-sm font-semibold text-amber-800">Постер</h4>
+                        <PaperSelectionField label="Бумага постера" typeValue={form.quarterPosterPaperType} materialValue={form.quarterPosterDensity} customValue={form.quarterPosterPaperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => { update("quarterPosterPaperType", value); update("quarterPosterDensity", ""); update("quarterPosterPaperCustomName", ""); }} onMaterialChange={(value) => update("quarterPosterDensity", value)} onCustomChange={(value) => update("quarterPosterPaperCustomName", value)} typeFieldName="quarterPosterPaperType" materialFieldName="quarterPosterDensity" customFieldName="quarterPosterPaperCustomName" showValidation={showValidation} invalidType={showValidation && required.includes("quarterPosterPaperType")} invalidMaterial={showValidation && required.includes("quarterPosterDensity")} invalidCustom={showValidation && required.includes("quarterPosterPaperCustomName")} />
+                        <Field label="Цветность постера"><select className={selectClass} value={form.quarterPosterColorMode} onChange={(e) => update("quarterPosterColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
+                        <PaperFinishField label="Поверхность постера" value={form.quarterPosterFinish} options={paperFinishOptionsForSelection(form.quarterPosterPaperType, form.quarterPosterDensity)} onChange={(value) => update("quarterPosterFinish", value)} />
+                        <LaminationBlockComponent label="Ламинация постера" value={form.quarterPosterLamination} onChange={(value: LaminationBlock) => update("quarterPosterLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-white p-3 space-y-3">
+                        <div className="flex items-center justify-between gap-3"><h4 className="text-sm font-semibold text-amber-800">Рекламные поля</h4><div className="flex gap-2"><button type="button" onClick={toggleQuarterAdFieldsSame} className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${form.quarterAdFieldsSame ? "border-amber-500 bg-amber-100 text-amber-900" : "border-amber-300 text-amber-800 hover:bg-amber-50"}`}>{form.quarterAdFieldsSame ? "Поля одинаковые: Да" : "Поля одинаковые"}</button><button type="button" onClick={addQuarterAdPart} className="rounded-lg border border-amber-300 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-50">＋ Добавить поле</button></div></div>
+                        {form.quarterAdParts.slice(0, form.quarterAdFieldsSame ? 1 : undefined).map((part, index) => (
+                          <div key={part.id} className="rounded-lg border border-slate-200 p-3 space-y-3">
+                            <div className="flex items-center justify-between"><h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Рекламное поле {index + 1}</h5>{form.quarterAdParts.length > 1 && <button type="button" onClick={() => removeQuarterAdPart(part.id)} className="text-xs text-red-500">Удалить</button>}</div>
+                            <Field label="Размер" required><input data-field="quarterAdPartSize" className={fieldClass(showValidation && required.includes("quarterAdPartSize"))} placeholder="Например: 297×210 мм" value={part.size} onChange={(e) => updateQuarterAdPart(part.id, { size: e.target.value })} /></Field>
+                            <PaperSelectionField label="Бумага" typeValue={part.paperType} materialValue={part.density} customValue={part.paperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => updateQuarterAdPart(part.id, { paperType: value, density: "", paperCustomName: "" })} onMaterialChange={(value) => updateQuarterAdPart(part.id, { density: value })} onCustomChange={(value) => updateQuarterAdPart(part.id, { paperCustomName: value })} typeFieldName={`quarterAdPartPaperType-${part.id}`} materialFieldName={`quarterAdPartDensity-${part.id}`} customFieldName={`quarterAdPartCustom-${part.id}`} showValidation={showValidation} invalidType={false} invalidMaterial={false} invalidCustom={false} />
+                            <PaperFinishField label="Поверхность" value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateQuarterAdPart(part.id, { finish: value })} />
+                            <Field label="Цветность"><select className={selectClass} value={part.colorMode || ""} onChange={(e) => updateQuarterAdPart(part.id, { colorMode: e.target.value })}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
+                            <LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateQuarterAdPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-white p-3 space-y-3">
+                        <h4 className="text-sm font-semibold text-amber-800">Календарная сетка</h4>
+                        <Field label="Сетка стандартная"><YesNo value={form.quarterGridStandard} onChange={(value) => update("quarterGridStandard", value)} /></Field>
+                        {form.quarterGridStandard ? <Field label="Какая стандартная сетка" required><input data-field="quarterGridName" className={fieldClass(showValidation && required.includes("quarterGridName"))} placeholder="Например: серая Донарита" value={form.quarterGridName} onChange={(e) => update("quarterGridName", e.target.value)} /></Field> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <Field label="Размер сетки" required><input data-field="quarterGridSize" className={fieldClass(showValidation && required.includes("quarterGridSize"))} value={form.quarterGridSize} onChange={(e) => update("quarterGridSize", e.target.value)} /></Field>
+                          <PaperSelectionField label="Бумага сетки" typeValue={form.quarterGridPaperType} materialValue={form.quarterGridDensity} customValue={form.quarterGridPaperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => { update("quarterGridPaperType", value); update("quarterGridDensity", ""); update("quarterGridPaperCustomName", ""); }} onMaterialChange={(value) => update("quarterGridDensity", value)} onCustomChange={(value) => update("quarterGridPaperCustomName", value)} typeFieldName="quarterGridPaperType" materialFieldName="quarterGridDensity" customFieldName="quarterGridPaperCustomName" showValidation={showValidation} invalidType={showValidation && required.includes("quarterGridPaperType")} invalidMaterial={showValidation && required.includes("quarterGridDensity")} invalidCustom={showValidation && required.includes("quarterGridPaperCustomName")} />
+                          <PaperFinishField label="Поверхность сетки" value={form.quarterGridFinish} options={paperFinishOptionsForSelection(form.quarterGridPaperType, form.quarterGridDensity)} onChange={(value) => update("quarterGridFinish", value)} />
+                          <Field label="Цветность"><select className={selectClass} value={form.quarterGridColorMode} onChange={(e) => update("quarterGridColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
+                          <Field label="Где печать"><select className={selectClass} value={form.quarterGridPrintMode} onChange={(e) => update("quarterGridPrintMode", e.target.value)}><option>У себя</option><option>Офсет</option></select></Field>
+                        </div>}
+                      </div>
+                      <div className="rounded-lg border border-amber-200 bg-white p-3 space-y-3">
+                        <Field label="Подложки под сетку"><YesNo value={form.quarterBackingEnabled} onChange={(value) => update("quarterBackingEnabled", value)} /></Field>
+                        {form.quarterBackingEnabled && <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Размер подложки" required><input data-field="quarterBackingSize" className={fieldClass(showValidation && required.includes("quarterBackingSize"))} value={form.quarterBackingSize} onChange={(e) => update("quarterBackingSize", e.target.value)} /></Field><PaperSelectionField label="Бумага подложки" typeValue={form.quarterBackingPaperType} materialValue={form.quarterBackingDensity} customValue={form.quarterBackingPaperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => { update("quarterBackingPaperType", value); update("quarterBackingDensity", ""); update("quarterBackingPaperCustomName", ""); }} onMaterialChange={(value) => update("quarterBackingDensity", value)} onCustomChange={(value) => update("quarterBackingPaperCustomName", value)} typeFieldName="quarterBackingPaperType" materialFieldName="quarterBackingDensity" customFieldName="quarterBackingPaperCustomName" showValidation={showValidation} invalidType={showValidation && required.includes("quarterBackingPaperType")} invalidMaterial={showValidation && required.includes("quarterBackingDensity")} invalidCustom={showValidation && required.includes("quarterBackingPaperCustomName")} /><PaperFinishField label="Поверхность подложки" value={form.quarterBackingFinish} onChange={(value) => update("quarterBackingFinish", value)} /><Field label="Цветность подложки"><select className={selectClass} value={form.quarterBackingColorMode} onChange={(e) => update("quarterBackingColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field></div>}
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border border-amber-200 bg-white p-3">
+                        <Field label="Крепление"><select className={selectClass} value={form.quarterMountType} onChange={(e) => update("quarterMountType", e.target.value)}><option>Планка</option><option>Люверс</option></select></Field>
+                        <Field label="Цвет крепления"><input className={inputClass} value={form.quarterMountColor} onChange={(e) => update("quarterMountColor", e.target.value)} /></Field>
+                        <Field label="Цвет пружины"><input className={inputClass} value={form.quarterSpringColor} onChange={(e) => update("quarterSpringColor", e.target.value)} /></Field>
+                        <Field label="Цвет курсора"><input className={inputClass} value={form.quarterCursorColor} onChange={(e) => update("quarterCursorColor", e.target.value)} /></Field>
+                        <Field label="Тип курсора"><div className="flex flex-wrap gap-2">{["С резинкой", "Без резинки", "Магнитный"].map((type) => <button key={type} type="button" onClick={() => update("quarterCursorType", type)} className={`rounded-lg border px-3 py-1.5 text-sm ${form.quarterCursorType === type ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{type}</button>)}</div></Field>
+                      </div>
+                    </div>
+                  )}
                   {form.calendarKind === "Настенный" && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <PaperSelectionField
@@ -6143,6 +6390,31 @@ function getRequiredFields(form: FormData): string[] {
     }
   } else if (isCalendar(form.productType)) {
     if (!form.calendarKind) errors.push("calendarKind");
+    if (form.calendarKind === "Квартальный") {
+      if (!form.quarterPosterSize.trim()) errors.push("quarterPosterSize");
+      if (!form.quarterPosterPaperType) errors.push("quarterPosterPaperType");
+      else if (form.quarterPosterPaperType === "Дизайнерская" ? !form.quarterPosterPaperCustomName.trim() : requiresPaperDensity(form.quarterPosterPaperType) && !form.quarterPosterDensity.trim()) errors.push(form.quarterPosterPaperType === "Дизайнерская" ? "quarterPosterPaperCustomName" : "quarterPosterDensity");
+      if (!form.quarterAdBlocks || Number(form.quarterAdBlocks) <= 0 || form.quarterAdParts.length === 0) errors.push("quarterAdParts");
+      form.quarterAdParts.forEach((part) => {
+        if (!part.size.trim()) errors.push("quarterAdPartSize");
+        if (!part.paperType) errors.push("quarterAdPartPaperType");
+        else if (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()) errors.push(part.paperType === "Дизайнерская" ? "quarterAdPartCustom" : "quarterAdPartDensity");
+      });
+      if (form.quarterGridStandard) {
+        if (!form.quarterGridName.trim()) errors.push("quarterGridName");
+      } else {
+        if (!form.quarterGridSize.trim()) errors.push("quarterGridSize");
+        if (!form.quarterGridPaperType) errors.push("quarterGridPaperType");
+        else if (form.quarterGridPaperType === "Дизайнерская" ? !form.quarterGridPaperCustomName.trim() : requiresPaperDensity(form.quarterGridPaperType) && !form.quarterGridDensity.trim()) errors.push(form.quarterGridPaperType === "Дизайнерская" ? "quarterGridPaperCustomName" : "quarterGridDensity");
+        if (!form.quarterGridColorMode) errors.push("quarterGridColorMode");
+        if (!form.quarterGridPrintMode) errors.push("quarterGridPrintMode");
+      }
+      if (form.quarterBackingEnabled) {
+        if (!form.quarterBackingSize.trim()) errors.push("quarterBackingSize");
+        if (!form.quarterBackingPaperType) errors.push("quarterBackingPaperType");
+        else if (form.quarterBackingPaperType === "Дизайнерская" ? !form.quarterBackingPaperCustomName.trim() : requiresPaperDensity(form.quarterBackingPaperType) && !form.quarterBackingDensity.trim()) errors.push(form.quarterBackingPaperType === "Дизайнерская" ? "quarterBackingPaperCustomName" : "quarterBackingDensity");
+      }
+    }
     if (form.calendarKind === "Настенный" && !form.adBlocks) errors.push("adBlocks");
     if (form.calendarKind === "Настенный") {
       if (!form.calendarHeaderPaperType) errors.push("calendarHeaderPaperType");
@@ -6270,6 +6542,21 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   calendarHeaderPaperType: "Бумага шапки",
   calendarHeaderPaperDensity: "Плотность шапки",
   calendarHeaderPaperCustomName: "Название дизайнерской бумаги шапки",
+  quarterPosterSize: "Размер постера",
+  quarterPosterPaperType: "Тип бумаги постера",
+  quarterPosterDensity: "Плотность бумаги постера",
+  quarterPosterPaperCustomName: "Название дизайнерской бумаги постера",
+  quarterAdParts: "Рекламные поля",
+  quarterAdPartSize: "Размер рекламного поля",
+  quarterGridName: "Название стандартной сетки",
+  quarterGridSize: "Размер индивидуальной сетки",
+  quarterGridPaperType: "Тип бумаги сетки",
+  quarterGridDensity: "Плотность бумаги сетки",
+  quarterGridColorMode: "Цветность сетки",
+  quarterGridPrintMode: "Печать сетки",
+  quarterBackingSize: "Размер подложки под сетку",
+  quarterBackingPaperType: "Тип бумаги подложки под сетку",
+  quarterBackingDensity: "Плотность бумаги подложки под сетку",
   wallMountDesc: "Описание ригеля / планки",
   calendarBaseMaterial: "Материал основания",
   bagHeight: "Высота пакета",

@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveTxt: (data) => ipcRenderer.invoke('save-txt', data),
   loadConfigSheet: () => ipcRenderer.invoke('load-config-sheet'),
   saveConfigSheet: (data) => ipcRenderer.invoke('save-config-sheet', data),
+  loadCardStats: () => ipcRenderer.invoke('load-card-stats'),
+  recordCardStat: (data) => ipcRenderer.invoke('record-card-stat', data),
   loadClientStore: () => ipcRenderer.invoke('load-client-store'),
   saveClientEntry: (data) => ipcRenderer.invoke('save-client-entry', data),
   loadPresetStore: () => ipcRenderer.invoke('load-preset-store'),
