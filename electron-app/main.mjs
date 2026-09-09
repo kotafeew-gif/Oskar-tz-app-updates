@@ -606,7 +606,7 @@ async function recordCardStatOnSheet(sheets, managerName, imageName) {
   if (!rows.length) {
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
-      range: `'${CARD_STATS_SHEET_TITLE}'!A1:C1`,
+      range: `'${CARD_STATS_SHEET_TITLE}'!A1:D1`,
       valueInputOption: 'RAW',
       requestBody: { values: [['Дата', 'Менеджер', 'Карточка / ИТОГО', 'Количество']] },
     });

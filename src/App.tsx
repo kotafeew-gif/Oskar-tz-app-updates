@@ -109,10 +109,20 @@ const SPRING_COLORS = [
   "Серебряная", "Золотая", "Другой цвет...",
 ];
 
-const SPRING_DIAMETERS = [
-  "6 мм", "8 мм", "10 мм", "12 мм", "14 мм", "16 мм", "19 мм",
-  "22 мм", "25 мм", "28 мм", "32 мм", "38 мм", "45 мм", "51 мм",
+type SpringSpec = { diameter: string; pitch: "2:1" | "3:1"; capacityMm: number; subcontract: boolean };
+const SPRING_SPECS: SpringSpec[] = [
+  { diameter: "6.4 мм", pitch: "2:1", capacityMm: 4.5, subcontract: false },
+  { diameter: "8 мм", pitch: "2:1", capacityMm: 6, subcontract: false },
+  { diameter: "9.5 мм", pitch: "2:1", capacityMm: 7.5, subcontract: false },
+  { diameter: "11 мм", pitch: "2:1", capacityMm: 9, subcontract: false },
+  { diameter: "12.7 мм", pitch: "2:1", capacityMm: 10.5, subcontract: false },
+  { diameter: "14.3 мм", pitch: "2:1", capacityMm: 12, subcontract: false },
+  { diameter: "16 мм", pitch: "3:1", capacityMm: 14.3, subcontract: true },
+  { diameter: "19 мм", pitch: "3:1", capacityMm: 16.4, subcontract: true },
+  { diameter: "22.2 мм", pitch: "3:1", capacityMm: 20.6, subcontract: true },
+  { diameter: "25.4 мм", pitch: "3:1", capacityMm: 23.8, subcontract: true },
 ];
+const SPRING_DIAMETERS = SPRING_SPECS.map((spec) => spec.diameter);
 const DRILL_DIAMETERS = ["2 мм", "3 мм", "4 мм", "5 мм", "6 мм", "8 мм", "10 мм", "12 мм"];
 const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голубой", "3в1 (серый)"];
 const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
@@ -169,7 +179,7 @@ const DEFAULT_PAPER_PROFILES = {
   notebookCover: ["200 г/м²", "250 г/м²", "300 г/м²", "350 г/м²"],
   notebookBlock: ["80 г/м² (офисная)", "90 г/м²", "100 г/м²", "120 г/м²"],
   calendarBase: ["Картон 250 г/м²", "Картон 300 г/м²", "Картон 350 г/м²", "Переплётный картон 1.5 мм"],
-  calendarGridDigital: ["115 г/м²", "130 г/м²", "150 г/м²", "170 г/м²"],
+  calendarGridDigital: ["115 г/м²", "130 г/м²", "150 г/м²", "170 г/м²", "Мелованная 200 г/м²"],
   calendarGridOffset: ["Офсетная 80 г/м²", "Офсетная 90 г/м²"],
   bag: ["170 г/м²", "200 г/м²", "250 г/м²", "300 г/м²", "Крафт 120 г/м²", "Крафт 150 г/м²"],
   sticker: STICKER_MATERIALS,
@@ -378,8 +388,8 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Переработана форма для квартальных календарей.",
-  "Прочие доработки и улучшения.",
+  "Переработана логика подсчёта диаметра пружины",
+  "Прочие доработки и улучшения",
 ];
 
 function getRandomSuccessImageSrc(previousSrc = ""): string {
@@ -446,7 +456,7 @@ function loadPaperProfiles(): typeof DEFAULT_PAPER_PROFILES {
     const next = { ...DEFAULT_PAPER_PROFILES };
     (Object.keys(DEFAULT_PAPER_PROFILES) as PaperProfileKey[]).forEach((key) => {
       const value = parsed[key];
-      next[key] = Array.isArray(value) ? value : DEFAULT_PAPER_PROFILES[key];
+       next[key] = Array.isArray(value) ? mergeUniqueStrings(value, DEFAULT_PAPER_PROFILES[key]) : DEFAULT_PAPER_PROFILES[key];
     });
     return next;
   } catch {
@@ -750,7 +760,7 @@ function normalizeDictsPayload(payload: any): Dicts {
       payload?.managerMarkers && typeof payload.managerMarkers === "object" ? payload.managerMarkers as Record<string, string> : {},
       Number(payload?.managerMarkerCounter) || 0,
     ),
-    paperProfiles: normalizeObject(payload?.paperProfiles, Object.keys(DEFAULT_PAPER_PROFILES)),
+    paperProfiles: Object.fromEntries((Object.keys(DEFAULT_PAPER_PROFILES) as PaperProfileKey[]).map((key) => [key, mergeUniqueStrings(normalizeList(payload?.paperProfiles?.[key]), DEFAULT_PAPER_PROFILES[key])])) as typeof DEFAULT_PAPER_PROFILES,
     paperLibrary: normalizeObject(payload?.paperLibrary, Object.keys(DEFAULT_PAPER_LIBRARY)),
   };
 }
@@ -1498,16 +1508,16 @@ function parseWeight(material: string): number {
   return match ? Number(match[1].replace(",", ".")) : 0;
 }
 
-const UNCOATED_THICKNESS_MM: Record<number, number> = {
-  80: 0.1,
-  90: 0.11,
-  100: 0.12,
-  115: 0.135,
-  120: 0.14,
-  130: 0.155,
-  150: 0.18,
-  170: 0.205,
-  200: 0.24,
+const MATERIAL_THICKNESS_MICRONS: Record<string, number> = {
+  "офсет 80": 100, "офсет 100": 124, "офсет 120": 140, "офсет 160": 180,
+  "каландр 90": 98, "каландр 100": 106, "каландр 120": 126, "каландр 160": 166,
+  "каландр 200": 200, "каландр 250": 245, "каландр 300": 305, "каландр 350": 350,
+  "мел мат 90": 80, "мел мат 115": 110, "мел мат 130": 131, "мел мат 150": 153,
+  "мел мат 170": 175, "мел мат 200": 210, "мел мат 250": 250, "мел мат 300": 285, "мел мат 350": 340,
+  "мел глянец 90": 75, "мел глянец 115": 91, "мел глянец 130": 105, "мел глянец 150": 125,
+  "мел глянец 170": 147, "мел глянец 200": 176, "мел глянец 250": 225, "мел глянец 300": 270, "мел глянец 350": 330,
+  "картон 270": 390,
+  "пластиковая обложка гл": 200, "пластиковая обложка мат": 400,
 };
 
 const COATED_MATTE_THICKNESS_MM: Record<number, number> = {
@@ -1556,22 +1566,38 @@ function interpolateThickness(gsm: number, table: Record<number, number>): numbe
 }
 
 function estimateThicknessMm(material: string, finish: PaperFinish = "Матовая"): number {
+  const normalized = material.toLowerCase().replace(/\s+/g, " ").trim();
   const gsm = parseWeight(material);
   if (!gsm) return 0;
 
-  const normalized = material.toLowerCase();
+  const isPlasticCover = normalized.includes("пластиковая обложка");
+  if (isPlasticCover) return (normalized.includes(" гл") ? 200 : 400) / 1000;
+
+  const isOffset = normalized.includes("офсет") || normalized.includes("офис");
+  const isCalender = normalized.includes("каландр");
+  const isCoated = normalized.includes("мелован") || normalized.includes("мел ");
+  const finishKey = finish === "Глянцевая" ? "мел глянец" : "мел мат";
+  const densityKey = Number.isFinite(gsm) ? String(gsm) : "";
+  const tableKey = isOffset ? `офсет ${densityKey}` : isCalender ? `каландр ${densityKey}` : isCoated ? `${finishKey} ${densityKey}` : `картон ${densityKey}`;
+  const tableMicrons = MATERIAL_THICKNESS_MICRONS[tableKey];
+  if (tableMicrons) return tableMicrons / 1000;
+
   const isKraft = normalized.includes("крафт");
-  const isOffice = normalized.includes("офис") || normalized.includes("офсет");
   const isCoatedByName = normalized.includes("мелов");
 
   if (isKraft) return Math.max(gsm / 670, 0.08);
 
-  if (isOffice || (!isCoatedByName && finish === "Матовая")) {
-    return interpolateThickness(gsm, UNCOATED_THICKNESS_MM) ?? Math.max(gsm / 750, 0.06);
+  if (isOffset || (!isCoatedByName && finish === "Матовая")) {
+    return Math.max(gsm / 750, 0.06);
   }
 
   const coatedTable = finish === "Глянцевая" ? COATED_GLOSS_THICKNESS_MM : COATED_MATTE_THICKNESS_MM;
   return interpolateThickness(gsm, coatedTable) ?? Math.max(gsm / (finish === "Глянцевая" ? 1080 : 980), 0.06);
+}
+
+function findSpringSpecForThickness(thickness: number): SpringSpec | null {
+  if (!thickness || thickness <= 0) return null;
+  return SPRING_SPECS.find((spec) => spec.capacityMm >= thickness) ?? SPRING_SPECS[SPRING_SPECS.length - 1];
 }
 
 function getSpringColor(form: FormData): string {
@@ -1598,7 +1624,7 @@ function formatBagPaperSelection(form: FormData): string {
   return density ? `${form.bagPaperType} ${density}` : form.bagPaperType;
 }
 
-function buildSpringSuggestion(form: FormData): { thickness: number; diameter: string } | null {
+function buildSpringSuggestion(form: FormData): { thickness: number; diameter: string; capacityMm: number; pitch: SpringSpec["pitch"]; subcontract: boolean } | null {
   if (form.bindingType !== "Пружина") return null;
 
   if (isNotebook(form.productType) && form.notebookCompositionEnabled) {
@@ -1620,9 +1646,8 @@ function buildSpringSuggestion(form: FormData): { thickness: number; diameter: s
     });
 
     if (!hasKnownPart) return null;
-    const target = Math.ceil(thickness + 2);
-    const nearest = SPRING_DIAMETERS.find((item) => parseWeight(item) >= target) ?? SPRING_DIAMETERS[SPRING_DIAMETERS.length - 1];
-    return { thickness, diameter: nearest };
+    const spring = findSpringSpecForThickness(thickness);
+    return spring ? { thickness, diameter: spring.diameter, capacityMm: spring.capacityMm, pitch: spring.pitch, subcontract: spring.subcontract } : null;
   }
 
   const sheetCount = isNotebook(form.productType)
@@ -1646,9 +1671,8 @@ function buildSpringSuggestion(form: FormData): { thickness: number; diameter: s
     : 0;
 
   const thickness = sheetCount * bodyThickness + (coverThickness ? 2 * coverThickness : 0);
-  const target = Math.ceil(thickness + 2);
-  const nearest = SPRING_DIAMETERS.find((item) => parseWeight(item) >= target) ?? SPRING_DIAMETERS[SPRING_DIAMETERS.length - 1];
-  return { thickness, diameter: nearest };
+  const spring = findSpringSpecForThickness(thickness);
+  return spring ? { thickness, diameter: spring.diameter, capacityMm: spring.capacityMm, pitch: spring.pitch, subcontract: spring.subcontract } : null;
 }
 
 function formatMaterialWithFinish(material: string, finish: PaperFinish): string {
@@ -4274,8 +4298,13 @@ function LegacyApp() {
       localStorage.setItem(LS_KEYS.successImageStats, JSON.stringify(next));
       return next;
     });
-    const result = await (window as any).electronAPI?.recordCardStat?.({ managerName: manager, imageName });
-    if (result?.success && result.stats) setSuccessImageStats(result.stats);
+    try {
+      const result = await (window as any).electronAPI?.recordCardStat?.({ managerName: manager, imageName });
+      if (result?.success && result.stats) setSuccessImageStats(result.stats);
+      else if (result && !result.success) setSendAutoSaveMsg((prev) => [prev, `Статистика не записалась: ${result.error || "ошибка Google Таблицы"}`].filter(Boolean).join("\n"));
+    } catch (error) {
+      setSendAutoSaveMsg((prev) => [prev, `Статистика не записалась: ${error instanceof Error ? error.message : "ошибка Google Таблицы"}`].filter(Boolean).join("\n"));
+    }
   }
 
   useEffect(() => {
@@ -4458,7 +4487,7 @@ function LegacyApp() {
   const adRequiredLabels = adRequired.map((field) => REQUIRED_FIELD_LABELS[field] ?? field);
   const todayIso = getTodayLocalIso();
   const springSuggestion = form.bindingType === "Пружина" ? buildSpringSuggestion(form) : null;
-  const springDiameterIsCustomOrder = springSuggestion ? parseWeight(springSuggestion.diameter) > 16 : false;
+  const springDiameterIsCustomOrder = springSuggestion?.subcontract || false;
   const missingFileLink = !form.fileLink.trim();
   const adMissingFileLink = !adForm.fileLink.trim();
   const dictSections = [
@@ -5809,9 +5838,9 @@ function LegacyApp() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <Field label="Цвет пружины"><select value={form.springColor} className={selectClass} onChange={(e) => update("springColor", e.target.value)}><option value="">— выберите —</option>{SPRING_COLORS.map((c) => <option key={c}>{c}</option>)}</select>{form.springColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} placeholder="Укажите цвет" value={form.springColorCustom} onChange={(e) => update("springColorCustom", e.target.value)} />}</Field>
                           <Field label="Диаметр пружины">
-                            <select value={form.springDiameter} className={selectClass} onChange={(e) => { springDiameterManuallyEditedRef.current = true; update("springDiameter", e.target.value); }}><option value="">— выберите —</option>{SPRING_DIAMETERS.map((d) => <option key={d}>{d}</option>)}</select>
-                            {springSuggestion && <p className="text-xs text-slate-500 mt-1">Диаметр подбирается автоматически по толщине блока и обложки, но его можно скорректировать вручную.</p>}
-                            {springDiameterIsCustomOrder && <p className="text-xs font-semibold text-amber-700 mt-1">Внимание, пружина ЗАКАЗНАЯ, перфорация 2:1</p>}
+                            <select value={form.springDiameter} className={selectClass} onChange={(e) => { springDiameterManuallyEditedRef.current = true; update("springDiameter", e.target.value); }}><option value="">— выберите —</option>{SPRING_SPECS.map((spec) => <option key={spec.diameter} value={spec.diameter}>{`${spec.diameter}, ${spec.pitch}, блок до ${spec.capacityMm} мм${spec.subcontract ? " (подряд)" : ""}`}</option>)}</select>
+                            {springSuggestion && <p className="text-xs text-slate-500 mt-1">Толщина блока: {springSuggestion.thickness.toFixed(2)} мм. Подобрано по допустимой высоте сшивания: до {springSuggestion.capacityMm} мм, шаг {springSuggestion.pitch}.</p>}
+                            {springDiameterIsCustomOrder && <p className="text-xs font-semibold text-amber-700 mt-1">Внимание, эта пружина шьётся на подрядном оборудовании.</p>}
                           </Field>
                           <Field label="Расположение">
                             <select value={form.springPosition} className={selectClass} onChange={(e) => update("springPosition", e.target.value)}>
