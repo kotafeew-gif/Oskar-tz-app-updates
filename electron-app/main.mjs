@@ -296,20 +296,23 @@ async function ensureSheetRowCount(sheets, sheetId, currentRowCount, requiredRow
   });
 }
 
-function buildOrangeRuns(text) {
-  const needle = 'УФ-лак';
-  const runs = [{ startIndex: 0, format: { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } } } }];
-  let index = text.indexOf(needle);
-
-  while (index !== -1) {
-    runs.push({ startIndex: index, format: { foregroundColorStyle: { rgbColor: { red: 0.93, green: 0.43, blue: 0.08 } } } });
-    if (index + needle.length < text.length) {
-      runs.push({ startIndex: index + needle.length, format: { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } } } });
+function buildTextFormatRuns(text) {
+  const base = { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } }, bold: false };
+  const events = [{ startIndex: 0, format: base }];
+  const addMatches = (needle, format) => {
+    let index = text.indexOf(needle);
+    while (index !== -1) {
+      events.push({ startIndex: index, format });
+      events.push({ startIndex: index + needle.length, format: base });
+      index = text.indexOf(needle, index + needle.length);
     }
-    index = text.indexOf(needle, index + needle.length);
-  }
-
-  return runs.sort((a, b) => a.startIndex - b.startIndex);
+  };
+  addMatches('УФ-лак', { foregroundColorStyle: { rgbColor: { red: 0.93, green: 0.43, blue: 0.08 } }, bold: false });
+  addMatches('глянцевая', { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } }, bold: true });
+  addMatches('скругление углов', { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } }, bold: true });
+  const unique = new Map();
+  events.sort((a, b) => a.startIndex - b.startIndex).forEach((event) => unique.set(event.startIndex, event));
+  return [...unique.values()];
 }
 
 let mainWindow;
@@ -1070,7 +1073,7 @@ ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz,
       });
     }
 
-    if (sheetId && columnE.includes('УФ-лак')) {
+    if (sheetId && (columnE.includes('УФ-лак') || columnE.includes('глянцевая') || columnE.includes('скругление углов'))) {
       requests.push({
         updateCells: {
           range: {
@@ -1085,7 +1088,7 @@ ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz,
               values: [
                 {
                   userEnteredValue: { stringValue: columnE },
-                  textFormatRuns: buildOrangeRuns(columnE),
+                  textFormatRuns: buildTextFormatRuns(columnE),
                 },
               ],
             },
