@@ -105,11 +105,10 @@ const DEFAULT_LAMINATION_KINDS = ["Глянцевая", "Матовая", "Со�
 const DEFAULT_LAMINATION_THICKNESS = ["30 мк", "80 мк", "125 мк"];
 
 const SPRING_COLORS = [
-  "Прозрачная", "Чёрная", "Белая", "Синяя", "Красная", "Зелёная", "Жёлтая",
-  "Серебряная", "Золотая", "Другой цвет...",
+  "Белая", "Чёрная", "Серебро", "Другой цвет...",
 ];
 
-type SpringSpec = { diameter: string; pitch: "2:1" | "3:1"; capacityMm: number; subcontract: boolean };
+type SpringSpec = { diameter: string; pitch: "2:1" | "3:1"; capacityMm: number; subcontract: boolean; note?: string };
 const SPRING_SPECS: SpringSpec[] = [
   { diameter: "6.4 мм", pitch: "2:1", capacityMm: 4.5, subcontract: false },
   { diameter: "8 мм", pitch: "2:1", capacityMm: 6, subcontract: false },
@@ -122,7 +121,6 @@ const SPRING_SPECS: SpringSpec[] = [
   { diameter: "22.2 мм", pitch: "3:1", capacityMm: 20.6, subcontract: true },
   { diameter: "25.4 мм", pitch: "3:1", capacityMm: 23.8, subcontract: true },
 ];
-const SPRING_DIAMETERS = SPRING_SPECS.map((spec) => spec.diameter);
 let runtimeSpringSpecs: SpringSpec[] = [...SPRING_SPECS];
 const DRILL_DIAMETERS = ["2 мм", "3 мм", "4 мм", "5 мм", "6 мм", "8 мм", "10 мм", "12 мм"];
 const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голубой", "3в1 (серый)"];
@@ -388,10 +386,10 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Изменено отображение ТЗ в таблице (для лучшей читаемости)",
-  "Исправлена настройка кашировки",
-  "Введено ограничение на активацию кнопки \"показать цвет\" =)",
-  "прочие улучшения и изменения.",
+  "Переработаны настройки для блокнотов.",
+  "Скорректированы настройки для пружины.",
+  "Исправлен баг при ручном вводе даты и изменены стандартные настройки ламината.",
+  "Прочие исправления и улучшения.",
 ];
 
 function getRandomSuccessImageSrc(previousSrc = ""): string {
@@ -428,11 +426,12 @@ function saveList(key: string, list: string[]) {
 
 function normalizeSpringSpecs(value: unknown): SpringSpec[] {
   if (!Array.isArray(value)) return [...SPRING_SPECS];
-  const result = value.map((item: any) => ({
+  const result: SpringSpec[] = value.map((item: any) => ({
     diameter: String(item?.diameter || "").trim(),
-    pitch: item?.pitch === "3:1" ? "3:1" : "2:1",
+    pitch: (item?.pitch === "3:1" ? "3:1" : "2:1") as SpringSpec["pitch"],
     capacityMm: Number(item?.capacityMm) || 0,
     subcontract: Boolean(item?.subcontract),
+    note: String(item?.note || "").trim(),
   })).filter((item: SpringSpec) => item.diameter && item.capacityMm > 0);
   return result.length ? result : [...SPRING_SPECS];
 }
@@ -898,7 +897,7 @@ interface KashurovkaBlock {
   slimPaperBottomPaperType: PaperTypeOption | ""; slimPaperBottomPaperCustomName: string; slimPaperBottomPaperDensity: string;
 }
 
-const defaultLaminationBlock = (): LaminationBlock => ({ enabled: false, side: "Односторонняя", thickness: "80 мк", kind: "Глянцевая" });
+const defaultLaminationBlock = (): LaminationBlock => ({ enabled: false, side: "", thickness: "", kind: "" });
 const defaultKashurovkaBlock = (): KashurovkaBlock => ({
   enabled: false, baseType: "", baseCustomName: "", linerType: "", linerSize: "", connectionType: "Каширование", turnoverType: "Без заворота",
   forsacEnabled: false, forsacPaper: "", forsacSize: "", forsacPrintMode: "Белые",
@@ -928,7 +927,7 @@ interface FormData {
   postProcessing: string[]; foilColor: string; uvType: string; bigkovka: boolean; bigkovkaLines: string; drillingDiameter: string;
   falcovka: boolean;
   lamination: LaminationBlock; kashurovka: KashurovkaBlock;
-  binding: boolean; bindingType: string; stapleCount: string; staplePosition: string; springColor: string; springColorCustom: string; springDiameter: string; springPosition: string; springHidden: boolean;
+  binding: boolean; bindingType: string; stapleCount: string; staplePosition: string; springColor: string; springColorCustom: string; springDiameter: string; springDiameterStrict: boolean; springPosition: string; springHidden: boolean;
   subcontractWorks: SubcontractWork[];
   notebookCompositionEnabled: boolean; notebookParts: NotebookPart[];
   bagPaperType: BagPaperTypeOption | ""; bagHeight: string; bagWidth: string; bagDepth: string; bagPartsCount: string; bagExternalSheets: boolean; bagEyeletColor: string; bagEyeletColorCustom: string; bagHandleColor: string; bagHandleColorCustom: string; bagHandlePipsik: string;
@@ -1095,7 +1094,7 @@ function createDefaultForm(): FormData {
     calendarHeaderPaperType: "", calendarHeaderPaperCustomName: "", calendarHeaderPaperDensity: "", calendarHeaderPaperFinish: "Матовая", calendarHeaderSize: "", calendarHeaderColorMode: "", calendarHeaderLamination: defaultLaminationBlock(),
     postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1", drillingDiameter: "", falcovka: false,
     lamination: defaultLaminationBlock(), kashurovka: defaultKashurovkaBlock(),
-    binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springDiameter: "8 мм", springPosition: "По широкой стороне", springHidden: false,
+    binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springDiameter: "8 мм", springDiameterStrict: false, springPosition: "По широкой стороне", springHidden: false,
     subcontractWorks: [], notebookCompositionEnabled: false, notebookParts: [],
     bagPaperType: "", bagHeight: "", bagWidth: "", bagDepth: "", bagPartsCount: "Из 2-х частей", bagExternalSheets: false, bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleType: "Верёвка", bagHandleColor: "Белый", bagHandleColorCustom: "", bagHandlePipsik: "Без пипсика",
     stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false, stickerPacks: false,
@@ -1345,17 +1344,6 @@ function stripParentheticalNote(value: string): string {
   return value.replace(/\s*\([^)]*\)/g, "").trim();
 }
 
-function normalizeTimeInput(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 4);
-  if (!digits) return "";
-  if (digits.length <= 2) return digits;
-  const hoursRaw = digits.slice(0, 2);
-  const minutesRaw = digits.slice(2, 4);
-  const hours = Math.min(Number(hoursRaw || "0"), 23);
-  const minutes = Math.min(Number(minutesRaw || "0"), 59);
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
-}
-
 function getTodayLocalIso(): string {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
@@ -1375,12 +1363,14 @@ function getCurrentDateTimeForFilename(): string {
 }
 
 function getLaminationSideNotation(side: string): string {
-  return side === "Двухсторонняя" ? "1+1" : "1+0";
+  if (side === "Двухсторонняя") return "1+1";
+  if (side === "Односторонняя") return "1+0";
+  return "";
 }
 
 function formatLamination(value: LaminationBlock): string {
   if (!value.enabled) return "Без ламинации";
-  return `${getLaminationSideNotation(value.side)}, ${value.kind}, ${value.thickness}`;
+  return [getLaminationSideNotation(value.side), value.kind, value.thickness].filter(Boolean).join(", ") || "Параметры не выбраны";
 }
 
 function formatLaminationCompact(value: LaminationBlock): string {
@@ -1389,8 +1379,8 @@ function formatLaminationCompact(value: LaminationBlock): string {
   if (kindLower.includes("карм")) {
     return `лам. карм.${value.thickness ? ` ${value.thickness}` : ""}`;
   }
-  const kind = value.kind === "Глянцевая" ? "глян." : value.kind === "Матовая" ? "мат." : "софт";
-  return `лам. ${getLaminationSideNotation(value.side)} ${kind} ${value.thickness}`;
+  const kind = value.kind === "Глянцевая" ? "глян." : value.kind === "Матовая" ? "мат." : value.kind ? "софт" : "";
+  return ["лам.", getLaminationSideNotation(value.side), kind, value.thickness].filter(Boolean).join(" ");
 }
 
 function formatFileCountText(value: string): string {
@@ -1646,6 +1636,25 @@ function findSpringSpecForThickness(thickness: number): SpringSpec | null {
 
 function getSpringColor(form: FormData): string {
   return form.springColor === "Другой цвет..." ? form.springColorCustom.trim() : form.springColor;
+}
+
+function getSpringDiameterText(form: FormData): string {
+  if (!form.springDiameter) return "";
+  return form.springDiameterStrict ? `СТРОГО ${form.springDiameter}` : form.springDiameter;
+}
+
+function getSpringSpecNote(spec: SpringSpec): string {
+  return spec.note || (spec.subcontract ? "подряд" : "");
+}
+
+function getSpringOutputParts(form: FormData): string[] {
+  return [
+    "пружина",
+    getSpringColor(form)?.toLowerCase(),
+    getSpringDiameterText(form),
+    form.springPosition?.toLowerCase(),
+    form.springHidden ? "скрытая" : "",
+  ].filter(Boolean);
 }
 
 function getBagColor(value: string, custom: string): string {
@@ -2057,9 +2066,7 @@ function generateShortTZ(form: FormData): string {
       const pos = form.stapleCount === "Одна" ? `, ${form.staplePosition.toLowerCase()}` : "";
       parts.push(`${form.stapleCount === "Две" ? "две скобы" : "одна скоба"}${pos}`);
     } else if (form.bindingType === "Пружина") {
-      const col = getSpringColor(form);
-      const dia = form.springDiameter;
-      parts.push(`пружина${col ? " " + col.toLowerCase() : ""}${dia ? " " + dia : ""}${form.springPosition ? `, ${form.springPosition.toLowerCase()}` : ""}${form.springHidden ? ", скрытая" : ", открытая"}`);
+      parts.push(getSpringOutputParts(form).join(" "));
     } else parts.push(form.bindingType.toLowerCase());
   }
 
@@ -2370,9 +2377,9 @@ function generateTZ(form: FormData, _tzNumber: number): string {
       const col = getSpringColor(form);
       lines.push(` Тип : Пружина`);
       if (col) lines.push(` Цвет : ${col}`);
-      if (form.springDiameter) lines.push(` Диаметр : ${form.springDiameter}`);
+      if (form.springDiameter) lines.push(` Диаметр : ${getSpringDiameterText(form)}`);
       lines.push(` Расположение : ${form.springPosition}`);
-      lines.push(` Скрытая пружина : ${form.springHidden ? "Да" : "Нет"}`);
+      if (form.springHidden) lines.push(" Скрытая пружина : Да");
     } else lines.push(` Тип : ${form.bindingType || "не указан"}`);
     lines.push("");
   }
@@ -2650,7 +2657,6 @@ function DateTimeField({
   invalidDate: boolean;
   invalidTime: boolean;
 }) {
-  const timePickerRef = useRef<HTMLInputElement | null>(null);
   const todayIso = getTodayLocalIso();
 
   return (
@@ -2661,47 +2667,16 @@ function DateTimeField({
         min={todayIso}
         className={`${fieldClass(invalidDate)} min-w-[150px] flex-1`}
         value={dateValue}
-        onChange={(e) => {
-          if (e.target.value && e.target.value < todayIso) return;
-          onDateChange(e.target.value);
-        }}
+        onChange={(e) => onDateChange(e.target.value)}
       />
       <input
         data-field={timeFieldName}
-        type="text"
-        inputMode="numeric"
-        className={`${fieldClass(invalidTime)} w-28 min-w-0 shrink`}
-        placeholder="ЧЧ:ММ"
-        value={timeValue}
-        onChange={(e) => {
-          const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
-          const next = digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
-          onTimeChange(next);
-        }}
-        onBlur={(e) => onTimeChange(normalizeTimeInput(e.target.value))}
-      />
-      <input
-        data-field={timeFieldName}
-        ref={timePickerRef}
         type="time"
-        className="absolute h-px w-px overflow-hidden opacity-0 pointer-events-none"
-        tabIndex={-1}
-        aria-hidden="true"
         min={dateValue === todayIso ? getCurrentLocalTimeIso() : undefined}
-        value={/^\d{2}:\d{2}$/.test(timeValue) ? timeValue : ""}
+        className={`${fieldClass(invalidTime)} w-32 min-w-0 shrink`}
+        value={timeValue}
         onChange={(e) => onTimeChange(e.target.value)}
       />
-      <button
-        type="button"
-        onClick={() => {
-          timePickerRef.current?.showPicker?.();
-          timePickerRef.current?.focus();
-        }}
-        className="shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-slate-600 hover:bg-slate-50 transition-colors"
-        aria-label="Открыть выбор времени"
-      >
-        <UiIcon name="clock" className="h-4 w-4" />
-      </button>
     </div>
   );
 }
@@ -2955,9 +2930,9 @@ function LaminationBlockComponent({ label, value, onChange, laminationKinds, lam
       </div>
       {value.enabled && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-2 border-l-2 border-blue-100 mt-2">
-          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Сторонность</label><select value={value.side} className={selectClass} onChange={(e) => upd("side", e.target.value)}><option>Односторонняя</option><option>Двухсторонняя</option></select></div>
-          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Толщина</label><select value={value.thickness} className={selectClass} onChange={(e) => upd("thickness", e.target.value)}>{laminationThickness.map((t: string) => <option key={t}>{t}</option>)}</select></div>
-          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Вид</label><select value={value.kind} className={selectClass} onChange={(e) => upd("kind", e.target.value)}>{laminationKinds.map((k: string) => <option key={k}>{k}</option>)}</select></div>
+          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Сторонность</label><select value={value.side} className={selectClass} onChange={(e) => upd("side", e.target.value)}><option value="">— выберите —</option><option>Односторонняя</option><option>Двухсторонняя</option></select></div>
+          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Толщина</label><select value={value.thickness} className={selectClass} onChange={(e) => upd("thickness", e.target.value)}><option value="">— выберите —</option>{laminationThickness.map((t: string) => <option key={t}>{t}</option>)}</select></div>
+          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Вид</label><select value={value.kind} className={selectClass} onChange={(e) => upd("kind", e.target.value)}><option value="">— выберите —</option>{laminationKinds.map((k: string) => <option key={k}>{k}</option>)}</select></div>
         </div>
       )}
     </div>
@@ -3631,10 +3606,11 @@ function SpringSpecsEditor({ items, onChange }: { items: SpringSpec[]; onChange:
       </div>
       <div className="space-y-2">
         {items.map((item, index) => (
-          <div key={`${item.diameter}-${item.pitch}-${index}`} className="grid grid-cols-1 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 md:grid-cols-[1.2fr_0.8fr_1fr_auto_auto] md:items-center">
+          <div key={`${item.diameter}-${item.pitch}-${index}`} className="grid grid-cols-1 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 md:grid-cols-[1.2fr_0.8fr_1fr_1.2fr_auto_auto] md:items-center">
             <input className={inputClass} value={item.diameter} onChange={(e) => update(index, { diameter: e.target.value })} placeholder="Диаметр, мм" />
             <select className={selectClass} value={item.pitch} onChange={(e) => update(index, { pitch: e.target.value as SpringSpec["pitch"] })}><option>2:1</option><option>3:1</option></select>
             <input type="number" min={0} step="0.1" className={inputClass} value={item.capacityMm || ""} onChange={(e) => update(index, { capacityMm: Number(e.target.value) || 0 })} placeholder="Высота блока, мм" />
+            <input className={inputClass} value={item.note || ""} onChange={(e) => update(index, { note: e.target.value })} placeholder="Примечание для меню" />
             <label className="flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={item.subcontract} onChange={(e) => update(index, { subcontract: e.target.checked })} /> Подряд</label>
             <button type="button" onClick={() => remove(index)} className="rounded-lg border border-red-200 px-2 py-1.5 text-xs text-red-600 hover:bg-red-50">Удалить</button>
           </div>
@@ -4778,9 +4754,9 @@ function LegacyApp() {
 
   useEffect(() => {
     const suggestion = buildSpringSuggestion(form);
-    const shouldAutoUpdate = form.notebookCompositionEnabled || !springDiameterManuallyEditedRef.current;
+    const shouldAutoUpdate = !springDiameterManuallyEditedRef.current;
     if (suggestion && form.bindingType === "Пружина" && shouldAutoUpdate && form.springDiameter !== suggestion.diameter) {
-      setForm((prev) => ({ ...prev, springDiameter: suggestion.diameter }));
+      setForm((prev) => ({ ...prev, springDiameter: suggestion.diameter, springDiameterStrict: false }));
     }
   }, [form.productType, form.bindingType, form.pageCount, form.blockPages, form.density, form.densityFinish, form.blockDensity, form.blockFinish, form.blockOffsetPrinting, form.coverDensity, form.coverFinish, form.coverUseKash, form.kashurovka.linerType, form.kashurovka.linerFinish, form.kashurovka.baseType, form.kashurovka.baseCustomName, form.kashurovka.linerPaperDensity, form.kashurovka.forsacEnabled, form.kashurovka.forsacPaper, form.kashurovka.forsacPaperDensity, form.kashurovka.forsacFinish, form.calendarBaseUseKash, form.calendarGridMaterial, form.calendarGridPages, form.calendarGridFinish, form.notebookCompositionEnabled, form.notebookParts]);
 
@@ -5267,7 +5243,7 @@ function LegacyApp() {
             <Section title="🖨 Параметры изделия">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Field label="Тип изделия" required>
-                  <select data-field="productType" value={form.productType} className={selectFieldClass(showValidation && required.includes("productType"))} onChange={(e) => { setForm((prev) => ({ ...createDefaultForm(), orderNumber: prev.orderNumber, clientName: prev.clientName, managerName: prev.managerName, deadline: prev.deadline, deadlineTime: prev.deadlineTime, quantity: prev.quantity, cellBooking: prev.cellBooking, subcontractWorks: prev.subcontractWorks, productType: e.target.value })); setShowValidation(false); }}>
+                  <select data-field="productType" value={form.productType} className={selectFieldClass(showValidation && required.includes("productType"))} onChange={(e) => { const nextProductType = e.target.value; const notebookSelected = isNotebook(nextProductType); setForm((prev) => ({ ...createDefaultForm(), orderNumber: prev.orderNumber, clientName: prev.clientName, managerName: prev.managerName, deadline: prev.deadline, deadlineTime: prev.deadlineTime, quantity: prev.quantity, cellBooking: prev.cellBooking, subcontractWorks: prev.subcontractWorks, productType: nextProductType, binding: notebookSelected, bindingType: notebookSelected ? "Пружина" : "Скоба", bigkovka: notebookSelected ? false : prev.bigkovka, falcovka: notebookSelected ? false : prev.falcovka })); springDiameterManuallyEditedRef.current = false; setShowValidation(false); }}>
                     <option value="">— выберите —</option>{dicts.productTypes.map((t) => <option key={t}>{t}</option>)}
                   </select>
                   {pt === "Другое..." && <input data-field="productTypeCustom" className={`${fieldClass(showValidation && required.includes("productTypeCustom"))} mt-2`} placeholder="Укажите тип изделия" value={form.productTypeCustom} onChange={(e) => update("productTypeCustom", e.target.value)} />}
@@ -5497,10 +5473,16 @@ function LegacyApp() {
                       <h3 className="text-sm font-semibold text-blue-700 flex items-center gap-1.5"><UiIcon name="book" className="h-4 w-4" />Обложка</h3>
                       <Field label="Обложка с кашированием">
                         <YesNo value={form.coverUseKash} onChange={(value) => {
-                          update("coverUseKash", value);
-                          if (value && !form.kashurovka.enabled) update("kashurovka", { ...form.kashurovka, enabled: true });
+                          setForm((prev) => ({
+                            ...prev,
+                            coverUseKash: value,
+                            kashurovka: value
+                              ? { ...prev.kashurovka, enabled: true }
+                              : { ...prev.kashurovka, enabled: false },
+                          }));
                         }} />
                       </Field>
+                      {form.coverUseKash && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">Перейдите в настройки кашировки.</div>}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="md:col-span-2">
                           <PaperSelectionField
@@ -5982,10 +5964,10 @@ function LegacyApp() {
               </Section>
             )}
 
-            <Section title="📐 Биговка">
-              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 items-start ${deskCalendarBigovkaActive || form.kashurovka.enabled ? "opacity-50" : ""}`}>
+            <Section title="📐 Биговка / Фальцовка">
+              <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 items-start ${deskCalendarBigovkaActive || form.kashurovka.enabled || notebook ? "opacity-50" : ""}`}>
                 <div className="flex items-center gap-4 flex-wrap">
-                  <YesNo value={form.bigkovka} onChange={(v) => update("bigkovka", v)} disabled={deskCalendarBigovkaActive || form.kashurovka.enabled} />
+                  <YesNo value={form.bigkovka} onChange={(v) => update("bigkovka", v)} disabled={deskCalendarBigovkaActive || form.kashurovka.enabled || notebook} />
                   {form.bigkovka && (
                     <div className="flex items-center gap-2">
                       <label className="text-sm text-slate-600">Количество линий:</label>
@@ -5993,7 +5975,7 @@ function LegacyApp() {
                         type="number"
                         min={1}
                         max={20}
-                        disabled={deskCalendarBigovkaActive || form.kashurovka.enabled}
+                        disabled={deskCalendarBigovkaActive || form.kashurovka.enabled || notebook}
                         className={`${inputClass} w-20 ${deskCalendarBigovkaActive || form.kashurovka.enabled ? "opacity-50 cursor-not-allowed" : ""}`}
                         value={form.bigkovkaLines}
                         onChange={(e) => update("bigkovkaLines", e.target.value)}
@@ -6003,10 +5985,11 @@ function LegacyApp() {
                   )}
                   {deskCalendarBigovkaActive && <p className="text-xs text-slate-500">Биговка уже указана в настройках основания настольного календаря.</p>}
                   {form.kashurovka.enabled && <p className="text-xs text-slate-500">При кашировке биговка не применяется.</p>}
+                  {notebook && <p className="text-xs text-slate-500">Для блокнота биговка и фальцовка не применяются.</p>}
                 </div>
                 <div className="flex items-center gap-2 md:justify-start md:pl-2">
                   <span className="text-xs font-medium text-slate-600 uppercase tracking-wide">Фальцовка</span>
-                  <YesNo value={form.falcovka} onChange={(v) => update("falcovka", v)} disabled={deskCalendarBigovkaActive} />
+                  <YesNo value={form.falcovka} onChange={(v) => update("falcovka", v)} disabled={deskCalendarBigovkaActive || form.kashurovka.enabled || notebook} />
                 </div>
               </div>
             </Section>
@@ -6038,9 +6021,9 @@ function LegacyApp() {
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           <Field label="Цвет пружины"><select value={form.springColor} className={selectClass} onChange={(e) => update("springColor", e.target.value)}><option value="">— выберите —</option>{SPRING_COLORS.map((c) => <option key={c}>{c}</option>)}</select>{form.springColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} placeholder="Укажите цвет" value={form.springColorCustom} onChange={(e) => update("springColorCustom", e.target.value)} />}</Field>
                           <Field label="Диаметр пружины">
-                            <select value={form.springDiameter} className={selectClass} onChange={(e) => { springDiameterManuallyEditedRef.current = true; update("springDiameter", e.target.value); }}><option value="">— выберите —</option>{dicts.springSpecs.map((spec) => <option key={`${spec.diameter}-${spec.pitch}`} value={spec.diameter}>{`${spec.diameter}, ${spec.pitch}, блок до ${spec.capacityMm} мм${spec.subcontract ? " (подряд)" : ""}`}</option>)}</select>
-                            {springSuggestion && <p className="text-xs text-slate-500 mt-1">Толщина блока: {springSuggestion.thickness.toFixed(2)} мм. Подобрано по допустимой высоте сшивания: до {springSuggestion.capacityMm} мм, шаг {springSuggestion.pitch}.</p>}
-                            {springDiameterIsCustomOrder && <p className="text-xs font-semibold text-amber-700 mt-1">Внимание, эта пружина шьётся на подрядном оборудовании.</p>}
+                            <select value={form.springDiameter} className={selectClass} onChange={(e) => { springDiameterManuallyEditedRef.current = true; update("springDiameter", e.target.value); update("springDiameterStrict", Boolean(e.target.value)); }}><option value="">— выберите —</option>{dicts.springSpecs.map((spec) => <option key={`${spec.diameter}-${spec.pitch}`} value={spec.diameter}>{[spec.diameter, getSpringSpecNote(spec)].filter(Boolean).join(", ")}</option>)}</select>
+                            {springSuggestion && <p className="text-xs text-slate-500 mt-1">Диаметр подобран автоматически.</p>}
+                            {springDiameterIsCustomOrder && <p className="text-xs font-semibold text-amber-700 mt-1">Пружина изготавливается на подрядном оборудовании.</p>}
                           </Field>
                           <Field label="Расположение">
                             <select value={form.springPosition} className={selectClass} onChange={(e) => update("springPosition", e.target.value)}>

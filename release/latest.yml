@@ -1,8 +1,8 @@
-version: 2.6.3
+version: 2.6.6
 files:
-  - url: oscar-print-app-setup-2.6.3.exe
-    sha512: qiX10uw+rrpTJvuiPPmM+bx8Fch0KMT4GZIKJ6PW6YqsfVLQ0pb66Vyg9UUA3P3bghpF63BLWGrRs3IufXjMnQ==
-    size: 113162119
-path: oscar-print-app-setup-2.6.3.exe
-sha512: qiX10uw+rrpTJvuiPPmM+bx8Fch0KMT4GZIKJ6PW6YqsfVLQ0pb66Vyg9UUA3P3bghpF63BLWGrRs3IufXjMnQ==
-releaseDate: '2026-09-09T18:07:07.756Z'
+  - url: oscar-print-app-setup-2.6.6.exe
+    sha512: n1qsVOjrczSCevD+Zo/57dOSDYL+cOrVekpufGzGx3upCrdTbFzKrA6mzhPcN5pVdyIY6SzkUCsLdqQKgPtalA==
+    size: 113161749
+path: oscar-print-app-setup-2.6.6.exe
+sha512: n1qsVOjrczSCevD+Zo/57dOSDYL+cOrVekpufGzGx3upCrdTbFzKrA6mzhPcN5pVdyIY6SzkUCsLdqQKgPtalA==
+releaseDate: '2026-09-24T12:00:23.337Z'

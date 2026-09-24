@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu } from 'electron';
 import { existsSync, statSync } from 'fs';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { google } from 'googleapis';
@@ -709,6 +709,8 @@ function createWindow() {
       mainWindow.webContents.send('update-status', latestUpdateState);
     }
   });
+
+  Menu.setApplicationMenu(null);
   mainWindow.webContents.on('console-message', (_event, level, message, line, sourceId) => {
     console.log(`[renderer:${level}] ${message} (${sourceId}:${line})`);
   });
