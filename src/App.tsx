@@ -8,7 +8,7 @@ const APP_VERSION = packageJson.version;
 const DEFAULT_PRODUCT_TYPES = [
   "Визитки", "Листовки", "Буклеты", "Флаеры", "Брошюры", "Каталоги",
   "Воблеры", "Бейджи", "Календари", "Плакаты", "Наклейки", "Открытка", "Конверты", "Сертификаты", "Бланки",
-  "Папки", "Блокноты", "Бумажные Пакеты", "Другое...",
+  "Папки", "Блокноты", "Кубарики", "Бумажные Пакеты", "Другое...",
 ];
 
 const DEFAULT_PAPER_SIZES = [
@@ -101,7 +101,7 @@ const DEFAULT_BINDING_TYPES = [
   "Скоба", "Термобиндер", "PUR-клей", "Пружина",
 ];
 
-const DEFAULT_LAMINATION_KINDS = ["Глянцевая", "Матовая", "Софт (Soft-Touch)"];
+const DEFAULT_LAMINATION_KINDS = ["Глянцевая", "Матовая", "Софт (Soft-Touch)", "Нестандартный"];
 const DEFAULT_LAMINATION_THICKNESS = ["30 мк", "80 мк", "125 мк"];
 
 const SPRING_COLORS = [
@@ -238,7 +238,8 @@ type ProductLayoutKind =
   | "bag"
   | "sticker"
   | "wobbler"
-  | "badge";
+  | "badge"
+  | "cubes";
 
 type ProductTemplateFieldKey = "size" | "paper" | "color" | "lamination" | "postProcessing";
 
@@ -285,6 +286,7 @@ const DEFAULT_PRODUCT_TEMPLATE_FLAGS: Record<ProductLayoutKind, ProductTemplateF
   sticker: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
   wobbler: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
   badge: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
+  cubes: { showSize: true, showPaper: true, showColor: true, showLamination: true, showPostProcessing: true },
 };
 
 const DEFAULT_PRODUCT_TEMPLATE_KINDS: Record<string, ProductLayoutKind> = {
@@ -306,6 +308,7 @@ const DEFAULT_PRODUCT_TEMPLATE_KINDS: Record<string, ProductLayoutKind> = {
   "Папки": "standard",
   "Блокноты": "notebook",
   "Бумажные Пакеты": "bag",
+  "Кубарики": "cubes",
   "Другое...": "standard",
 };
 
@@ -334,6 +337,7 @@ const PRODUCT_LAYOUT_OPTIONS: Array<{ value: ProductLayoutKind; label: string }>
   { value: "sticker", label: "Наклейки" },
   { value: "wobbler", label: "Воблер" },
   { value: "badge", label: "Бейдж" },
+  { value: "cubes", label: "Кубарики" },
 ];
 
 const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; description: string }> = {
@@ -381,15 +385,20 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
     title: "Бейдж",
     description: "Для бейджей и пропусков с отдельными требованиями к отверстиям.",
   },
+  cubes: {
+    title: "Кубарики",
+    description: "Для блоков кубариков с размером, бумагой, цветностью и количеством листов.",
+  },
 };
 
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Переработаны настройки для блокнотов.",
-  "Скорректированы настройки для пружины.",
-  "Исправлен баг при ручном вводе даты и изменены стандартные настройки ламината.",
-  "Прочие исправления и улучшения.",
+  "Выбор матовой/глянцевой бумаги теперь только у меловки.",
+  "В ламинацию добавлен пункт Нестандартная.",
+  "Добавлен вид продукции Кубарики.",
+  "Исправлено отображение цветности в таблице.",
+  "Прочие доработки.",
 ];
 
 function getRandomSuccessImageSrc(previousSrc = ""): string {
@@ -456,14 +465,7 @@ function loadPaperLibrary(): typeof DEFAULT_PAPER_LIBRARY {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") return DEFAULT_PAPER_LIBRARY;
 
-    const next = { ...DEFAULT_PAPER_LIBRARY };
-    (Object.keys(DEFAULT_PAPER_LIBRARY) as PaperLibraryKey[]).forEach((key) => {
-      const value = parsed[key];
-      next[key] = key === "cardboard"
-        ? ["270 г/м²"]
-        : Array.isArray(value) ? mergeUniqueStrings(value, DEFAULT_PAPER_LIBRARY[key]) : DEFAULT_PAPER_LIBRARY[key];
-    });
-    return next;
+    return normalizePaperLibrary(parsed);
   } catch {
     return DEFAULT_PAPER_LIBRARY;
   }
@@ -627,6 +629,26 @@ function normalizeStringList(items: unknown[]): string[] {
   return result;
 }
 
+function normalizePaperLibrary(value: unknown): typeof DEFAULT_PAPER_LIBRARY {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const normalizeKey = (key: PaperLibraryKey, foreignKeys: PaperLibraryKey[] = []) => {
+    const items = Array.isArray(source[key]) ? normalizeStringList(source[key] as unknown[]) : [];
+    const foreignOnly = new Set(
+      foreignKeys.flatMap((foreignKey) => DEFAULT_PAPER_LIBRARY[foreignKey])
+        .filter((item) => !DEFAULT_PAPER_LIBRARY[key].includes(item)),
+    );
+    return mergeUniqueStrings(items.filter((item) => !foreignOnly.has(item)), DEFAULT_PAPER_LIBRARY[key]);
+  };
+
+  return {
+    coated: normalizeKey("coated"),
+    offset: normalizeKey("offset", ["calender"]),
+    calender: normalizeKey("calender", ["coated"]),
+    cardboard: ["270 г/м²"],
+    designer: normalizeKey("designer"),
+  };
+}
+
 function normalizeTemplateFlags(flags: unknown, fallbackKind: ProductLayoutKind): ProductTemplateFlags {
   const fallback = DEFAULT_PRODUCT_TEMPLATE_FLAGS[fallbackKind] || DEFAULT_PRODUCT_TEMPLATE_FLAGS.standard;
   const source = flags && typeof flags === "object" ? flags as Record<string, unknown> : {};
@@ -781,7 +803,7 @@ function normalizeDictsPayload(payload: any): Dicts {
     notebookCompositionPartTypes: Array.isArray(payload?.notebookCompositionPartTypes)
       ? normalizeList(payload.notebookCompositionPartTypes)
       : [...DEFAULT_NOTEBOOK_COMPOSITION_PART_TYPES],
-    laminationKinds: normalizeList(payload?.laminationKinds),
+    laminationKinds: mergeUniqueStrings(normalizeList(payload?.laminationKinds), DEFAULT_LAMINATION_KINDS),
     laminationThickness: normalizeList(payload?.laminationThickness),
     springSpecs,
     managers: normalizeList(payload?.managers),
@@ -793,10 +815,7 @@ function normalizeDictsPayload(payload: any): Dicts {
       Number(payload?.managerMarkerCounter) || 0,
     ),
     paperProfiles: Object.fromEntries((Object.keys(DEFAULT_PAPER_PROFILES) as PaperProfileKey[]).map((key) => [key, key === "calendarBase" ? [...DEFAULT_PAPER_PROFILES.calendarBase] : mergeUniqueStrings(normalizeList(payload?.paperProfiles?.[key]), DEFAULT_PAPER_PROFILES[key])])) as typeof DEFAULT_PAPER_PROFILES,
-    paperLibrary: Object.fromEntries((Object.keys(DEFAULT_PAPER_LIBRARY) as PaperLibraryKey[]).map((key) => [
-      key,
-      key === "cardboard" ? ["270 г/м²"] : mergeUniqueStrings(normalizeList(payload?.paperLibrary?.[key]), DEFAULT_PAPER_LIBRARY[key]),
-    ])) as typeof DEFAULT_PAPER_LIBRARY,
+    paperLibrary: normalizePaperLibrary(payload?.paperLibrary),
   };
 }
 
@@ -884,7 +903,7 @@ function createResetDicts(): Dicts {
 }
 
 type PaperFinish = "Матовая" | "Глянцевая";
-interface LaminationBlock { enabled: boolean; side: string; thickness: string; kind: string; }
+interface LaminationBlock { enabled: boolean; side: string; thickness: string; kind: string; kindCustom?: string; }
 interface KashurovkaBlock {
   enabled: boolean; baseType: string; baseCustomName: string; linerType: string; linerSize: string; connectionType: string; turnoverType: string;
   forsacEnabled: boolean; forsacPaper: string; forsacSize: string; forsacPrintMode: string;
@@ -897,7 +916,7 @@ interface KashurovkaBlock {
   slimPaperBottomPaperType: PaperTypeOption | ""; slimPaperBottomPaperCustomName: string; slimPaperBottomPaperDensity: string;
 }
 
-const defaultLaminationBlock = (): LaminationBlock => ({ enabled: false, side: "", thickness: "", kind: "" });
+const defaultLaminationBlock = (): LaminationBlock => ({ enabled: false, side: "", thickness: "", kind: "", kindCustom: "" });
 const defaultKashurovkaBlock = (): KashurovkaBlock => ({
   enabled: false, baseType: "", baseCustomName: "", linerType: "", linerSize: "", connectionType: "Каширование", turnoverType: "Без заворота",
   forsacEnabled: false, forsacPaper: "", forsacSize: "", forsacPrintMode: "Белые",
@@ -1281,6 +1300,7 @@ const isEnvelope = (pt: string) => isLayout(pt, "envelope");
 const isBusinessCard = (pt: string) => isLayout(pt, "businessCard");
 const isBag = (pt: string) => isLayout(pt, "bag") || pt === "Пакеты";
 const isSticker = (pt: string) => isLayout(pt, "sticker");
+const isCubariki = (pt: string) => isLayout(pt, "cubes") || normalizeTemplateName(pt) === "Кубарики";
 const PAPER_FINISHES: PaperFinish[] = ["Матовая", "Глянцевая"];
 
 function isPocketCalendar(form: FormData): boolean {
@@ -1300,7 +1320,7 @@ function ensureProductTypes(list: string[]): string[] {
     normalized.push(clean);
   });
 
-  const additions = ["Бумажные Пакеты", "Воблеры", "Бейджи"];
+  const additions = ["Бумажные Пакеты", "Воблеры", "Бейджи", "Кубарики"];
   additions.forEach((item) => {
     const clean = normalizeTemplateName(item);
     const key = clean.toLowerCase();
@@ -1370,17 +1390,19 @@ function getLaminationSideNotation(side: string): string {
 
 function formatLamination(value: LaminationBlock): string {
   if (!value.enabled) return "Без ламинации";
-  return [getLaminationSideNotation(value.side), value.kind, value.thickness].filter(Boolean).join(", ") || "Параметры не выбраны";
+  const kind = value.kind === "Нестандартный" ? (value.kindCustom || "Нестандартный") : value.kind;
+  return [getLaminationSideNotation(value.side), kind, value.thickness].filter(Boolean).join(", ") || "Параметры не выбраны";
 }
 
 function formatLaminationCompact(value: LaminationBlock): string {
   if (!value.enabled) return "без лам.";
-  const kindLower = value.kind.toLowerCase();
+  const kind = value.kind === "Нестандартный" ? (value.kindCustom || "Нестандартный") : value.kind;
+  const kindLower = kind.toLowerCase();
   if (kindLower.includes("карм")) {
     return `лам. карм.${value.thickness ? ` ${value.thickness}` : ""}`;
   }
-  const kind = value.kind === "Глянцевая" ? "глян." : value.kind === "Матовая" ? "мат." : value.kind ? "софт" : "";
-  return ["лам.", getLaminationSideNotation(value.side), kind, value.thickness].filter(Boolean).join(" ");
+  const compactKind = kind === "Глянцевая" ? "глян." : kind === "Матовая" ? "мат." : kind ? (value.kind === "Нестандартный" ? kind : "софт") : "";
+  return ["лам.", getLaminationSideNotation(value.side), compactKind, value.thickness].filter(Boolean).join(" ");
 }
 
 function formatFileCountText(value: string): string {
@@ -1418,7 +1440,7 @@ function formatPaperSelectionWithFinish(type: PaperTypeOption | "", value: strin
   const paper = formatPaperSelection(type, value, customName, envelopeLabel);
   if (!paper) return "";
   if (type === "Без бумаги" || type === "Давальческая") return paper;
-  return `${paper}, ${finish.toLowerCase()}`;
+  return type === "Мелованная" && finish === "Глянцевая" ? `Глянцевая ${paper}` : paper;
 }
 
 function formatPaperSelectionForTZ(type: PaperTypeOption | "", value: string, customName = "", envelopeLabel = false): string {
@@ -1430,7 +1452,7 @@ function formatPaperSelectionWithFinishForTZ(type: PaperTypeOption | "", value: 
   if (type === "Без бумаги") return "";
   const paper = formatPaperSelection(type, value, customName, envelopeLabel);
   if (!paper || type === "Давальческая") return paper;
-  return finish === "Глянцевая" ? `${paper}, глянцевая` : paper;
+  return type === "Мелованная" && finish === "Глянцевая" ? `Глянцевая ${paper}` : paper;
 }
 
 function isPaperlessPaperType(type: PaperTypeOption | ""): boolean {
@@ -1744,12 +1766,12 @@ function buildSpringSuggestion(form: FormData): { thickness: number; diameter: s
   return spring ? { thickness, diameter: spring.diameter, capacityMm: spring.capacityMm, pitch: spring.pitch, subcontract: spring.subcontract } : null;
 }
 
-function formatMaterialWithFinish(material: string, finish: PaperFinish): string {
-  return material ? `${material}${finish === "Глянцевая" ? ", глянцевая" : ""}` : material;
+function formatMaterialWithFinish(material: string, _finish: PaperFinish): string {
+  return material;
 }
 
-function formatFinishForTZ(finish: PaperFinish): string {
-  return finish === "Глянцевая" ? "глянцевая" : "";
+function formatFinishForTZ(finish: PaperFinish, type: PaperTypeOption | "" = ""): string {
+  return type === "Мелованная" && finish === "Глянцевая" ? "глянцевая" : "";
 }
 
 function isStandaloneShortPart(value: string): boolean {
@@ -1827,6 +1849,7 @@ function formatPostProcessingFullText(item: string, form: FormData): string {
 function getDisplaySize(form: FormData): string {
   if (isEnvelope(form.productType)) return form.envelopeSize === "Нестандартный" ? form.envelopeSizeCustom : form.envelopeSize;
   if (form.productType === "Визитки") return form.businessCardSize === "Нестандартный" ? form.businessCardSizeCustom : form.businessCardSize;
+  if (isCubariki(form.productType)) return form.paperSize.trim();
   if (isBag(form.productType)) return form.bagWidth || form.bagHeight || form.bagDepth ? `${form.bagWidth || "?"}×${form.bagHeight || "?"}×${form.bagDepth || "?"} мм` : "";
   if (isCatalog(form.productType)) return form.catalogFormat === "Нестандартный" ? form.catalogFormatCustom : form.catalogFormat;
   if (isBrochure(form.productType)) return form.brochureFormat === "Нестандартный" ? form.brochureFormatCustom : form.brochureFormat;
@@ -1983,11 +2006,16 @@ function generateShortTZ(form: FormData): string {
       ].filter(Boolean);
       parts.push(["сетка", gridParts.join(", ") || "—"].join("\n"));
     }
+  } else if (isCubariki(form.productType)) {
+    const material = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish);
+    const materialLine = [material, formatShortColor(form.colorMode)].filter(Boolean).join(", ");
+    if (materialLine) parts.push(materialLine);
+    if (form.blockPages) parts.push(`${form.blockPages} листов`);
   } else if (isBag(form.productType)) {
     if (!form.bagExternalSheets) {
       const bagPaper = formatBagPaperSelection(form);
-      if (bagPaper) parts.push([bagPaper, formatFinishForTZ(form.densityFinish)].filter(Boolean).join(" "));
-      if (form.colorMode) parts.push(form.colorMode.split(/\s/)[0]);
+      const bagMaterialLine = [bagPaper, formatShortColor(form.colorMode)].filter(Boolean).join(", ");
+      if (bagMaterialLine) parts.push(bagMaterialLine);
     }
     if (form.bagPartsCount) parts.push(form.bagPartsCount.toLowerCase());
     if (form.bagExternalSheets) parts.push("сборка из сторонних листов");
@@ -1998,19 +2026,19 @@ function generateShortTZ(form: FormData): string {
     const handleText = getBagHandleText(form);
     if (handleText) parts.push(`ручки: ${handleText.toLowerCase()}`);
   } else if (isSticker(form.productType)) {
-    if (form.stickerMaterial) parts.push([normalizeMaterial(form.stickerMaterial), formatFinishForTZ(form.stickerFinish)].filter(Boolean).join(" ").toLowerCase());
-    if (form.colorMode) parts.push(formatShortColor(form.colorMode));
+    const stickerMaterialLine = [normalizeMaterial(form.stickerMaterial), formatShortColor(form.colorMode)].filter(Boolean).join(", ");
+    if (stickerMaterialLine) parts.push(stickerMaterialLine.toLowerCase());
     if (form.stickerPlotterCut) parts.push("плоттерная резка");
   } else if (form.productType === "Воблеры") {
-    const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-   if (paperText) parts.push([paperText, form.paperType === "Дизайнерская" ? "" : formatFinishForTZ(form.densityFinish)].filter(Boolean).join(" "));
-    if (form.colorMode) parts.push(formatShortColor(form.colorMode));
+    const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
+    const paperLine = [paperText, formatShortColor(form.colorMode)].filter(Boolean).join(", ");
+    if (paperLine) parts.push(paperLine);
     if (form.wobblerPlotterCut) parts.push("плоттерная резка");
     if (form.wobblerFootGlue) parts.push("приклейка ножки");
   } else if (form.productType === "Бейджи") {
-    const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-    if (paperText) parts.push([paperText, form.paperType === "Дизайнерская" ? "" : formatFinishForTZ(form.densityFinish)].filter(Boolean).join(" "));
-    if (form.colorMode) parts.push(formatShortColor(form.colorMode, form.ownReverse));
+    const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
+    const paperLine = [paperText, formatShortColor(form.colorMode, form.ownReverse)].filter(Boolean).join(", ");
+    if (paperLine) parts.push(paperLine);
     if (form.badgeHoleType) {
       const holeText = formatHoleSelectionText(form.badgeHoleType, form.badgeHoleDiameter, form.badgeHoleCount);
       parts.push(holeText);
@@ -2018,13 +2046,11 @@ function generateShortTZ(form: FormData): string {
   } else {
     const envelopePaperless = isEnvelope(form.productType) && form.paperType === "Без бумаги";
     if (templateFlags.showPaper && !envelopePaperless) {
-      const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-      if (paperText) parts.push([paperText, form.paperType === "Дизайнерская" ? "" : formatFinishForTZ(form.densityFinish)].filter(Boolean).join(" "));
-    }
-    if (templateFlags.showColor && isEnvelope(form.productType)) {
+      const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
+      const materialLine = [paperText, templateFlags.showColor ? formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки") : ""].filter(Boolean).join(", ");
+      if (materialLine) parts.push(materialLine);
+    } else if (templateFlags.showColor) {
       parts.push(formatShortColor(form.colorMode, form.ownReverse) || "—");
-    } else if (templateFlags.showColor && form.colorMode) {
-      parts.push(formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки"));
     }
   }
 
@@ -2055,9 +2081,9 @@ function generateShortTZ(form: FormData): string {
 
   if (isCalendar(form.productType) && form.calendarBaseLamination.enabled) parts.push(`осн. ${getLaminationShort(form.calendarBaseLamination)}`);
   if (isPocketCalendar(form)) {
-    const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-    if (paperText) parts.push([paperText, form.paperType === "Дизайнерская" ? "" : formatFinishForTZ(form.densityFinish)].filter(Boolean).join(" "));
-    if (form.colorMode) parts.push(form.colorMode.split(/\s/)[0]);
+    const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
+    const paperLine = [paperText, formatShortColor(form.colorMode)].filter(Boolean).join(", ");
+    if (paperLine) parts.push(paperLine);
     if (form.lamination.enabled) parts.push(getLaminationShort(form.lamination));
   }
 
@@ -2247,19 +2273,21 @@ function generateTZ(form: FormData, _tzNumber: number): string {
       lines.push(` ${form.gridType === "Цифра" ? "Цветность сетки" : "Цвет офсета"} : ${form.gridType === "Цифра" ? normalizeColorMode(form.calendarGridColorMode) || "—" : normalizeColorMode(form.calendarOffsetColor) || "—"}`);
     }
     if (form.calendarKind === "Карманный") {
-      const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-      const paperLine = paperText
-        ? [paperText, form.paperType === "Дизайнерская" ? "" : formatFinishForTZ(form.densityFinish)].filter(Boolean).join(", ")
-        : "—";
+      const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
+      const paperLine = [paperText, normalizeColorMode(form.colorMode)].filter(Boolean).join(", ") || "—";
       lines.push(` Материал : ${paperLine}`);
-      lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
       if (form.lamination.enabled) lines.push(` Ламинация : ${formatLamination(form.lamination)}`);
     }
+  } else if (isCubariki(form.productType)) {
+    const material = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish);
+    const materialLine = [material, formatColorWithReverse(form.colorMode, false)].filter(Boolean).join(", ");
+    lines.push(` Материал : ${materialLine || "—"}`);
+    lines.push(` Листов в блоке : ${form.blockPages || "—"}`);
   } else if (isBag(form.productType)) {
     if (!form.bagExternalSheets) {
       const bagPaper = formatBagPaperSelection(form);
-      lines.push(` Бумага : ${bagPaper ? [bagPaper, formatFinishForTZ(form.densityFinish)].filter(Boolean).join(", ") : "—"}`);
-      lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
+      const bagMaterialLine = [bagPaper, normalizeColorMode(form.colorMode)].filter(Boolean).join(", ");
+      lines.push(` Бумага : ${bagMaterialLine || "—"}`);
     }
     lines.push(` Размер Ш×В×Г : ${size || "—"}`);
     lines.push(` Количество частей : ${form.bagPartsCount || "—"}`);
@@ -2269,42 +2297,30 @@ function generateTZ(form: FormData, _tzNumber: number): string {
     }
     lines.push(` Цвет ручек : ${getBagHandleText(form) || "—"}`);
   } else if (isSticker(form.productType)) {
-    lines.push(` Материал : ${formatMaterialWithFinish(form.stickerMaterial, form.stickerFinish) || "—"}`);
+    lines.push(` Материал : ${[normalizeMaterial(form.stickerMaterial), normalizeColorMode(form.colorMode)].filter(Boolean).join(", ") || "—"}`);
     lines.push(` Плоттерная резка : ${form.stickerPlotterCut ? "Да" : "Нет"}`);
-    lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
   } else if (form.productType === "Воблеры") {
-    const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-    const paperLine = paperText
-      ? [paperText, form.paperType === "Дизайнерская" ? "" : formatFinishForTZ(form.densityFinish)].filter(Boolean).join(", ")
-      : "—";
+    const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
+    const paperLine = [paperText, normalizeColorMode(form.colorMode)].filter(Boolean).join(", ") || "—";
     lines.push(` Материал : ${paperLine}`);
-    lines.push(` Цветность : ${normalizeColorMode(form.colorMode) || "—"}`);
     if (form.wobblerPlotterCut) lines.push(" Плоттерная резка");
     if (form.wobblerFootGlue) lines.push(" Приклейка ножки");
   } else if (form.productType === "Бейджи") {
-    const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-    const paperLine = paperText
-      ? [paperText, form.paperType === "Дизайнерская" ? "" : formatFinishForTZ(form.densityFinish)].filter(Boolean).join(", ")
-      : "—";
+    const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
+    const paperLine = [paperText, formatColorWithReverse(form.colorMode, form.ownReverse)].filter(Boolean).join(", ") || "—";
     lines.push(` Материал : ${paperLine}`);
-    lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse)}`);
     if (form.badgeHoleType) {
       const holeText = formatHoleSelectionText(form.badgeHoleType, form.badgeHoleDiameter, form.badgeHoleCount);
       lines.push(` Отверстие : ${holeText}`);
     } else lines.push(" Отверстие : —");
   } else {
+    const envelopePaperless = isEnvelope(form.productType) && form.paperType === "Без бумаги";
     if (form.kashurovka.enabled) lines.push(" Базовые материалы задаются в блоке кашировки");
-    else {
-      const envelopePaperless = isEnvelope(form.productType) && form.paperType === "Без бумаги";
-      if (templateFlags.showPaper && !envelopePaperless) {
-        const paperText = formatPaperSelectionForTZ(form.paperType, form.density, form.paperCustomName) || normalizeMaterial(form.density);
-        const paperLine = paperText
-          ? [paperText, form.paperType === "Дизайнерская" ? "" : formatFinishForTZ(form.densityFinish)].filter(Boolean).join(", ")
-          : "—";
-        lines.push(` Материал : ${paperLine}`);
-      }
-    }
-    if (templateFlags.showColor && !form.kashurovka.enabled) {
+    else if (templateFlags.showPaper && !envelopePaperless) {
+      const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
+      const paperLine = [paperText, templateFlags.showColor ? formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки") : ""].filter(Boolean).join(", ") || "—";
+      lines.push(` Материал : ${paperLine}`);
+    } else if (templateFlags.showColor && !form.kashurovka.enabled) {
       lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки")}`);
     }
   }
@@ -2932,7 +2948,7 @@ function LaminationBlockComponent({ label, value, onChange, laminationKinds, lam
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-2 border-l-2 border-blue-100 mt-2">
           <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Сторонность</label><select value={value.side} className={selectClass} onChange={(e) => upd("side", e.target.value)}><option value="">— выберите —</option><option>Односторонняя</option><option>Двухсторонняя</option></select></div>
           <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Толщина</label><select value={value.thickness} className={selectClass} onChange={(e) => upd("thickness", e.target.value)}><option value="">— выберите —</option>{laminationThickness.map((t: string) => <option key={t}>{t}</option>)}</select></div>
-          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Вид</label><select value={value.kind} className={selectClass} onChange={(e) => upd("kind", e.target.value)}><option value="">— выберите —</option>{laminationKinds.map((k: string) => <option key={k}>{k}</option>)}</select></div>
+          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Вид</label><select value={value.kind} className={selectClass} onChange={(e) => { upd("kind", e.target.value); if (e.target.value !== "Нестандартный") upd("kindCustom", ""); }}><option value="">— выберите —</option>{laminationKinds.map((k: string) => <option key={k}>{k}</option>)}</select>{value.kind === "Нестандартный" && <input className={`${inputClass} mt-2`} placeholder="Например: глянец / мат" value={value.kindCustom || ""} onChange={(e) => upd("kindCustom", e.target.value)} />}</div>
         </div>
       )}
     </div>
@@ -2944,12 +2960,15 @@ function PaperFinishField({
   value,
   onChange,
   options = PAPER_FINISHES,
+  visible = true,
 }: {
   label?: string;
   value: PaperFinish;
   onChange: (value: PaperFinish) => void;
   options?: PaperFinish[];
+  visible?: boolean;
 }) {
+  if (!visible) return null;
   return (
     <Field label={label}>
       <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
@@ -3156,7 +3175,7 @@ function KashurovkaBlockComponent({ value, onChange, paperProfiles, paperLibrary
                   invalidMaterial={isRequired("kashLinerPaperDensity")}
                   invalidCustom={isRequired("kashLinerPaperCustomName")}
                 />
-                <PaperFinishField value={value.linerFinish} options={paperFinishOptionsForSelection(value.linerPaperType, value.linerPaperDensity)} onChange={(v) => upd("linerFinish", v)} />
+                <PaperFinishField value={value.linerFinish} visible={value.linerPaperType === "Мелованная"} options={paperFinishOptionsForSelection(value.linerPaperType, value.linerPaperDensity)} onChange={(v) => upd("linerFinish", v)} />
                 <Field label="Цветность лайнера"><select value={value.linerColor} className={selectClass} onChange={(e) => upd("linerColor", e.target.value)}><option value="">— выберите —</option>{colors.map((c: string) => <option key={c}>{c}</option>)}</select></Field>
                 <div className="md:col-span-2"><Field label="Размер лайнера (мм)"><input className={inputClass} placeholder="Например: 210×297 мм" value={value.linerSize} onChange={(e) => upd("linerSize", e.target.value)} /></Field></div>
                 <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация лайнера" value={value.linerLamination} onChange={(v: LaminationBlock) => upd("linerLamination", v)} laminationKinds={laminationKinds} laminationThickness={laminationThickness} /></div>
@@ -3213,7 +3232,7 @@ function KashurovkaBlockComponent({ value, onChange, paperProfiles, paperLibrary
                       invalidMaterial={isRequired("kashForsacPaperDensity")}
                       invalidCustom={isRequired("kashForsacPaperCustomName")}
                     />
-                    <PaperFinishField value={value.forsacFinish} options={paperFinishOptionsForSelection(value.forsacPaperType, value.forsacPaperDensity)} onChange={(v) => upd("forsacFinish", v)} />
+                    <PaperFinishField value={value.forsacFinish} visible={value.forsacPaperType === "Мелованная"} options={paperFinishOptionsForSelection(value.forsacPaperType, value.forsacPaperDensity)} onChange={(v) => upd("forsacFinish", v)} />
                     <Field label="Цветность форзаца"><select value={value.forsacColor} className={selectClass} onChange={(e) => upd("forsacColor", e.target.value)}><option value="">— выберите —</option>{colors.map((c: string) => <option key={c}>{c}</option>)}</select></Field>
                     <Field label="Печать на форзаце"><select value={value.forsacPrintMode} className={selectClass} onChange={(e) => upd("forsacPrintMode", e.target.value)}><option>Белые</option><option>С печатью</option></select></Field>
                     <Field label="Размер форзаца (мм)"><input className={inputClass} placeholder="Например: 200×290 мм" value={value.forsacSize} onChange={(e) => upd("forsacSize", e.target.value)} /></Field>
@@ -3274,7 +3293,7 @@ function KashurovkaBlockComponent({ value, onChange, paperProfiles, paperLibrary
                   invalidMaterial={isRequired("kashSlimPaperTopPaperDensity")}
                   invalidCustom={isRequired("kashSlimPaperTopPaperCustomName")}
                 />
-                <PaperFinishField value={value.slimPaperTopFinish} options={paperFinishOptionsForSelection(value.slimPaperTopPaperType, value.slimPaperTopPaperDensity)} onChange={(v) => upd("slimPaperTopFinish", v)} />
+                <PaperFinishField value={value.slimPaperTopFinish} visible={value.slimPaperTopPaperType === "Мелованная"} options={paperFinishOptionsForSelection(value.slimPaperTopPaperType, value.slimPaperTopPaperDensity)} onChange={(v) => upd("slimPaperTopFinish", v)} />
                 <Field label="Цветность бумаги 1"><select value={value.slimPaperTopColor} className={selectClass} onChange={(e) => upd("slimPaperTopColor", e.target.value)}><option value="">— выберите —</option>{colors.map((c: string) => <option key={c}>{c}</option>)}</select></Field>
                 <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация бумаги 1" value={value.slimPaperTopLamination} onChange={(v: LaminationBlock) => upd("slimPaperTopLamination", v)} laminationKinds={laminationKinds} laminationThickness={laminationThickness} /></div>
               </div>
@@ -3326,7 +3345,7 @@ function KashurovkaBlockComponent({ value, onChange, paperProfiles, paperLibrary
                   invalidMaterial={isRequired("kashSlimPaperBottomPaperDensity")}
                   invalidCustom={isRequired("kashSlimPaperBottomPaperCustomName")}
                 />
-                <PaperFinishField value={value.slimPaperBottomFinish} options={paperFinishOptionsForSelection(value.slimPaperBottomPaperType, value.slimPaperBottomPaperDensity)} onChange={(v) => upd("slimPaperBottomFinish", v)} />
+                <PaperFinishField value={value.slimPaperBottomFinish} visible={value.slimPaperBottomPaperType === "Мелованная"} options={paperFinishOptionsForSelection(value.slimPaperBottomPaperType, value.slimPaperBottomPaperDensity)} onChange={(v) => upd("slimPaperBottomFinish", v)} />
                 <Field label="Цветность бумаги 2"><select value={value.slimPaperBottomColor} className={selectClass} onChange={(e) => upd("slimPaperBottomColor", e.target.value)}><option value="">— выберите —</option>{colors.map((c: string) => <option key={c}>{c}</option>)}</select></Field>
                 <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация бумаги 2" value={value.slimPaperBottomLamination} onChange={(v: LaminationBlock) => upd("slimPaperBottomLamination", v)} laminationKinds={laminationKinds} laminationThickness={laminationThickness} /></div>
               </div>
@@ -3346,16 +3365,16 @@ function getKashShortTZ(form: FormData): string {
   if (!form.kashurovka.enabled) return "";
   const value = form.kashurovka;
   if (value.connectionType === "Слим-каширование") {
-    const paper1 = [normalizeMaterial(value.slimPaperTop), formatFinishForTZ(value.slimPaperTopFinish), value.slimPaperTopColor.split(/\s/)[0], getLaminationShort(value.slimPaperTopLamination)].filter(Boolean).join(" ");
-    const paper2 = [normalizeMaterial(value.slimPaperBottom), formatFinishForTZ(value.slimPaperBottomFinish), value.slimPaperBottomColor.split(/\s/)[0], getLaminationShort(value.slimPaperBottomLamination)].filter(Boolean).join(" ");
+    const paper1 = [normalizeMaterial(value.slimPaperTop), formatFinishForTZ(value.slimPaperTopFinish, value.slimPaperTopPaperType), value.slimPaperTopColor.split(/\s/)[0], getLaminationShort(value.slimPaperTopLamination)].filter(Boolean).join(" ");
+    const paper2 = [normalizeMaterial(value.slimPaperBottom), formatFinishForTZ(value.slimPaperBottomFinish, value.slimPaperBottomPaperType), value.slimPaperBottomColor.split(/\s/)[0], getLaminationShort(value.slimPaperBottomLamination)].filter(Boolean).join(" ");
     return `слим-каширование: бум.1 ${paper1 || "—"}; бум.2 ${paper2 || "—"}`;
   }
 
   const parts = [
     "каширование",
     value.baseType ? `осн. ${value.baseType === "Другое..." ? `${value.baseCustomName || "другое"} (под заказ)` : value.baseType}` : "",
-    value.linerType ? `лайнер ${[normalizeMaterial(value.linerType), formatFinishForTZ(value.linerFinish), value.linerColor.split(/\s/)[0], getLaminationShort(value.linerLamination)].filter(Boolean).join(" ")}` : "",
-    value.forsacEnabled ? `форзац ${[normalizeMaterial(value.forsacPaper), formatFinishForTZ(value.forsacFinish), value.forsacColor.split(/\s/)[0], getLaminationShort(value.forsacLamination)].filter(Boolean).join(" ")}` : "",
+    value.linerType ? `лайнер ${[normalizeMaterial(value.linerType), formatFinishForTZ(value.linerFinish, value.linerPaperType), value.linerColor.split(/\s/)[0], getLaminationShort(value.linerLamination)].filter(Boolean).join(" ")}` : "",
+    value.forsacEnabled ? `форзац ${[normalizeMaterial(value.forsacPaper), formatFinishForTZ(value.forsacFinish, value.forsacPaperType), value.forsacColor.split(/\s/)[0], getLaminationShort(value.forsacLamination)].filter(Boolean).join(" ")}` : "",
   ].filter(Boolean);
 
   return parts.join(", ");
@@ -3364,8 +3383,8 @@ function getKashShortTZ(form: FormData): string {
 function getDesktopCalendarKashShortTZ(form: FormData): string {
   const value = form.kashurovka;
   const base = value.baseType === "Другое..." ? `${value.baseCustomName || "другое"} (под заказ)` : value.baseType;
-  const liner = [normalizeMaterial(value.linerType), formatFinishForTZ(value.linerFinish), value.linerColor.split(/\s/)[0], getLaminationShort(value.linerLamination)].filter(Boolean).join(" ");
-  const forsac = [normalizeMaterial(value.forsacPaper), formatFinishForTZ(value.forsacFinish), value.forsacColor.split(/\s/)[0], getLaminationShort(value.forsacLamination)].filter(Boolean).join(" ");
+  const liner = [normalizeMaterial(value.linerType), formatFinishForTZ(value.linerFinish, value.linerPaperType), value.linerColor.split(/\s/)[0], getLaminationShort(value.linerLamination)].filter(Boolean).join(" ");
+  const forsac = [normalizeMaterial(value.forsacPaper), formatFinishForTZ(value.forsacFinish, value.forsacPaperType), value.forsacColor.split(/\s/)[0], getLaminationShort(value.forsacLamination)].filter(Boolean).join(" ");
   return [
     "основание",
     `каширование на ${base || "—"}`,
@@ -4989,6 +5008,7 @@ function LegacyApp() {
   const notebook = isNotebook(pt);
   const envelope = isEnvelope(pt);
   const bag = isBag(pt);
+  const cubariki = isCubariki(pt);
   const sticker = isSticker(pt);
   const brochure = isBrochure(pt);
   const wobbler = pt === "Воблеры";
@@ -5255,6 +5275,10 @@ function LegacyApp() {
                     </select>
                     {form.businessCardSize === "Нестандартный" && <input data-field="businessCardSizeCustom" className={`${fieldClass(showValidation && required.includes("businessCardSizeCustom"))} mt-2`} placeholder="Например: 85×55 мм" value={form.businessCardSizeCustom} onChange={(e) => update("businessCardSizeCustom", e.target.value)} />}
                   </Field>
+                ) : cubariki ? (
+                  <Field label={templateSizeLabel} required>
+                    <input data-field="paperSize" className={fieldClass(showValidation && required.includes("paperSize"))} placeholder="Например: 90×90 мм" value={form.paperSize} onChange={(e) => update("paperSize", e.target.value)} />
+                  </Field>
                 ) : !envelope && !multiBlock && !calendar && !bag && (
                   <Field label={templateSizeLabel} required>
                     <select data-field="paperSize" value={form.paperSize} className={selectFieldClass(showValidation && required.includes("paperSize"))} onChange={(e) => update("paperSize", e.target.value)}>
@@ -5326,7 +5350,8 @@ function LegacyApp() {
                     <>
                       <PaperFinishField
                         value={sticker ? form.stickerFinish : form.densityFinish}
-                        options={sticker ? PAPER_FINISHES : paperFinishOptionsForSelection(form.paperType, form.density)}
+                        visible={!sticker && form.paperType === "Мелованная"}
+                        options={paperFinishOptionsForSelection(form.paperType, form.density)}
                         onChange={(value) => update(sticker ? "stickerFinish" : "densityFinish", value as never)}
                       />
                       <Field label={templateColorLabel} required><select data-field="colorMode" value={form.colorMode} disabled={(pt === "Листовки" || badge) && form.ownReverse} className={`${selectFieldClass(showValidation && required.includes("colorMode"))} ${(pt === "Листовки" || badge) && form.ownReverse ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{(sticker ? STICKER_COLOR_MODES : dicts.colors).map((c) => <option key={c}>{c}</option>)}</select></Field>
@@ -5337,6 +5362,7 @@ function LegacyApp() {
                       <YesNo value={form.ownReverse} onChange={(value) => { update("ownReverse", value); if (value) update("colorMode", AUTO_REVERSE_COLOR); }} />
                     </Field>
                   )}
+                  {cubariki && <Field label="Количество листов в блоке" required><input data-field="blockPages" type="number" min={1} className={fieldClass(showValidation && required.includes("blockPages"))} value={form.blockPages} onChange={(e) => update("blockPages", e.target.value)} placeholder="Например: 100" /></Field>}
                 </div>
               )}
 
@@ -5509,7 +5535,7 @@ function LegacyApp() {
                             disabled={form.coverUseKash}
                           />
                         </div>
-                        <div className={form.coverUseKash ? "opacity-50 pointer-events-none" : ""}><PaperFinishField label="Поверхность обложки" value={form.coverFinish} options={paperFinishOptionsForSelection(form.coverPaperType, form.coverDensity)} onChange={(value) => update("coverFinish", value)} /></div>
+                        <div className={form.coverUseKash ? "opacity-50 pointer-events-none" : ""}><PaperFinishField label="Поверхность обложки" visible={form.coverPaperType === "Мелованная"} value={form.coverFinish} options={paperFinishOptionsForSelection(form.coverPaperType, form.coverDensity)} onChange={(value) => update("coverFinish", value)} /></div>
                         <Field label="Цветность обложки" required><select data-field="coverColor" value={form.coverColor} disabled={form.coverUseKash} className={`${selectFieldClass(showValidation && required.includes("coverColor"))} ${form.coverUseKash ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("coverColor", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
                       </div>
                       <div className={form.coverUseKash ? "opacity-50 pointer-events-none" : ""}>
@@ -5552,7 +5578,7 @@ function LegacyApp() {
                                     invalidCustom={showValidation && required.includes("backingPaperCustomName")}
                                   />
                                 </div>
-                                <PaperFinishField label="Поверхность подложки" value={form.backingFinish} options={paperFinishOptionsForSelection(form.backingPaperType, form.backingDensity)} onChange={(value) => update("backingFinish", value)} />
+                                <PaperFinishField label="Поверхность подложки" visible={form.backingPaperType === "Мелованная"} value={form.backingFinish} options={paperFinishOptionsForSelection(form.backingPaperType, form.backingDensity)} onChange={(value) => update("backingFinish", value)} />
                                 <Field label="Цветность подложки">
                                   <select value={form.backingColor} className={selectClass} onChange={(e) => update("backingColor", e.target.value)}>
                                     <option value="">Без печати</option>
@@ -5594,7 +5620,7 @@ function LegacyApp() {
                             invalidCustom={showValidation && !form.blockOffsetPrinting && required.includes("blockPaperCustomName")}
                           />
                         </div>
-                        <div className={form.blockOffsetPrinting ? "pointer-events-none opacity-50" : ""}><PaperFinishField label="Поверхность блока" value={form.blockFinish} options={paperFinishOptionsForSelection(form.blockPaperType, form.blockDensity)} onChange={(value) => update("blockFinish", value)} /></div>
+                        <div className={form.blockOffsetPrinting ? "pointer-events-none opacity-50" : ""}><PaperFinishField label="Поверхность блока" visible={form.blockPaperType === "Мелованная"} value={form.blockFinish} options={paperFinishOptionsForSelection(form.blockPaperType, form.blockDensity)} onChange={(value) => update("blockFinish", value)} /></div>
                         <Field label="Цветность блока" required={!form.blockOffsetPrinting}><select data-field="blockColor" value={form.blockColor} disabled={form.blockOffsetPrinting} className={`${selectFieldClass(showValidation && !form.blockOffsetPrinting && required.includes("blockColor"))} ${form.blockOffsetPrinting ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("blockColor", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
                         <label className="md:col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"><input type="checkbox" checked={form.blockOffsetPrinting} onChange={(e) => { update("blockOffsetPrinting", e.target.checked); if (e.target.checked) update("blockColor", ""); }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />Печать блока на офсете</label>
                       </div>
@@ -5680,7 +5706,7 @@ function LegacyApp() {
                                       Печатается на офсете
                                     </label>
                                   )}
-                                  <PaperFinishField label="Поверхность" value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateNotebookPart(part.id, { finish: value })} />
+                                  <PaperFinishField label="Поверхность" visible={part.paperType === "Мелованная"} value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateNotebookPart(part.id, { finish: value })} />
                                   <Field label="Цветность">
                                     <select value={part.color} className={selectClass} onChange={(e) => updateNotebookPart(part.id, { color: e.target.value })}>
                                       <option>Без печати</option>
@@ -5722,7 +5748,7 @@ function LegacyApp() {
                         <h4 className="text-sm font-semibold text-amber-800">Постер</h4>
                         <PaperSelectionField label="Бумага постера" typeValue={form.quarterPosterPaperType} materialValue={form.quarterPosterDensity} customValue={form.quarterPosterPaperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => { update("quarterPosterPaperType", value); update("quarterPosterDensity", ""); update("quarterPosterPaperCustomName", ""); }} onMaterialChange={(value) => update("quarterPosterDensity", value)} onCustomChange={(value) => update("quarterPosterPaperCustomName", value)} typeFieldName="quarterPosterPaperType" materialFieldName="quarterPosterDensity" customFieldName="quarterPosterPaperCustomName" showValidation={showValidation} invalidType={showValidation && required.includes("quarterPosterPaperType")} invalidMaterial={showValidation && required.includes("quarterPosterDensity")} invalidCustom={showValidation && required.includes("quarterPosterPaperCustomName")} />
                         <Field label="Цветность постера"><select className={selectClass} value={form.quarterPosterColorMode} onChange={(e) => update("quarterPosterColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
-                        <PaperFinishField label="Поверхность постера" value={form.quarterPosterFinish} options={paperFinishOptionsForSelection(form.quarterPosterPaperType, form.quarterPosterDensity)} onChange={(value) => update("quarterPosterFinish", value)} />
+                        <PaperFinishField label="Поверхность постера" visible={form.quarterPosterPaperType === "Мелованная"} value={form.quarterPosterFinish} options={paperFinishOptionsForSelection(form.quarterPosterPaperType, form.quarterPosterDensity)} onChange={(value) => update("quarterPosterFinish", value)} />
                         <LaminationBlockComponent label="Ламинация постера" value={form.quarterPosterLamination} onChange={(value: LaminationBlock) => update("quarterPosterLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
                       </div>
                       <div className="rounded-lg border border-amber-200 bg-white p-3 space-y-3">
@@ -5732,7 +5758,7 @@ function LegacyApp() {
                             <div className="flex items-center justify-between"><h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Рекламное поле {index + 1}</h5>{form.quarterAdParts.length > 1 && <button type="button" onClick={() => removeQuarterAdPart(part.id)} className="text-xs text-red-500">Удалить</button>}</div>
                             <Field label="Размер" required><input data-field="quarterAdPartSize" className={fieldClass(showValidation && required.includes("quarterAdPartSize"))} placeholder="Например: 297×210 мм" value={part.size} onChange={(e) => updateQuarterAdPart(part.id, { size: e.target.value })} /></Field>
                             <PaperSelectionField label="Бумага" typeValue={part.paperType} materialValue={part.density} customValue={part.paperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => updateQuarterAdPart(part.id, { paperType: value, density: "", paperCustomName: "" })} onMaterialChange={(value) => updateQuarterAdPart(part.id, { density: value })} onCustomChange={(value) => updateQuarterAdPart(part.id, { paperCustomName: value })} typeFieldName={`quarterAdPartPaperType-${part.id}`} materialFieldName={`quarterAdPartDensity-${part.id}`} customFieldName={`quarterAdPartCustom-${part.id}`} showValidation={showValidation} invalidType={false} invalidMaterial={false} invalidCustom={false} />
-                            <PaperFinishField label="Поверхность" value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateQuarterAdPart(part.id, { finish: value })} />
+                            <PaperFinishField label="Поверхность" visible={part.paperType === "Мелованная"} value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateQuarterAdPart(part.id, { finish: value })} />
                             <Field label="Цветность"><select className={selectClass} value={part.colorMode || ""} onChange={(e) => updateQuarterAdPart(part.id, { colorMode: e.target.value })}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
                             <LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateQuarterAdPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
                           </div>
@@ -5744,14 +5770,14 @@ function LegacyApp() {
                         {form.quarterGridStandard ? <Field label="Какая стандартная сетка" required><input data-field="quarterGridName" className={fieldClass(showValidation && required.includes("quarterGridName"))} placeholder="Например: серая Донарита" value={form.quarterGridName} onChange={(e) => update("quarterGridName", e.target.value)} /></Field> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <Field label="Размер сетки" required><input data-field="quarterGridSize" className={fieldClass(showValidation && required.includes("quarterGridSize"))} value={form.quarterGridSize} onChange={(e) => update("quarterGridSize", e.target.value)} /></Field>
                           <PaperSelectionField label="Бумага сетки" typeValue={form.quarterGridPaperType} materialValue={form.quarterGridDensity} customValue={form.quarterGridPaperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => { update("quarterGridPaperType", value); update("quarterGridDensity", ""); update("quarterGridPaperCustomName", ""); }} onMaterialChange={(value) => update("quarterGridDensity", value)} onCustomChange={(value) => update("quarterGridPaperCustomName", value)} typeFieldName="quarterGridPaperType" materialFieldName="quarterGridDensity" customFieldName="quarterGridPaperCustomName" showValidation={showValidation} invalidType={showValidation && required.includes("quarterGridPaperType")} invalidMaterial={showValidation && required.includes("quarterGridDensity")} invalidCustom={showValidation && required.includes("quarterGridPaperCustomName")} />
-                          <PaperFinishField label="Поверхность сетки" value={form.quarterGridFinish} options={paperFinishOptionsForSelection(form.quarterGridPaperType, form.quarterGridDensity)} onChange={(value) => update("quarterGridFinish", value)} />
+                          <PaperFinishField label="Поверхность сетки" visible={form.quarterGridPaperType === "Мелованная"} value={form.quarterGridFinish} options={paperFinishOptionsForSelection(form.quarterGridPaperType, form.quarterGridDensity)} onChange={(value) => update("quarterGridFinish", value)} />
                           <Field label="Цветность"><select className={selectClass} value={form.quarterGridColorMode} onChange={(e) => update("quarterGridColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
                           <Field label="Где печать"><select className={selectClass} value={form.quarterGridPrintMode} onChange={(e) => update("quarterGridPrintMode", e.target.value)}><option>У себя</option><option>Офсет</option></select></Field>
                         </div>}
                       </div>
                       <div className="rounded-lg border border-amber-200 bg-white p-3 space-y-3">
                         <Field label="Подложки под сетку"><YesNo value={form.quarterBackingEnabled} onChange={(value) => update("quarterBackingEnabled", value)} /></Field>
-                        {form.quarterBackingEnabled && <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Размер подложки" required><input data-field="quarterBackingSize" className={fieldClass(showValidation && required.includes("quarterBackingSize"))} value={form.quarterBackingSize} onChange={(e) => update("quarterBackingSize", e.target.value)} /></Field><PaperSelectionField label="Бумага подложки" typeValue={form.quarterBackingPaperType} materialValue={form.quarterBackingDensity} customValue={form.quarterBackingPaperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => { update("quarterBackingPaperType", value); update("quarterBackingDensity", ""); update("quarterBackingPaperCustomName", ""); }} onMaterialChange={(value) => update("quarterBackingDensity", value)} onCustomChange={(value) => update("quarterBackingPaperCustomName", value)} typeFieldName="quarterBackingPaperType" materialFieldName="quarterBackingDensity" customFieldName="quarterBackingPaperCustomName" showValidation={showValidation} invalidType={showValidation && required.includes("quarterBackingPaperType")} invalidMaterial={showValidation && required.includes("quarterBackingDensity")} invalidCustom={showValidation && required.includes("quarterBackingPaperCustomName")} /><PaperFinishField label="Поверхность подложки" value={form.quarterBackingFinish} onChange={(value) => update("quarterBackingFinish", value)} /><Field label="Цветность подложки"><select className={selectClass} value={form.quarterBackingColorMode} onChange={(e) => update("quarterBackingColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field></div>}
+                        {form.quarterBackingEnabled && <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Размер подложки" required><input data-field="quarterBackingSize" className={fieldClass(showValidation && required.includes("quarterBackingSize"))} value={form.quarterBackingSize} onChange={(e) => update("quarterBackingSize", e.target.value)} /></Field><PaperSelectionField label="Бумага подложки" typeValue={form.quarterBackingPaperType} materialValue={form.quarterBackingDensity} customValue={form.quarterBackingPaperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => { update("quarterBackingPaperType", value); update("quarterBackingDensity", ""); update("quarterBackingPaperCustomName", ""); }} onMaterialChange={(value) => update("quarterBackingDensity", value)} onCustomChange={(value) => update("quarterBackingPaperCustomName", value)} typeFieldName="quarterBackingPaperType" materialFieldName="quarterBackingDensity" customFieldName="quarterBackingPaperCustomName" showValidation={showValidation} invalidType={showValidation && required.includes("quarterBackingPaperType")} invalidMaterial={showValidation && required.includes("quarterBackingDensity")} invalidCustom={showValidation && required.includes("quarterBackingPaperCustomName")} /><PaperFinishField label="Поверхность подложки" visible={form.quarterBackingPaperType === "Мелованная"} value={form.quarterBackingFinish} onChange={(value) => update("quarterBackingFinish", value)} /><Field label="Цветность подложки"><select className={selectClass} value={form.quarterBackingColorMode} onChange={(e) => update("quarterBackingColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field></div>}
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border border-amber-200 bg-white p-3">
                         <Field label="Крепление"><select className={selectClass} value={form.quarterMountType} onChange={(e) => update("quarterMountType", e.target.value)}><option>Планка</option><option>Люверс</option></select></Field>
@@ -5769,7 +5795,7 @@ function LegacyApp() {
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           <Field label="Размер основания"><input className={inputClass} value={form.calendarBaseSize || ""} onChange={(e) => update("calendarBaseSize", e.target.value)} placeholder="Например: 300×210 мм" /></Field>
                           <Field label="Материал основания" required><select data-field="calendarBaseMaterial" value={form.calendarBaseMaterial} className={selectFieldClass(showValidation && required.includes("calendarBaseMaterial"))} onChange={(e) => { update("calendarBaseMaterial", e.target.value); if (e.target.value !== "Другое...") update("calendarBaseCustomName", ""); }}><option value="">— выберите —</option>{dicts.paperProfiles.calendarBase.map((item) => <option key={item}>{item}</option>)}</select>{form.calendarBaseMaterial === "Другое..." && <><input data-field="calendarBaseCustomName" className={`${inputClass} mt-2`} value={form.calendarBaseCustomName || ""} onChange={(e) => update("calendarBaseCustomName", e.target.value)} placeholder="Укажите материал" /><p className="mt-1 text-xs font-semibold text-amber-700">Материал под заказ.</p></>}</Field>
-                          <PaperFinishField label="Поверхность основания" value={form.calendarBaseFinish} onChange={(value) => update("calendarBaseFinish", value)} />
+                          <PaperFinishField label="Поверхность основания" visible={false} value={form.calendarBaseFinish} onChange={(value) => update("calendarBaseFinish", value)} />
                           <Field label="Цветность основания"><select className={selectClass} value={form.calendarBaseColorMode} onChange={(e) => update("calendarBaseColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((item) => <option key={item}>{item}</option>)}</select></Field>
                           <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация основания" value={form.calendarBaseLamination} onChange={(value) => update("calendarBaseLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
                         </div>
@@ -5784,7 +5810,7 @@ function LegacyApp() {
                           {dicts.paperProfiles.notebookCover.map((item) => <option key={item}>{item}</option>)}
                         </select>
                       </Field>
-                      <PaperFinishField label="Поверхность перекидных листов" value={form.calendarHeaderPaperFinish} options={paperFinishOptionsForSelection(form.calendarHeaderPaperType, form.calendarHeaderPaperDensity)} onChange={(value) => update("calendarHeaderPaperFinish", value)} />
+                      <PaperFinishField label="Поверхность перекидных листов" visible={form.calendarHeaderPaperType === "Мелованная"} value={form.calendarHeaderPaperFinish} options={paperFinishOptionsForSelection(form.calendarHeaderPaperType, form.calendarHeaderPaperDensity)} onChange={(value) => update("calendarHeaderPaperFinish", value)} />
                       <Field label="Цветность перекидных листов"><select data-field="calendarHeaderColorMode" className={selectClass} value={form.calendarHeaderColorMode} onChange={(e) => update("calendarHeaderColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((item) => <option key={item}>{item}</option>)}</select></Field>
                       <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация перекидных листов" value={form.calendarHeaderLamination} onChange={(value) => update("calendarHeaderLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
                         </div>
@@ -5805,7 +5831,7 @@ function LegacyApp() {
                         }} />
                       </Field>
                       <Field label="Материал основания" required><select data-field="calendarBaseMaterial" value={form.calendarBaseMaterial} disabled={form.calendarBaseUseKash} className={`${selectFieldClass(showValidation && required.includes("calendarBaseMaterial"))} ${form.calendarBaseUseKash ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => { update("calendarBaseMaterial", e.target.value); if (e.target.value !== "Другое...") update("calendarBaseCustomName", ""); }}><option value="">— выберите —</option>{dicts.paperProfiles.calendarBase.map((d) => <option key={d}>{d}</option>)}</select>{form.calendarBaseMaterial === "Другое..." && <><input data-field="calendarBaseCustomName" className={`${inputClass} mt-2`} placeholder="Укажите материал основания" value={form.calendarBaseCustomName || ""} onChange={(e) => update("calendarBaseCustomName", e.target.value)} /><p className="mt-1 text-xs font-semibold text-amber-700">Материал под заказ.</p></>}</Field>
-                      <div className={form.calendarBaseUseKash ? "opacity-50 pointer-events-none" : ""}><PaperFinishField value={form.calendarBaseFinish} onChange={(value) => update("calendarBaseFinish", value)} /></div>
+                      <div className={form.calendarBaseUseKash ? "opacity-50 pointer-events-none" : ""}><PaperFinishField visible={false} value={form.calendarBaseFinish} onChange={(value) => update("calendarBaseFinish", value)} /></div>
                       <div className={`md:col-span-2 ${form.calendarBaseUseKash ? "opacity-50 pointer-events-none" : ""}`}>
                         <LaminationBlockComponent label="Ламинация основания" value={form.calendarBaseLamination} onChange={(value) => update("calendarBaseLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
                       </div>
@@ -5816,13 +5842,13 @@ function LegacyApp() {
                       {form.gridType === "Цифра" ? (
                         <>
                           <Field label="Бумага блока/сетки"><select value={form.calendarGridMaterial} className={selectClass} onChange={(e) => update("calendarGridMaterial", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.calendarGridDigital.map((d) => <option key={d}>{d}</option>)}</select></Field>
-                          <PaperFinishField value={form.calendarGridFinish} onChange={(value) => update("calendarGridFinish", value)} />
+                          <PaperFinishField visible={false} value={form.calendarGridFinish} onChange={(value) => update("calendarGridFinish", value)} />
                           <Field label="Цветность блока/сетки"><select value={form.calendarGridColorMode} className={selectClass} onChange={(e) => update("calendarGridColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((d) => <option key={d}>{d}</option>)}</select></Field>
                         </>
                       ) : (
                         <>
                           <Field label="Бумага блока/сетки"><select value={form.calendarGridMaterial} className={selectClass} onChange={(e) => update("calendarGridMaterial", e.target.value)}><option value="">— выберите —</option>{dicts.paperProfiles.calendarGridOffset.map((d) => <option key={d}>{d}</option>)}</select></Field>
-                          <PaperFinishField value={form.calendarGridFinish} onChange={(value) => update("calendarGridFinish", value)} />
+                          <PaperFinishField visible={false} value={form.calendarGridFinish} onChange={(value) => update("calendarGridFinish", value)} />
                           <Field label="Цвет офсета блока/сетки"><select value={form.calendarOffsetColor} className={selectClass} onChange={(e) => update("calendarOffsetColor", e.target.value)}>{CALENDAR_OFFSET_COLORS.map((d) => <option key={d}>{d}</option>)}</select></Field>
                         </>
                       )}
@@ -5858,7 +5884,7 @@ function LegacyApp() {
                         invalidMaterial={showValidation && required.includes("density")}
                         invalidCustom={showValidation && required.includes("paperCustomName")}
                       />
-                      <PaperFinishField value={form.densityFinish} onChange={(value) => update("densityFinish", value)} />
+                      <PaperFinishField visible={form.paperType === "Мелованная"} value={form.densityFinish} onChange={(value) => update("densityFinish", value)} />
                       <Field label={templateColorLabel} required><select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
                       <div className="md:col-span-2">
                         <LaminationBlockComponent label="Ламинация" value={form.lamination} onChange={(value) => update("lamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
@@ -5889,7 +5915,7 @@ function LegacyApp() {
                             <option value="">— выберите —</option>{dicts.paperProfiles.bag.map((d) => <option key={d}>{d}</option>)}
                           </select>
                         </Field>
-                        <PaperFinishField value={form.densityFinish} options={PAPER_FINISHES} onChange={(value) => update("densityFinish", value)} />
+                        <PaperFinishField visible={form.paperType === "Мелованная"} value={form.densityFinish} options={PAPER_FINISHES} onChange={(value) => update("densityFinish", value)} />
                         <Field label="Цветность" required>
                           <select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}>
                             <option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}
@@ -6558,6 +6584,16 @@ function getRequiredFields(form: FormData): string[] {
       if (!form.brochureFormat) errors.push("brochureFormat");
       if (form.brochureFormat === "Нестандартный" && !form.brochureFormatCustom.trim()) errors.push("brochureFormatCustom");
     }
+  } else if (isCubariki(form.productType)) {
+    if (templateSizeRequired && !form.paperSize.trim()) errors.push("paperSize");
+    if (templatePaperRequired && !form.kashurovka.enabled) {
+      if (!form.paperType) errors.push("paperType");
+      else if (form.paperType === "Дизайнерская" ? !form.paperCustomName.trim() : requiresPaperDensity(form.paperType) && !form.density.trim()) {
+        errors.push(form.paperType === "Дизайнерская" ? "paperCustomName" : "density");
+      }
+    }
+    if (templateColorRequired && !form.colorMode && !isPaperlessPaperType(form.paperType)) errors.push("colorMode");
+    if (!form.blockPages || Number(form.blockPages) <= 0) errors.push("blockPages");
   } else if (!isMultiBlock(form.productType) && !isCalendar(form.productType) && !isBag(form.productType) && !isSticker(form.productType)) {
     if (templateSizeRequired) {
       if (!form.paperSize) errors.push("paperSize");

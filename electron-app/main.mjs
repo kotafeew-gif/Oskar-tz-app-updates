@@ -300,11 +300,13 @@ function buildTextFormatRuns(text) {
   const base = { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } }, bold: false };
   const events = [{ startIndex: 0, format: base }];
   const addMatches = (needle, format) => {
-    let index = text.indexOf(needle);
+    const haystack = text.toLocaleLowerCase('ru-RU');
+    const target = needle.toLocaleLowerCase('ru-RU');
+    let index = haystack.indexOf(target);
     while (index !== -1) {
       events.push({ startIndex: index, format });
       events.push({ startIndex: index + needle.length, format: base });
-      index = text.indexOf(needle, index + needle.length);
+      index = haystack.indexOf(target, index + needle.length);
     }
   };
   addMatches('УФ-лак', { foregroundColorStyle: { rgbColor: { red: 0.93, green: 0.43, blue: 0.08 } }, bold: false });
@@ -1075,7 +1077,7 @@ ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz,
       });
     }
 
-    if (sheetId && (columnE.includes('УФ-лак') || columnE.includes('глянцевая') || columnE.includes('скругление углов'))) {
+    if (sheetId && (columnE.includes('УФ-лак') || /глянцевая/i.test(columnE) || columnE.includes('скругление углов'))) {
       requests.push({
         updateCells: {
           range: {
