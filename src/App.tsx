@@ -2045,9 +2045,16 @@ function generateShortTZ(form: FormData): string {
       const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
       const materialLine = [paperText, templateFlags.showColor ? formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки") : ""].filter(Boolean).join(", ");
       if (materialLine) parts.push(materialLine);
-    } else if (templateFlags.showColor) {
-      parts.push(formatShortColor(form.colorMode, form.ownReverse) || "—");
-    }
+      } else if (templateFlags.showColor) {
+        const colorText = formatShortColor(form.colorMode, form.ownReverse) || "—";
+        const last = parts[parts.length - 1];
+        // Приклеиваем к предыдущему элементу (к размеру), если он не «standalone»-операция
+        if (last && !isStandaloneShortPart(last)) {
+          parts[parts.length - 1] = `${last}, ${colorText}`;
+        } else {
+          parts.push(colorText);
+        }
+      }
   }
 
   if (form.lamination.enabled && !isMultiBlock(form.productType) && !isNotebook(form.productType) && !isCalendar(form.productType)) {
