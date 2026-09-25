@@ -631,19 +631,15 @@ function normalizeStringList(items: unknown[]): string[] {
 
 function normalizePaperLibrary(value: unknown): typeof DEFAULT_PAPER_LIBRARY {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
-  const normalizeKey = (key: PaperLibraryKey, foreignKeys: PaperLibraryKey[] = []) => {
+  const normalizeKey = (key: PaperLibraryKey) => {
     const items = Array.isArray(source[key]) ? normalizeStringList(source[key] as unknown[]) : [];
-    const foreignOnly = new Set(
-      foreignKeys.flatMap((foreignKey) => DEFAULT_PAPER_LIBRARY[foreignKey])
-        .filter((item) => !DEFAULT_PAPER_LIBRARY[key].includes(item)),
-    );
-    return mergeUniqueStrings(items.filter((item) => !foreignOnly.has(item)), DEFAULT_PAPER_LIBRARY[key]);
+    return items.length ? items : [...DEFAULT_PAPER_LIBRARY[key]];
   };
 
   return {
     coated: normalizeKey("coated"),
-    offset: normalizeKey("offset", ["calender"]),
-    calender: normalizeKey("calender", ["coated"]),
+    offset: normalizeKey("offset"),
+    calender: normalizeKey("calender"),
     cardboard: ["270 г/м²"],
     designer: normalizeKey("designer"),
   };
