@@ -309,7 +309,17 @@ function buildTextFormatRuns(text) {
       index = haystack.indexOf(target, index + needle.length);
     }
   };
-  addMatches('УФ-лак', { foregroundColorStyle: { rgbColor: { red: 0.93, green: 0.43, blue: 0.08 } }, bold: false });
+  const addRegexMatches = (pattern, format) => {
+    for (const match of text.matchAll(pattern)) {
+      if (match.index == null) continue;
+      events.push({ startIndex: match.index, format });
+      events.push({ startIndex: match.index + match[0].length, format: base });
+    }
+  };
+  addRegexMatches(/уф[- ]?лак[^,\n]*/gi, { foregroundColorStyle: { rgbColor: { red: 0.93, green: 0.43, blue: 0.08 } }, bold: true });
+  addRegexMatches(/раскрой[^,\n]*/gi, { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } }, bold: true });
+  addMatches('основание', { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } }, bold: true });
+  addMatches('сетка', { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } }, bold: true });
   addMatches('глянцевая', { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } }, bold: true });
   addMatches('скругление углов', { foregroundColorStyle: { rgbColor: { red: 0, green: 0, blue: 0 } }, bold: true });
   const unique = new Map();
@@ -1077,7 +1087,7 @@ ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz,
       });
     }
 
-    if (sheetId && (columnE.includes('УФ-лак') || /глянцевая/i.test(columnE) || columnE.includes('скругление углов'))) {
+    if (sheetId && (/уф[- ]?лак|раскрой|основание|сетка/i.test(columnE) || /глянцевая/i.test(columnE) || columnE.includes('скругление углов'))) {
       requests.push({
         updateCells: {
           range: {

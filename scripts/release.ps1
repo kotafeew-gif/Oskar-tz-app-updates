@@ -9,7 +9,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
 function Get-CurrentVersion {
-  (Get-Content package.json -Raw | ConvertFrom-Json).version
+  (Get-Content release-info.json -Raw | ConvertFrom-Json).version
 }
 
 function Get-NextPatchVersion([string]$currentVersion) {
@@ -36,6 +36,11 @@ Write-Host "Bumping version: $currentVersion -> $Version"
 if ($LASTEXITCODE -ne 0) {
   throw "npm version failed."
 }
+
+$releaseInfoPath = Join-Path $repoRoot 'release-info.json'
+$releaseInfo = Get-Content $releaseInfoPath -Raw | ConvertFrom-Json
+$releaseInfo.version = $Version
+$releaseInfo | ConvertTo-Json -Depth 10 | Set-Content $releaseInfoPath -Encoding UTF8
 
 if (-not $NoBuild) {
   Write-Host "Building installer..."

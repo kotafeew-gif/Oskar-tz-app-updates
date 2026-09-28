@@ -1,9 +1,10 @@
 ﻿import { Fragment, useEffect, useRef, useState } from "react";
 import packageJson from "../package.json";
+import releaseInfo from "../release-info.json";
 
 // ─── Константы справочников ─────────────────────────────────────────────────
 
-const APP_VERSION = packageJson.version;
+const APP_VERSION = releaseInfo.version || packageJson.version;
 
 const DEFAULT_PRODUCT_TYPES = [
   "Визитки", "Листовки", "Буклеты", "Флаеры", "Брошюры", "Каталоги",
@@ -394,12 +395,20 @@ const PRODUCT_LAYOUT_META: Record<ProductLayoutKind, { title: string; descriptio
 let runtimeProductTemplates: ProductTemplateStore = { ...DEFAULT_PRODUCT_TEMPLATES };
 
 const UPDATE_SUMMARY_POINTS = [
-  "Выбор матовой/глянцевой бумаги теперь только у меловки.",
-  "В ламинацию добавлен пункт Нестандартная.",
-  "Добавлен вид продукции Кубарики.",
-  "Исправлено отображение цветности в таблице.",
-  "Прочие доработки.",
+  ...(Array.isArray(releaseInfo.startMessage) ? releaseInfo.startMessage : []),
 ];
+
+const SHORT_TZ_ANNOTATION_SPLIT_RE = /(раскрой(?:\s+[^,;\n]*)?|уф[-\s]?лак(?:\s+[^,;\n]*)?)/gi;
+const SHORT_TZ_ANNOTATION_MATCH_RE = /^(раскрой|уф[-\s]?лак)/i;
+
+function renderShortTZText(text: string, keyPrefix: string) {
+  return text.split(SHORT_TZ_ANNOTATION_SPLIT_RE).map((segment, index) => (
+    segment ? SHORT_TZ_ANNOTATION_MATCH_RE.test(segment)
+      ? <strong key={`${keyPrefix}-${index}`} className={`font-bold ${/^уф[-\s]?лак/i.test(segment) ? "text-orange-600" : "text-slate-900"}`}>{segment}</strong>
+      : <span key={`${keyPrefix}-${index}`}>{segment}</span>
+      : null
+  ));
+}
 
 function getRandomSuccessImageSrc(previousSrc = ""): string {
   if (SUCCESS_IMAGE_SRCS.length === 0) return "";
@@ -937,7 +946,7 @@ interface FormData {
   blockPaperType: PaperTypeOption | ""; blockPaperCustomName: string; blockDensity: string; blockFinish: PaperFinish; blockColor: string; blockOffsetPrinting: boolean; blockLamination: LaminationBlock; blockPages: string;
   adBlocks: string; calendarKind: string; wallMountType: string; wallMountDesc: string; gridType: string; hasPlanka: boolean; plankaDesc: string; hasRigel: boolean;
   quarterPosterSize: string; quarterPosterPaperType: PaperTypeOption | ""; quarterPosterPaperCustomName: string; quarterPosterDensity: string; quarterPosterFinish: PaperFinish; quarterPosterColorMode: string; quarterPosterLamination: LaminationBlock; quarterAdBlocks: string; quarterAdFieldsSame: boolean; quarterAdParts: QuarterAdPart[]; quarterGridStandard: boolean; quarterGridName: string; quarterGridSize: string; quarterGridPaperType: PaperTypeOption | ""; quarterGridPaperCustomName: string; quarterGridDensity: string; quarterGridFinish: PaperFinish; quarterGridColorMode: string; quarterGridPrintMode: string; quarterBackingEnabled: boolean; quarterBackingSize: string; quarterBackingPaperType: PaperTypeOption | ""; quarterBackingPaperCustomName: string; quarterBackingDensity: string; quarterBackingFinish: PaperFinish; quarterBackingColorMode: string; quarterMountType: string; quarterMountColor: string; quarterSpringColor: string; quarterCursorColor: string; quarterCursorType: string;
-  calendarBaseUseKash: boolean; calendarBaseMaterial: string; calendarBaseCustomName: string; calendarBaseSize: string; calendarBaseColorMode: string; calendarBaseFinish: PaperFinish; calendarBaseLamination: LaminationBlock; calendarBaseBigovkaLines: string; calendarGridMaterial: string; calendarGridPages: string; calendarGridFinish: PaperFinish; calendarGridColorMode: string; calendarOffsetColor: string;
+  calendarBaseUseKash: boolean; calendarBaseMaterial: string; calendarBaseCustomName: string; calendarBaseSize: string; calendarBaseColorMode: string; calendarBaseFinish: PaperFinish; calendarBaseLamination: LaminationBlock; calendarBaseBigovkaLines: string; calendarGridMaterial: string; calendarGridPages: string; calendarGridFinish: PaperFinish; calendarGridColorMode: string; calendarOffsetColor: string; desktopCalendarCompositionEnabled: boolean; desktopCalendarParts: DesktopCalendarPart[];
   calendarHeaderPaperType: PaperTypeOption | ""; calendarHeaderPaperCustomName: string; calendarHeaderPaperDensity: string; calendarHeaderPaperFinish: PaperFinish; calendarHeaderSize: string; calendarHeaderColorMode: string; calendarHeaderLamination: LaminationBlock;
   postProcessing: string[]; foilColor: string; uvType: string; bigkovka: boolean; bigkovkaLines: string; drillingDiameter: string;
   falcovka: boolean;
@@ -1007,6 +1016,21 @@ interface QuarterAdPart {
   colorMode: string;
 }
 
+interface DesktopCalendarPart {
+  id: string;
+  type: string;
+  customName: string;
+  size: string;
+  quantity: string;
+  paperType: PaperTypeOption | "";
+  paperCustomName: string;
+  density: string;
+  finish: PaperFinish;
+  colorMode: string;
+  lamination: LaminationBlock;
+  note: string;
+}
+
 interface SuccessImageStats {
   byImage: Record<string, number>;
   byManager: Record<string, Record<string, number>>;
@@ -1047,6 +1071,25 @@ function createQuarterAdPart(): QuarterAdPart {
     finish: "Матовая",
     lamination: defaultLaminationBlock(),
     colorMode: "",
+  };
+}
+
+const DESKTOP_CALENDAR_PART_TYPES = ["Обложка", "Календарный блок", "Лист с праздниками", "Другое"];
+
+function createDesktopCalendarPart(type = "Календарный блок"): DesktopCalendarPart {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    type,
+    customName: "",
+    size: "",
+    quantity: "",
+    paperType: "Мелованная",
+    paperCustomName: "",
+    density: "",
+    finish: "Матовая",
+    colorMode: "",
+    lamination: defaultLaminationBlock(),
+    note: "",
   };
 }
 
@@ -1106,6 +1149,7 @@ function createDefaultForm(): FormData {
     adBlocks: "3", calendarKind: "Настенный", wallMountType: "Ригель", wallMountDesc: "", gridType: "Цифра", hasPlanka: false, plankaDesc: "", hasRigel: false,
     quarterPosterSize: "", quarterPosterPaperType: "Мелованная", quarterPosterPaperCustomName: "", quarterPosterDensity: "", quarterPosterFinish: "Матовая", quarterPosterColorMode: "", quarterPosterLamination: defaultLaminationBlock(), quarterAdBlocks: "1", quarterAdFieldsSame: false, quarterAdParts: [createQuarterAdPart()], quarterGridStandard: true, quarterGridName: "", quarterGridSize: "", quarterGridPaperType: "Мелованная", quarterGridPaperCustomName: "", quarterGridDensity: "", quarterGridFinish: "Матовая", quarterGridColorMode: "", quarterGridPrintMode: "У себя", quarterBackingEnabled: false, quarterBackingSize: "", quarterBackingPaperType: "Мелованная", quarterBackingPaperCustomName: "", quarterBackingDensity: "", quarterBackingFinish: "Матовая", quarterBackingColorMode: "", quarterMountType: "Планка", quarterMountColor: "Серебро", quarterSpringColor: "Белая", quarterCursorColor: "Красный", quarterCursorType: "Без резинки",
     calendarBaseUseKash: false, calendarBaseMaterial: "", calendarBaseCustomName: "", calendarBaseSize: "", calendarBaseColorMode: "", calendarBaseFinish: "Матовая", calendarBaseLamination: defaultLaminationBlock(), calendarBaseBigovkaLines: "", calendarGridMaterial: "", calendarGridPages: "", calendarGridFinish: "Матовая", calendarGridColorMode: "", calendarOffsetColor: "Серый",
+    desktopCalendarCompositionEnabled: false, desktopCalendarParts: [],
     calendarHeaderPaperType: "", calendarHeaderPaperCustomName: "", calendarHeaderPaperDensity: "", calendarHeaderPaperFinish: "Матовая", calendarHeaderSize: "", calendarHeaderColorMode: "", calendarHeaderLamination: defaultLaminationBlock(),
     postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1", drillingDiameter: "", falcovka: false,
     lamination: defaultLaminationBlock(), kashurovka: defaultKashurovkaBlock(),
@@ -1237,6 +1281,9 @@ function mergePresetIntoForm(base: FormData, presetData: Partial<FormData>): For
     notebookParts: Array.isArray(presetData.notebookParts)
       ? presetData.notebookParts.map((part) => mergeValue(createNotebookPart(), part))
       : presetData.notebookParts,
+    desktopCalendarParts: Array.isArray(presetData.desktopCalendarParts)
+      ? presetData.desktopCalendarParts.map((part) => mergeValue(createDesktopCalendarPart(String(part.type || "Календарный блок")), part))
+      : presetData.desktopCalendarParts,
   };
 
   return mergeValue(base, normalizedPresetData) as FormData;
@@ -1698,6 +1745,26 @@ function formatBagPaperSelection(form: FormData): string {
 function buildSpringSuggestion(form: FormData): { thickness: number; diameter: string; capacityMm: number; pitch: SpringSpec["pitch"]; subcontract: boolean } | null {
   if (form.bindingType !== "Пружина") return null;
 
+  if (isCalendar(form.productType) && form.calendarKind === "Настольный" && form.desktopCalendarCompositionEnabled) {
+    let thickness = 0;
+    if (form.calendarBaseUseKash && form.kashurovka.enabled) {
+      const baseMaterial = form.kashurovka.baseType === "Другое..." ? form.kashurovka.baseCustomName : form.kashurovka.baseType;
+      const baseThickness = estimateThicknessMm(baseMaterial);
+      const linerThickness = estimateThicknessMm(form.kashurovka.linerPaperDensity || form.kashurovka.linerType, form.kashurovka.linerFinish);
+      if (baseThickness && linerThickness) thickness += 2 * (baseThickness + linerThickness);
+    } else {
+      thickness += estimateThicknessMm(form.calendarBaseMaterial === "Другое..." ? form.calendarBaseCustomName : form.calendarBaseMaterial, form.calendarBaseFinish) || 0;
+    }
+    form.desktopCalendarParts.forEach((part) => {
+      const partThickness = estimateThicknessMm(part.density, part.finish);
+      const count = part.type === "Календарный блок" || part.type === "Лист с праздниками" ? Number(part.quantity) || 1 : 1;
+      if (partThickness) thickness += partThickness * count;
+    });
+    if (!thickness) return null;
+    const spring = findSpringSpecForThickness(thickness);
+    return spring ? { thickness, diameter: spring.diameter, capacityMm: spring.capacityMm, pitch: spring.pitch, subcontract: spring.subcontract } : null;
+  }
+
   if (isCalendar(form.productType) && form.calendarKind === "Настольный" && form.calendarBaseUseKash && form.kashurovka.enabled) {
     const baseMaterial = form.kashurovka.baseType === "Другое..." ? form.kashurovka.baseCustomName : form.kashurovka.baseType;
     const baseThickness = estimateThicknessMm(baseMaterial);
@@ -1899,8 +1966,10 @@ function generateShortTZ(form: FormData): string {
   const parts: string[] = [];
   const product = formatProductNameForTZ(form, true);
   const templateFlags = getProductTemplate(form.productType).flags;
-  if (product) parts.push(product);
-  const size = getDisplaySize(form);
+  const isDesktopCalendar = isCalendar(form.productType) && form.calendarKind === "Настольный";
+  if (isDesktopCalendar) parts.push("календарь настольный");
+  else if (product) parts.push(product);
+  const size = isDesktopCalendar ? "" : getDisplaySize(form);
   if (size) parts.push(size.split(/\s*[(/]/)[0].trim());
 
   if (isMultiBlock(form.productType)) {
@@ -1953,7 +2022,7 @@ function generateShortTZ(form: FormData): string {
   } else if (isCalendar(form.productType)) {
     if (form.calendarKind === "Квартальный") {
       parts.push(formatQuarterCalendarShortLines(form).join("\n"));
-    } else {
+    } else if (!isDesktopCalendar) {
       parts.push(form.calendarKind.toLowerCase());
     }
     if (form.calendarKind !== "Квартальный" && form.calendarKind === "Настенный") {
@@ -1990,17 +2059,33 @@ function generateShortTZ(form: FormData): string {
       const gridColor = form.calendarOffsetColor || "";
       parts.push(`Сетка: офсет${gridMaterial || gridColor ? `, ${[gridMaterial, gridColor].filter(Boolean).join(" ")}` : ""}`);
     }
-    if (form.calendarKind !== "Квартальный" && form.calendarKind === "Настольный" && form.calendarBaseMaterial) {
-      const baseName = form.calendarBaseMaterial === "Другое..." ? `${form.calendarBaseCustomName || "другое"} (под заказ)` : form.calendarBaseMaterial;
-      parts.push([`Основание: ${normalizeMaterial(baseName)}`, formatFinishForTZ(form.calendarBaseFinish)].filter(Boolean).join(" "));
-    }
-    if (form.calendarKind === "Настольный" && form.calendarGridMaterial) {
-      const gridParts = [
-        formatMaterialWithFinish(form.calendarGridMaterial, form.calendarGridFinish),
-        form.calendarGridPages ? `${form.calendarGridPages} листов` : "",
-        form.calendarGridColorMode ? normalizeColorMode(form.calendarGridColorMode) : form.calendarOffsetColor,
-      ].filter(Boolean);
-      parts.push(["сетка", gridParts.join(", ") || "—"].join("\n"));
+    if (form.calendarKind === "Настольный") {
+      const baseParts = ["основание", "", `${form.calendarBaseSize || "—"},`];
+      if (!form.calendarBaseUseKash) {
+        const baseName = form.calendarBaseMaterial === "Другое..." ? `${form.calendarBaseCustomName || "другое"} (под заказ)` : form.calendarBaseMaterial;
+        const material = [normalizeMaterial(baseName), formatFinishForTZ(form.calendarBaseFinish, "Мелованная"), normalizeColorMode(form.calendarBaseColorMode)].filter(Boolean).join(" ");
+        if (material) baseParts.push(material);
+        if (form.calendarBaseLamination.enabled) baseParts.push(`осн. ${getLaminationShort(form.calendarBaseLamination)}`);
+      }
+      if (form.calendarBaseBigovkaLines) {
+        const count = Number(form.calendarBaseBigovkaLines);
+        const suffix = count === 1 ? "биговка" : count >= 2 && count <= 4 ? "биговки" : "биговок";
+        baseParts.push(`${form.calendarBaseBigovkaLines} ${suffix} основания`);
+      }
+      parts.push(baseParts.filter((part, index) => part || index === 0 || index === 1).join("\n"));
+      if (form.kashurovka.enabled) parts.push(getDesktopCalendarKashShortTZ(form));
+      parts.push("сетка");
+      if (form.desktopCalendarCompositionEnabled) {
+        const composition = form.desktopCalendarParts.map(formatDesktopCalendarPartShort).filter(Boolean);
+        if (composition.length) parts.push(composition.join("\n"));
+      } else if (form.calendarGridMaterial) {
+        const gridParts = [
+          formatMaterialWithFinish(form.calendarGridMaterial, form.calendarGridFinish),
+          form.calendarGridPages ? `${form.calendarGridPages} листов` : "",
+          form.calendarGridColorMode ? normalizeColorMode(form.calendarGridColorMode) : form.calendarOffsetColor,
+        ].filter(Boolean);
+        parts.push(gridParts.join(", ") || "—");
+      }
     }
   } else if (isCubariki(form.productType)) {
     const material = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish);
@@ -2074,15 +2159,11 @@ function generateShortTZ(form: FormData): string {
     parts.push("фальцовка");
   }
 
-  if (!form.kashurovka.enabled && isCalendar(form.productType) && form.calendarKind === "Настольный" && form.calendarBaseBigovkaLines) {
-    parts.push(`${form.calendarBaseBigovkaLines} биговк основания`);
+  if (form.kashurovka.enabled && !(isCalendar(form.productType) && form.calendarKind === "Настольный")) {
+    parts.push(getKashShortTZ(form));
   }
 
-  if (form.kashurovka.enabled) {
-    parts.push(isCalendar(form.productType) && form.calendarKind === "Настольный" ? getDesktopCalendarKashShortTZ(form) : getKashShortTZ(form));
-  }
-
-  if (isCalendar(form.productType) && form.calendarBaseLamination.enabled) parts.push(`осн. ${getLaminationShort(form.calendarBaseLamination)}`);
+  if (isCalendar(form.productType) && form.calendarKind !== "Настольный" && form.calendarBaseLamination.enabled) parts.push(`осн. ${getLaminationShort(form.calendarBaseLamination)}`);
   if (isPocketCalendar(form)) {
     const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
     const paperLine = [paperText, formatShortColor(form.colorMode)].filter(Boolean).join(", ");
@@ -2263,17 +2344,24 @@ function generateTZ(form: FormData, _tzNumber: number): string {
       lines.push(` Крепление : ${form.wallMountType || "—"}`);
       lines.push(` Описание крепления : ${form.wallMountDesc || "—"}`);
     } else if (form.calendarKind === "Настольный") {
+      lines.push(` Размер основания : ${form.calendarBaseSize || "—"}`);
       if (form.calendarBaseUseKash) lines.push(" Основание задаётся в блоке кашировки");
       else {
         const baseName = form.calendarBaseMaterial === "Другое..." ? `${form.calendarBaseCustomName || "другое"} (под заказ)` : form.calendarBaseMaterial;
-        lines.push(` Основание : ${formatMaterialWithFinish(baseName, form.calendarBaseFinish) || "—"}`);
+        lines.push(` Основание : ${[formatMaterialWithFinish(baseName, form.calendarBaseFinish), normalizeColorMode(form.calendarBaseColorMode)].filter(Boolean).join(", ") || "—"}`);
         if (form.calendarBaseLamination.enabled) lines.push(` Ламинация основания : ${formatLamination(form.calendarBaseLamination)}`);
       }
-      if (form.calendarBaseBigovkaLines && !form.kashurovka.enabled) lines.push(` Биговка основания : ${form.calendarBaseBigovkaLines} линий`);
-      lines.push(` Блок/сетка : ${form.gridType || "—"}`);
-      lines.push(` Материал блока/сетки : ${formatMaterialWithFinish(form.calendarGridMaterial, form.calendarGridFinish) || "—"}`);
-      if (form.calendarGridPages) lines.push(` Количество листов сетки : ${form.calendarGridPages}`);
-      lines.push(` ${form.gridType === "Цифра" ? "Цветность сетки" : "Цвет офсета"} : ${form.gridType === "Цифра" ? normalizeColorMode(form.calendarGridColorMode) || "—" : normalizeColorMode(form.calendarOffsetColor) || "—"}`);
+      if (form.calendarBaseBigovkaLines) lines.push(` Биговка основания : ${form.calendarBaseBigovkaLines} линий`);
+      if (form.desktopCalendarCompositionEnabled) {
+        lines.push(" СОСТАВ КАЛЕНДАРЯ");
+        lines.push(" -----------------");
+        if (form.desktopCalendarParts.length === 0) lines.push(" Части не добавлены");
+        form.desktopCalendarParts.forEach((part, index) => lines.push(...formatDesktopCalendarPartTZ(part, index)));
+      } else {
+        lines.push(` Блок/сетка : ${form.gridType || "—"}`);
+        lines.push(` Материал блока/сетки : ${[formatMaterialWithFinish(form.calendarGridMaterial, form.calendarGridFinish), form.gridType === "Цифра" ? normalizeColorMode(form.calendarGridColorMode) : normalizeColorMode(form.calendarOffsetColor)].filter(Boolean).join(", ") || "—"}`);
+        if (form.calendarGridPages) lines.push(` Количество листов сетки : ${form.calendarGridPages}`);
+      }
     }
     if (form.calendarKind === "Карманный") {
       const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
@@ -3400,15 +3488,43 @@ function getKashShortTZ(form: FormData): string {
 
 function getDesktopCalendarKashShortTZ(form: FormData): string {
   const value = form.kashurovka;
+  if (value.connectionType === "Слим-каширование") {
+    const paper1 = [normalizeMaterial(value.slimPaperTop), formatFinishForTZ(value.slimPaperTopFinish, value.slimPaperTopPaperType), value.slimPaperTopColor.split(/\s/)[0], getLaminationShort(value.slimPaperTopLamination)].filter(Boolean).join(" ");
+    const paper2 = [normalizeMaterial(value.slimPaperBottom), formatFinishForTZ(value.slimPaperBottomFinish, value.slimPaperBottomPaperType), value.slimPaperBottomColor.split(/\s/)[0], getLaminationShort(value.slimPaperBottomLamination)].filter(Boolean).join(" ");
+    return [
+      "слим-каширование:",
+      `бум.1 ${paper1 || "—"};`,
+      `бум.2 ${paper2 || "—"}`,
+    ].join("\n");
+  }
   const base = value.baseType === "Другое..." ? `${value.baseCustomName || "другое"} (под заказ)` : value.baseType;
   const liner = [normalizeMaterial(value.linerType), formatFinishForTZ(value.linerFinish, value.linerPaperType), value.linerColor.split(/\s/)[0], getLaminationShort(value.linerLamination)].filter(Boolean).join(" ");
   const forsac = [normalizeMaterial(value.forsacPaper), formatFinishForTZ(value.forsacFinish, value.forsacPaperType), value.forsacColor.split(/\s/)[0], getLaminationShort(value.forsacLamination)].filter(Boolean).join(" ");
   return [
-    "основание",
     `каширование на ${base || "—"}`,
     `лайнер ${liner || "—"}`,
     value.forsacEnabled ? `форзац ${forsac || "—"}` : "",
   ].filter(Boolean).join("\n");
+}
+
+function formatDesktopCalendarPartShort(part: DesktopCalendarPart): string {
+  const title = part.type === "Другое" ? (part.customName.trim() || "Другое") : part.type;
+  const paper = formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish);
+  const details = [part.size, paper, normalizeColorMode(part.colorMode), part.quantity ? `${part.quantity} листов` : "", part.lamination.enabled ? getLaminationShort(part.lamination) : "", part.note.trim()]
+    .filter(Boolean)
+    .join(", ");
+  return `${title || "Часть"}: ${details || "—"}`;
+}
+
+function formatDesktopCalendarPartTZ(part: DesktopCalendarPart, index: number): string[] {
+  const title = part.type === "Другое" ? (part.customName.trim() || "Другое") : part.type;
+  const lines = [` ${index + 1}. ${title || "Часть"}`, `  Размер : ${part.size || "—"}`];
+  const paper = formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish);
+  lines.push(`  Материал : ${[paper, normalizeColorMode(part.colorMode)].filter(Boolean).join(", ") || "—"}`);
+  if (part.quantity) lines.push(`  Количество листов : ${part.quantity}`);
+  if (part.lamination.enabled) lines.push(`  Ламинация : ${formatLamination(part.lamination)}`);
+  if (part.note.trim()) lines.push(`  Примечание : ${part.note.trim()}`);
+  return lines;
 }
 
 function ShortTZPanel({ form }: { form: FormData }) {
@@ -3460,11 +3576,11 @@ function ShortTZPanel({ form }: { form: FormData }) {
                     {lineIndex === 0
                       ? line.split(" / ").map((segment, i, arr) => (
                       <span key={i}>
-                        <span className="text-slate-800">{segment}</span>
+                        <span className="text-slate-800">{renderShortTZText(segment, `short-${lineIndex}-${i}`)}</span>
                         {i < arr.length - 1 && <span className="text-emerald-400 font-bold mx-1">/</span>}
                       </span>
                       ))
-                      : line}
+                      : renderShortTZText(line, `short-${lineIndex}`)}
                   </div>
                 )
               ))}
@@ -4623,6 +4739,32 @@ function LegacyApp() {
     });
   }
 
+  function updateDesktopCalendarPart(id: string, patch: Partial<DesktopCalendarPart>) {
+    setForm((prev) => ({
+      ...prev,
+      desktopCalendarParts: prev.desktopCalendarParts.map((part) => (part.id === id ? { ...part, ...patch } : part)),
+    }));
+  }
+
+  function addDesktopCalendarPart() {
+    setForm((prev) => ({ ...prev, desktopCalendarParts: [...prev.desktopCalendarParts, createDesktopCalendarPart("Другое")] }));
+  }
+
+  function removeDesktopCalendarPart(id: string) {
+    setForm((prev) => ({ ...prev, desktopCalendarParts: prev.desktopCalendarParts.filter((part) => part.id !== id) }));
+  }
+
+  function moveDesktopCalendarPart(id: string, direction: -1 | 1) {
+    setForm((prev) => {
+      const index = prev.desktopCalendarParts.findIndex((part) => part.id === id);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= prev.desktopCalendarParts.length) return prev;
+      const desktopCalendarParts = [...prev.desktopCalendarParts];
+      [desktopCalendarParts[index], desktopCalendarParts[nextIndex]] = [desktopCalendarParts[nextIndex], desktopCalendarParts[index]];
+      return { ...prev, desktopCalendarParts };
+    });
+  }
+
   function updateQuarterAdPart(id: string, patch: Partial<QuarterAdPart>) {
     setForm((prev) => ({
       ...prev,
@@ -4795,7 +4937,7 @@ function LegacyApp() {
     if (suggestion && form.bindingType === "Пружина" && shouldAutoUpdate && form.springDiameter !== suggestion.diameter) {
       setForm((prev) => ({ ...prev, springDiameter: suggestion.diameter, springDiameterStrict: false }));
     }
-  }, [form.productType, form.bindingType, form.pageCount, form.blockPages, form.density, form.densityFinish, form.blockDensity, form.blockFinish, form.blockOffsetPrinting, form.coverDensity, form.coverFinish, form.coverUseKash, form.kashurovka.linerType, form.kashurovka.linerFinish, form.kashurovka.baseType, form.kashurovka.baseCustomName, form.kashurovka.linerPaperDensity, form.kashurovka.forsacEnabled, form.kashurovka.forsacPaper, form.kashurovka.forsacPaperDensity, form.kashurovka.forsacFinish, form.calendarBaseUseKash, form.calendarGridMaterial, form.calendarGridPages, form.calendarGridFinish, form.notebookCompositionEnabled, form.notebookParts]);
+  }, [form.productType, form.bindingType, form.pageCount, form.blockPages, form.density, form.densityFinish, form.blockDensity, form.blockFinish, form.blockOffsetPrinting, form.coverDensity, form.coverFinish, form.coverUseKash, form.kashurovka.linerType, form.kashurovka.linerFinish, form.kashurovka.baseType, form.kashurovka.baseCustomName, form.kashurovka.linerPaperDensity, form.kashurovka.forsacEnabled, form.kashurovka.forsacPaper, form.kashurovka.forsacPaperDensity, form.kashurovka.forsacFinish, form.calendarBaseUseKash, form.calendarGridMaterial, form.calendarGridPages, form.calendarGridFinish, form.desktopCalendarCompositionEnabled, form.desktopCalendarParts, form.notebookCompositionEnabled, form.notebookParts]);
 
   useEffect(() => {
     const next: Partial<FormData> = {};
@@ -5849,12 +5991,58 @@ function LegacyApp() {
                         }} />
                       </Field>
                       <Field label="Материал основания" required><select data-field="calendarBaseMaterial" value={form.calendarBaseMaterial} disabled={form.calendarBaseUseKash} className={`${selectFieldClass(showValidation && required.includes("calendarBaseMaterial"))} ${form.calendarBaseUseKash ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => { update("calendarBaseMaterial", e.target.value); if (e.target.value !== "Другое...") update("calendarBaseCustomName", ""); }}><option value="">— выберите —</option>{dicts.paperProfiles.calendarBase.map((d) => <option key={d}>{d}</option>)}</select>{form.calendarBaseMaterial === "Другое..." && <><input data-field="calendarBaseCustomName" className={`${inputClass} mt-2`} placeholder="Укажите материал основания" value={form.calendarBaseCustomName || ""} onChange={(e) => update("calendarBaseCustomName", e.target.value)} /><p className="mt-1 text-xs font-semibold text-amber-700">Материал под заказ.</p></>}</Field>
+                      <Field label="Размер основания" required><input data-field="calendarBaseSize" className={fieldClass(showValidation && required.includes("calendarBaseSize"))} value={form.calendarBaseSize} onChange={(e) => update("calendarBaseSize", e.target.value)} placeholder="Например: 148×185 мм" /></Field>
                       <div className={form.calendarBaseUseKash ? "opacity-50 pointer-events-none" : ""}><PaperFinishField visible={false} value={form.calendarBaseFinish} onChange={(value) => update("calendarBaseFinish", value)} /></div>
                       <div className={`md:col-span-2 ${form.calendarBaseUseKash ? "opacity-50 pointer-events-none" : ""}`}>
                         <LaminationBlockComponent label="Ламинация основания" value={form.calendarBaseLamination} onChange={(value) => update("calendarBaseLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
                       </div>
+                      <Field label="Количество биговок основания"><input type="number" min={0} max={20} className={inputClass} value={form.calendarBaseBigovkaLines} onChange={(e) => { update("calendarBaseBigovkaLines", e.target.value); if (e.target.value && e.target.value !== "0" && form.bigkovka) update("bigkovka", false); }} placeholder="0" /></Field>
                       {form.calendarBaseUseKash && <p className="md:col-span-2 text-xs text-slate-500">Основание настольного календаря задаётся через блок кашировки.</p>}
-                      <Field label="Количество биговок основания"><input type="number" min={0} max={20} disabled={form.calendarBaseUseKash || form.kashurovka.enabled} className={`${inputClass} ${form.calendarBaseUseKash || form.kashurovka.enabled ? "opacity-50 cursor-not-allowed" : ""}`} value={form.calendarBaseBigovkaLines} onChange={(e) => { update("calendarBaseBigovkaLines", e.target.value); if (e.target.value && e.target.value !== "0" && form.bigkovka) update("bigkovka", false); }} placeholder="0" /></Field>
+                      <div className="md:col-span-2 rounded-xl border border-violet-200 bg-violet-50/60 p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <h3 className="text-sm font-semibold text-violet-800">Составной календарь</h3>
+                            <p className="mt-1 text-xs text-violet-700">Добавьте обложку, календарный блок, лист с праздниками и другие части.</p>
+                          </div>
+                          <YesNo value={form.desktopCalendarCompositionEnabled} onChange={(value) => setForm((prev) => ({
+                            ...prev,
+                            desktopCalendarCompositionEnabled: value,
+                            desktopCalendarParts: value && prev.desktopCalendarParts.length === 0 ? [createDesktopCalendarPart("Обложка"), createDesktopCalendarPart("Календарный блок")] : prev.desktopCalendarParts,
+                          }))} />
+                        </div>
+                      </div>
+                      {form.desktopCalendarCompositionEnabled && (
+                        <div className="md:col-span-2 space-y-3 rounded-xl border border-violet-200 bg-white p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <h4 className="text-sm font-semibold text-violet-800">Части календаря</h4>
+                            <button type="button" onClick={addDesktopCalendarPart} className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-50">＋ Добавить часть</button>
+                          </div>
+                          {form.desktopCalendarParts.map((part, index) => (
+                            <div key={part.id} className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 space-y-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Часть {index + 1}</div>
+                                <div className="flex gap-1">
+                                  <button type="button" aria-label="Переместить часть выше" disabled={index === 0} onClick={() => moveDesktopCalendarPart(part.id, -1)} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs disabled:opacity-40">↑</button>
+                                  <button type="button" aria-label="Переместить часть ниже" disabled={index === form.desktopCalendarParts.length - 1} onClick={() => moveDesktopCalendarPart(part.id, 1)} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs disabled:opacity-40">↓</button>
+                                  <button type="button" onClick={() => removeDesktopCalendarPart(part.id)} className="rounded border border-red-200 bg-white px-2 py-1 text-xs text-red-600">Удалить</button>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                                <Field label="Вид части" required><select data-field="desktopCalendarPartType" value={part.type} className={selectFieldClass(showValidation && required.includes("desktopCalendarPartType"))} onChange={(e) => updateDesktopCalendarPart(part.id, { type: e.target.value, customName: e.target.value === "Другое" ? part.customName : "", quantity: e.target.value === "Календарный блок" && !part.quantity ? "" : part.quantity })}>{DESKTOP_CALENDAR_PART_TYPES.map((type) => <option key={type}>{type}</option>)}</select></Field>
+                                {part.type === "Другое" && <Field label="Название части" required><input data-field="desktopCalendarPartCustomName" className={fieldClass(showValidation && required.includes("desktopCalendarPartCustomName"))} value={part.customName} onChange={(e) => updateDesktopCalendarPart(part.id, { customName: e.target.value })} placeholder="Например: рекламная вставка" /></Field>}
+                                <Field label="Размер" required><input data-field="desktopCalendarPartSize" className={fieldClass(showValidation && required.includes("desktopCalendarPartSize"))} placeholder="Например: 148×185 мм" value={part.size} onChange={(e) => updateDesktopCalendarPart(part.id, { size: e.target.value })} /></Field>
+                                <PaperSelectionField label="Бумага" typeValue={part.paperType} materialValue={part.density} customValue={part.paperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => updateDesktopCalendarPart(part.id, { paperType: value, density: "", paperCustomName: "" })} onMaterialChange={(value) => updateDesktopCalendarPart(part.id, { density: value })} onCustomChange={(value) => updateDesktopCalendarPart(part.id, { paperCustomName: value })} typeFieldName={`desktopCalendarPartPaperType-${part.id}`} materialFieldName={`desktopCalendarPartDensity-${part.id}`} customFieldName={`desktopCalendarPartCustom-${part.id}`} showValidation={showValidation} invalidType={showValidation && required.includes("desktopCalendarPartPaperType")} invalidMaterial={showValidation && required.includes("desktopCalendarPartDensity")} invalidCustom={showValidation && required.includes("desktopCalendarPartCustom")} />
+                                <PaperFinishField label="Поверхность" visible={part.paperType === "Мелованная"} value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateDesktopCalendarPart(part.id, { finish: value })} />
+                                <Field label="Цветность" required><select data-field="desktopCalendarPartColor" value={part.colorMode} className={selectFieldClass(showValidation && required.includes("desktopCalendarPartColor"))} onChange={(e) => updateDesktopCalendarPart(part.id, { colorMode: e.target.value })}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
+                                <Field label="Количество листов" required={part.type === "Календарный блок"}><input data-field="desktopCalendarPartQuantity" type="number" min={1} className={fieldClass(showValidation && required.includes("desktopCalendarPartQuantity"))} value={part.quantity} onChange={(e) => updateDesktopCalendarPart(part.id, { quantity: e.target.value })} placeholder={part.type === "Календарный блок" ? "Например: 11" : "Необязательно"} /></Field>
+                                <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateDesktopCalendarPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
+                                <Field label="Примечание / обработка"><input className={inputClass} placeholder="Например: раскрой на ахе" value={part.note} onChange={(e) => updateDesktopCalendarPart(part.id, { note: e.target.value })} /></Field>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {!form.desktopCalendarCompositionEnabled && <>
                       <Field label="Тип блока/сетки"><select value={form.gridType} className={selectClass} onChange={(e) => update("gridType", e.target.value)}><option>Цифра</option><option>Офсет</option></select></Field>
                       <Field label="Количество листов блока/сетки"><input type="number" min={1} className={inputClass} value={form.calendarGridPages || ""} onChange={(e) => update("calendarGridPages", e.target.value)} placeholder="Необязательно" /></Field>
                       {form.gridType === "Цифра" ? (
@@ -5870,6 +6058,7 @@ function LegacyApp() {
                           <Field label="Цвет офсета блока/сетки"><select value={form.calendarOffsetColor} className={selectClass} onChange={(e) => update("calendarOffsetColor", e.target.value)}>{CALENDAR_OFFSET_COLORS.map((d) => <option key={d}>{d}</option>)}</select></Field>
                         </>
                       )}
+                      </>}
                     </div>
                   )}
                   {form.calendarKind === "Карманный" && (
@@ -6696,6 +6885,23 @@ function getRequiredFields(form: FormData): string[] {
       if (!form.calendarBaseMaterial) errors.push("calendarBaseMaterial");
       if (form.calendarBaseMaterial === "Другое..." && !(form.calendarBaseCustomName || "").trim()) errors.push("calendarBaseCustomName");
     }
+    if (form.calendarKind === "Настольный") {
+      if (!form.calendarBaseSize.trim()) errors.push("calendarBaseSize");
+      if (form.desktopCalendarCompositionEnabled) {
+        if (form.desktopCalendarParts.length === 0) errors.push("desktopCalendarParts");
+        form.desktopCalendarParts.forEach((part) => {
+          if (!part.type) errors.push("desktopCalendarPartType");
+          if (part.type === "Другое" && !part.customName.trim()) errors.push("desktopCalendarPartCustomName");
+          if (!part.size.trim()) errors.push("desktopCalendarPartSize");
+          if (!part.paperType) errors.push("desktopCalendarPartPaperType");
+          else if (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()) {
+            errors.push(part.paperType === "Дизайнерская" ? "desktopCalendarPartCustom" : "desktopCalendarPartDensity");
+          }
+          if (!part.colorMode && !isPaperlessPaperType(part.paperType)) errors.push("desktopCalendarPartColor");
+          if (part.type === "Календарный блок" && (!part.quantity || Number(part.quantity) <= 0)) errors.push("desktopCalendarPartQuantity");
+        });
+      }
+    }
   } else if (isBag(form.productType)) {
     if (!form.bagExternalSheets) {
       if (templatePaperRequired) {
@@ -6833,6 +7039,16 @@ const REQUIRED_FIELD_LABELS: Record<string, string> = {
   wallMountDesc: "Описание ригеля / планки",
   calendarBaseMaterial: "Материал основания",
   calendarBaseCustomName: "Материал основания (под заказ)",
+  calendarBaseSize: "Размер основания",
+  desktopCalendarPartCustomName: "Название части календаря",
+  desktopCalendarParts: "Части настольного календаря",
+  desktopCalendarPartType: "Вид части календаря",
+  desktopCalendarPartSize: "Размер части календаря",
+  desktopCalendarPartPaperType: "Тип бумаги части календаря",
+  desktopCalendarPartDensity: "Плотность бумаги части календаря",
+  desktopCalendarPartCustom: "Название дизайнерской бумаги части календаря",
+  desktopCalendarPartColor: "Цветность части календаря",
+  desktopCalendarPartQuantity: "Количество листов части календаря",
   bagHeight: "Высота пакета",
   bagWidth: "Ширина пакета",
   bagDepth: "Глубина пакета",
