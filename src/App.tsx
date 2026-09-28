@@ -2045,9 +2045,16 @@ function generateShortTZ(form: FormData): string {
       const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
       const materialLine = [paperText, templateFlags.showColor ? formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки") : ""].filter(Boolean).join(", ");
       if (materialLine) parts.push(materialLine);
-    } else if (templateFlags.showColor) {
-      parts.push(formatShortColor(form.colorMode, form.ownReverse) || "—");
-    }
+      } else if (templateFlags.showColor) {
+        const colorText = formatShortColor(form.colorMode, form.ownReverse) || "—";
+        const last = parts[parts.length - 1];
+        // Приклеиваем к предыдущему элементу (к размеру), если он не «standalone»-операция
+        if (last && !isStandaloneShortPart(last)) {
+          parts[parts.length - 1] = `${last}, ${colorText}`;
+        } else {
+          parts.push(colorText);
+        }
+      }
   }
 
   if (form.lamination.enabled && !isMultiBlock(form.productType) && !isNotebook(form.productType) && !isCalendar(form.productType)) {
@@ -2944,7 +2951,22 @@ function LaminationBlockComponent({ label, value, onChange, laminationKinds, lam
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-2 border-l-2 border-blue-100 mt-2">
           <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Сторонность</label><select value={value.side} className={selectClass} onChange={(e) => upd("side", e.target.value)}><option value="">— выберите —</option><option>Односторонняя</option><option>Двухсторонняя</option></select></div>
           <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Толщина</label><select value={value.thickness} className={selectClass} onChange={(e) => upd("thickness", e.target.value)}><option value="">— выберите —</option>{laminationThickness.map((t: string) => <option key={t}>{t}</option>)}</select></div>
-          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Вид</label><select value={value.kind} className={selectClass} onChange={(e) => { upd("kind", e.target.value); if (e.target.value !== "Нестандартный") upd("kindCustom", ""); }}><option value="">— выберите —</option>{laminationKinds.map((k: string) => <option key={k}>{k}</option>)}</select>{value.kind === "Нестандартный" && <input className={`${inputClass} mt-2`} placeholder="Например: глянец / мат" value={value.kindCustom || ""} onChange={(e) => upd("kindCustom", e.target.value)} />}</div>
+          <div className="flex flex-col gap-1"><label className="text-[10px] text-slate-400 uppercase">Вид</label>
+            <select
+              value={value.kind}
+              className={selectClass}
+              onChange={(e) => {
+                const nextKind = e.target.value;
+                onChange({
+                  ...value,
+                  kind: nextKind,
+                  kindCustom: nextKind === "Нестандартный" ? (value.kindCustom || "") : "",
+                });
+              }}
+            >
+              <option value="">— выберите —</option>
+              {laminationKinds.map((k: string) => <option key={k}>{k}</option>)}
+            </select></div>
         </div>
       )}
     </div>
