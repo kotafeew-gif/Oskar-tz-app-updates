@@ -10,6 +10,8 @@
     "dev": "vite",
     "sync:release-info": "node scripts/sync-release-info.mjs",
     "build": "npm run sync:release-info && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "start": "electron .",
     "release": "powershell -ExecutionPolicy Bypass -File .\\scripts\\release.ps1",
@@ -36,7 +38,7 @@
     "tailwindcss": "4.1.17",
     "typescript": "5.9.3",
     "vite": "7.2.4",
-    "vite-plugin-singlefile": "2.3.0"
+    "vitest": "^5.0.3"
   },
   "build": {
     "appId": "com.oskarprint.tz",

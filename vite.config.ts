@@ -9,11 +9,15 @@ const __dirname = path.dirname(__filename);
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: './', // <--- ВОТ ТА САМАЯ МАГИЧЕСКАЯ СТРОЧКА
+  base: './',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
     },
   },
-});
+  test: {
+    environment: 'node',
+    include: ['src/**/*.test.ts'],
+  },
+} satisfies import('vite').UserConfig & { test: import('vitest/config').UserConfig['test'] } as any);
