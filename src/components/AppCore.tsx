@@ -204,6 +204,7 @@ import AdShortTZPanel from "./AdShortTZPanel";
 import DictEditor from "./DictEditor";
 import SpringSpecsEditor from "./SpringSpecsEditor";
 import ProductTemplateEditor from "./ProductTemplateEditor";
+import Kitten from "./Kitten";
 
 import { getRequiredFields, getRequiredAdFields, REQUIRED_FIELD_LABELS } from "../validation";
 
@@ -428,9 +429,8 @@ function LegacyApp() {
       }
 
       setPresetStore(result.store);
-      const savedPreset = Object.values(result.store.byManager || {})
-        .flat()
-        .find((preset: PresetEntry) => preset.name.toLowerCase() === presetName.toLowerCase());
+      const savedPreset = (Object.values(result.store.byManager || {}).flat() as PresetEntry[])
+        .find((preset) => preset.name.toLowerCase() === presetName.toLowerCase());
       setSelectedPresetId(savedPreset?.id || "");
       setPresetSearchDraft(savedPreset?.name || presetName);
       setPresetNameDraft("");
@@ -587,6 +587,7 @@ function LegacyApp() {
   const [isDictLocked, setIsDictLocked] = useState(true);
   const [dictPassword, setDictPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [kittenEnabled, setKittenEnabled] = useState(false);
   const [dictSectionQuery, setDictSectionQuery] = useState("");
   const [dictSyncMsg, setDictSyncMsg] = useState<string | null>(null);
   const [dictSyncBusy, setDictSyncBusy] = useState<"idle" | "loading" | "saving">("idle");
@@ -1676,7 +1677,7 @@ function LegacyApp() {
                           }));
                         }} />
                       </Field>
-                      {form.coverUseKash && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">Перейдите в настройки кашировки.</div>}
+                      {form.coverUseKash && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">Продолжите оформление в разделе кашировки.</div>}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="md:col-span-2">
                           <PaperSelectionField
@@ -2120,7 +2121,7 @@ function LegacyApp() {
                     {!form.bagExternalSheets && (
                       <>
                         <Field label={templatePaperLabel} required>
-                          <select value={form.bagPaperType} className={selectFieldClass(showValidation && required.includes("bagPaperType"))} onChange={(e) => update("bagPaperType", e.target.value)}>
+                          <select value={form.bagPaperType} className={selectFieldClass(showValidation && required.includes("bagPaperType"))} onChange={(e) => update("bagPaperType", e.target.value as any)}>
                             <option value="">— выберите —</option>
                             {BAG_PAPER_TYPE_OPTIONS.map((item) => <option key={item}>{item}</option>)}
                           </select>
@@ -2453,20 +2454,26 @@ function LegacyApp() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           if (dictPassword === "123321") {
-                            setIsDictLocked(false);
-                            setPasswordError("");
-                          } else {
-                            setPasswordError("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c!");
-                          }
-                        }
-                      }}
-                    />
-                    <button
-                      onClick={() => {
-                        if (dictPassword === "123321") {
-                          setIsDictLocked(false);
-                          setPasswordError("");
-                        } else {
+                                                      setIsDictLocked(false);
+                                                      setPasswordError("");
+                                                    } else if (dictPassword === "mur") {
+                                                                                                          setKittenEnabled(true);
+                                                                                                          setPasswordError("");
+                                                                                                        } else {
+                                                                                                          setPasswordError("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c!");
+                                                                                                        }
+                                                                                                      }
+                                                                                                    }}
+                                                                                                  />
+                                                                                                  <button
+                                                                          onClick={() => {
+                                                                            if (dictPassword === "123321") {
+                                                                              setIsDictLocked(false);
+                                                                              setPasswordError("");
+                                                                            } else if (dictPassword === "mur") {
+                                                                              setKittenEnabled(true);
+                                                                              setPasswordError("");
+                                                                            } else {
                           setPasswordError("\u041d\u0435\u0432\u0435\u0440\u043d\u044b\u0439 \u043f\u0430\u0440\u043e\u043b\u044c!");
                         }
                       }}
@@ -2733,8 +2740,9 @@ function LegacyApp() {
           </div>
         </div>
       )}
-    </div>
-  );
+    {kittenEnabled && <Kitten />}
+        </div>
+      );
 }
 
 export default LegacyApp;

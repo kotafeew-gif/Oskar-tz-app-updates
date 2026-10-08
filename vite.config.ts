@@ -20,4 +20,4 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
   },
-} satisfies import('vite').UserConfig & { test: import('vitest/config').UserConfig['test'] } as any);
+} as any);

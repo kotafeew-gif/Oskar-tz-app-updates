@@ -1,8 +1,17 @@
 import YesNo from "./YesNo";
 import { selectClass } from "./fieldClasses";
+import type { LaminationBlock } from "../types";
 
-export default function LaminationBlockComponent({ label, value, onChange, laminationKinds, laminationThickness }: any) {
-  const upd = (key: string, val: any) => onChange({ ...value, [key]: val });
+interface LaminationProps {
+  label?: string;
+  value: LaminationBlock;
+  onChange: (value: LaminationBlock) => void;
+  laminationKinds: string[];
+  laminationThickness: string[];
+}
+
+export default function LaminationBlockComponent({ label, value, onChange, laminationKinds, laminationThickness }: LaminationProps) {
+  const upd = (key: string, val: string | boolean) => onChange({ ...value, [key]: val });
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3">

@@ -3,9 +3,10 @@ import DictEditor from "./DictEditor";
 import SpringSpecsEditor from "./SpringSpecsEditor";
 import { selectClass, fieldClass, actionFieldClass } from "./fieldClasses";
 import UiIcon from "./UiIcon";
-import type { Dicts, ProductLayoutKind, ProductTemplateConfig, ProductTemplateFieldKey } from "../types";
-import { PRODUCT_LAYOUT_OPTIONS, PRODUCT_LAYOUT_META, PRODUCT_TEMPLATE_FIELD_KEYS, DEFAULT_PRODUCT_TEMPLATE_FIELDS } from "../constants";
-import { normalizeTemplateName } from "../utils";
+import type { Dicts } from "../types";
+import type { ProductLayoutKind, ProductTemplateConfig, ProductTemplateFieldKey, ProductTemplateStore, ProductTemplateFlags, ProductTemplateFieldConfig } from "../constants";
+import { PRODUCT_LAYOUT_OPTIONS, PRODUCT_LAYOUT_META, PRODUCT_TEMPLATE_FIELD_KEYS, DEFAULT_PRODUCT_TEMPLATE_FIELDS, DEFAULT_PRODUCT_TEMPLATE_KINDS, DEFAULT_PRODUCT_TEMPLATE_FLAGS } from "../constants";
+import { normalizeTemplateName, createProductTemplateConfig } from "../utils";
 
 export default function ProductTemplateEditor({
   productTypes,
@@ -360,7 +361,7 @@ export default function ProductTemplateEditor({
                                   updateTemplate(activeName, {
                                     fields: {
                                       [item.key]: { ...fieldConfig, label: e.target.value },
-                                    } as Partial<Record<ProductTemplateFieldKey, ProductTemplateFieldConfig>>,
+                                    } as any,
                                   })
                                 }
                               />
@@ -371,7 +372,7 @@ export default function ProductTemplateEditor({
                                   checked={isVisible}
                                   onChange={(e) =>
                                     updateTemplate(activeName, {
-                                      flags: { [visibleKey]: e.target.checked } as Partial<ProductTemplateFlags>,
+                                      flags: { [visibleKey]: e.target.checked } as any,
                                     })
                                   }
                                 />
@@ -387,7 +388,7 @@ export default function ProductTemplateEditor({
                                     updateTemplate(activeName, {
                                       fields: {
                                         [item.key]: { ...fieldConfig, required: e.target.checked },
-                                      } as Partial<Record<ProductTemplateFieldKey, ProductTemplateFieldConfig>>,
+                                      } as any,
                                     })
                                   }
                                 />

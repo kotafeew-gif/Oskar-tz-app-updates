@@ -1,6 +1,7 @@
 import { useEffect } from "react";
-import { PAPER_TYPE_OPTIONS } from "../constants";
-import type { PaperFinish, PaperSelectionValue, PaperTypeOption } from "../types";
+import { PAPER_TYPE_OPTIONS, DEFAULT_PAPER_LIBRARY } from "../constants";
+import type { PaperFinish, PaperSelectionValue } from "../types";
+import type { PaperTypeOption } from "../constants";
 import { selectClass, fieldClass, selectFieldClass } from "./fieldClasses";
 import { getPaperLibraryItems } from "../utils";
 

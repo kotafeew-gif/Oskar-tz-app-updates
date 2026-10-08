@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import packageJson from "../package.json";
 import releaseInfo from "../release-info.json";
 

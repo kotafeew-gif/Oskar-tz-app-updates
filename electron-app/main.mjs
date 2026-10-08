@@ -483,7 +483,7 @@ function clearUpdateProgress() {
 function setupVisualAutoUpdater() {
   if (!app.isPackaged) return;
 
-  autoUpdater.autoDownload = false;
+  autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.allowPrerelease = false;
 
@@ -529,6 +529,10 @@ function setupVisualAutoUpdater() {
       releaseName: info.releaseName || '',
       notes: normalizeReleaseNotes(info.releaseNotes),
     });
+    // Force restart - no way to skip
+    setTimeout(() => {
+      autoUpdater.quitAndInstall();
+    }, 3000);
   });
 
   autoUpdater.on('error', (error) => {
