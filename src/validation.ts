@@ -1,4 +1,4 @@
-import type { FormData, AdFormData } from "./types";
+import type { FormData, AdFormData, LaminationBlock } from "./types";
 import {
   resolveProductName, isPocketCalendar, getProductTemplate,
   isProductTemplateFieldRequired, getTodayLocalIso, isDeadlineTimeInPast,
@@ -29,7 +29,23 @@ export function getRequiredFields(form: FormData): string[] {
     else if (isDateTimeInPast(work.date, work.time)) errors.push("subcontractTimePast");
   });
   if (!form.productType) errors.push("productType");
-  if (form.productType === "Другое..." && !product) errors.push("productTypeCustom");
+  if ((form.productType === "Другое..." || form.productType === "Другое") && !product) errors.push("productTypeCustom");
+  if (form.productType === "Другое..." || form.productType === "Другое") {
+    if (form.otherPaperEntries.length === 0) errors.push("otherPaperEntries");
+    form.otherPaperEntries.forEach((entry) => {
+      const entryKey = entry.id;
+      if (!entry.size.trim()) errors.push(`otherPaperSize-${entryKey}`);
+      if (!entry.paperType) errors.push(`otherPaperType-${entryKey}`);
+      else if (entry.paperType === "Дизайнерская" ? !entry.paperCustomName.trim() : requiresPaperDensity(entry.paperType) && !entry.density.trim()) {
+        errors.push(`${entry.paperType === "Дизайнерская" ? "otherPaperCustom" : "otherPaperDensity"}-${entryKey}`);
+      }
+      if (entry.lamination.enabled) {
+        if (!entry.lamination.side) errors.push(`otherPaperEntry-${entryKey}-laminationSide`);
+        if (!entry.lamination.thickness) errors.push(`otherPaperEntry-${entryKey}-laminationThickness`);
+        if (!entry.lamination.kind) errors.push(`otherPaperEntry-${entryKey}-laminationKind`);
+      }
+    });
+  }
   if (!form.quantity) errors.push("quantity");
   if (pocketCalendar) {
     if (templateSizeRequired) {
@@ -81,7 +97,7 @@ export function getRequiredFields(form: FormData): string[] {
     }
     if (templateColorRequired && !form.colorMode && !isPaperlessPaperType(form.paperType)) errors.push("colorMode");
     if (!form.blockPages || Number(form.blockPages) <= 0) errors.push("blockPages");
-  } else if (!isMultiBlock(form.productType) && !isCalendar(form.productType) && !isBag(form.productType) && !isSticker(form.productType)) {
+  } else if (!isMultiBlock(form.productType) && !isCalendar(form.productType) && !isBag(form.productType) && !isSticker(form.productType) && form.productType !== "Другое..." && form.productType !== "Другое") {
     if (templateSizeRequired) {
       if (!form.paperSize) errors.push("paperSize");
       if (form.paperSize === "Нестандартный" && !form.paperSizeCustom.trim()) errors.push("paperSizeCustom");
@@ -205,7 +221,7 @@ export function getRequiredFields(form: FormData): string[] {
   } else if (form.productType === "Бейджи") {
     if (!form.badgeHoleType) errors.push("badgeHoleType");
     if (form.badgeHoleType === "Круглое" && !form.badgeHoleCount) errors.push("badgeHoleCount");
-  } else if (!isEnvelope(form.productType) && !isCalendar(form.productType) && !form.kashurovka.enabled && templatePaperRequired) {
+  } else if (!isEnvelope(form.productType) && !isCalendar(form.productType) && !form.kashurovka.enabled && templatePaperRequired && form.productType !== "Другое..." && form.productType !== "Другое") {
     if (!form.paperType) errors.push("paperType");
     else if (form.paperType === "Дизайнерская" ? !form.paperCustomName.trim() : requiresPaperDensity(form.paperType) && !form.density.trim()) {
       errors.push(form.paperType === "Дизайнерская" ? "paperCustomName" : "density");
@@ -240,6 +256,20 @@ export function getRequiredFields(form: FormData): string[] {
   if (form.binding && form.bindingType === "Пружина" && !form.springDiameter) errors.push("springDiameter");
   if (templateFlags.showPostProcessing && (form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && !form.foilColor.trim()) errors.push("foilColor");
   if (templateFlags.showPostProcessing && form.postProcessing.includes("Сверление отверстий") && !form.drillingDiameter.trim()) errors.push("drillingDiameter");
+  const laminations: LaminationBlock[] = [
+    form.lamination, form.coverLamination, form.backingLamination, form.blockLamination,
+    form.quarterPosterLamination, form.calendarBaseLamination, form.calendarHeaderLamination,
+    ...form.quarterAdParts.map((part) => part.lamination),
+    ...form.desktopCalendarParts.map((part) => part.lamination),
+    ...form.notebookParts.map((part) => part.lamination),
+    // Ламинация позиций «Другое» проверяется выше с адресом конкретной карточки.
+  ];
+  laminations.forEach((lamination) => {
+    if (!lamination.enabled) return;
+    if (!lamination.side) errors.push("laminationSide");
+    if (!lamination.thickness) errors.push("laminationThickness");
+    if (!lamination.kind) errors.push("laminationKind");
+  });
   return Array.from(new Set(errors));
 }
 
@@ -266,6 +296,15 @@ export const REQUIRED_FIELD_LABELS: Record<string, string> = {
   subcontractTimePast: "Нельзя указывать прошедшее время подряда",
   productType: "Тип изделия",
   productTypeCustom: "Свой тип изделия",
+  otherPaperEntries: "Виды бумаги",
+  otherPaperEntrySize: "Размер / формат вида бумаги",
+  otherPaperEntryPaperType: "Тип бумаги вида",
+  otherPaperEntryDensity: "Плотность бумаги вида",
+  otherPaperEntryCustom: "Название дизайнерской бумаги вида",
+  otherPaperEntryLaminationSide: "Сторонность ламинации",
+  otherPaperEntryLaminationThickness: "Толщина ламинации",
+  otherPaperEntryLaminationKind: "Вид ламинации",
+
   quantity: "Тираж",
   paperSize: "Формат / размер",
   paperSizeCustom: "Нестандартный формат",
@@ -356,6 +395,9 @@ export const REQUIRED_FIELD_LABELS: Record<string, string> = {
   springDiameter: "Диаметр пружины",
   foilColor: "Цвет фольги",
   drillingDiameter: "Диаметр сверления",
+  laminationSide: "Сторонность ламинации",
+  laminationThickness: "Толщина ламинации",
+  laminationKind: "Вид ламинации",
   deadlineTime: "Время сдачи",
 };
 

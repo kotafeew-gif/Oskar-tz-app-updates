@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { generateShortTZ, createDefaultForm } from "../utils";
+import { generateShortTZ, generateTZ, createDefaultForm } from "../utils";
 import { getRequiredFields } from "../validation";
 import type { FormData } from "../types";
 
@@ -88,5 +88,28 @@ describe("getRequiredFields", () => {
     });
     const errors = getRequiredFields(form);
     expect(errors).toHaveLength(0);
+  });
+
+  it("requires complete paper entries for other products", () => {
+    const form = makeForm({ productType: "Другое...", productTypeCustom: "Набор", otherPaperEntries: [{ id: "1", name: "", size: "210×297 мм", paperType: "Мелованная", paperCustomName: "", density: "", finish: "Матовая", color: "Без печати", lamination: { enabled: false, side: "", thickness: "", kind: "" }, note: "" }] });
+    expect(getRequiredFields(form)).toContain("otherPaperDensity-1");
+  });
+
+  it("prints multiple paper entries for other products", () => {
+    const form = makeForm({ productType: "Другое...", productTypeCustom: "Набор", otherPaperEntries: [
+      { id: "1", name: "Обложка", size: "210×297 мм", paperType: "Мелованная", paperCustomName: "", density: "150 г/м²", finish: "Матовая", color: "Без печати", lamination: { enabled: false, side: "", thickness: "", kind: "" }, note: "" },
+      { id: "2", name: "Вкладыш", size: "100×100 мм", paperType: "Офсетная", paperCustomName: "", density: "80 г/м²", finish: "Матовая", color: "Без печати", lamination: { enabled: false, side: "", thickness: "", kind: "" }, note: "" },
+    ] });
+    expect(generateShortTZ(form)).toContain("210×297 мм");
+    expect(generateTZ(form, 1)).toContain("100×100 мм");
+  });
+
+  it("does not require legacy single-paper fields for other products", () => {
+    const form = makeForm({
+      clientName: "Тест", managerName: "Алёна", productType: "Другое", productTypeCustom: "Набор", quantity: "100", deadline: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+      otherPaperEntries: [{ id: "1", name: "", size: "A4", paperType: "Мелованная", paperCustomName: "", density: "150 г/м²", finish: "Матовая", color: "4+4", lamination: { enabled: false, side: "", thickness: "", kind: "" }, note: "" }],
+    });
+    expect(getRequiredFields(form)).not.toContain("paperType");
+    expect(getRequiredFields(form)).not.toContain("colorMode");
   });
 });

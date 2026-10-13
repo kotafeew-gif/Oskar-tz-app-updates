@@ -86,7 +86,7 @@ export interface FormData {
   lamination: LaminationBlock; kashurovka: KashurovkaBlock;
   binding: boolean; bindingType: string; stapleCount: string; staplePosition: string; springColor: string; springColorCustom: string; springDiameter: string; springDiameterStrict: boolean; springPosition: string; springHidden: boolean;
   subcontractWorks: SubcontractWork[];
-  notebookCompositionEnabled: boolean; notebookParts: NotebookPart[];
+  notebookCompositionEnabled: boolean; notebookParts: NotebookPart[]; otherPaperEntries: OtherPaperEntry[];
   bagPaperType: BagPaperTypeOption | ""; bagHeight: string; bagWidth: string; bagDepth: string; bagPartsCount: string; bagExternalSheets: boolean; bagEyeletColor: string; bagEyeletColorCustom: string; bagHandleColor: string; bagHandleColorCustom: string; bagHandlePipsik: string;
   stickerMaterial: string; stickerFinish: PaperFinish; stickerPlotterCut: boolean; stickerPacks: boolean;
   ownReverse: boolean;
@@ -135,6 +135,19 @@ export interface NotebookPart {
   type: string;
   quantity: string;
   offsetPrinting: boolean;
+  paperType: PaperTypeOption | "";
+  paperCustomName: string;
+  density: string;
+  finish: PaperFinish;
+  color: string;
+  lamination: LaminationBlock;
+  note: string;
+}
+
+export interface OtherPaperEntry {
+  id: string;
+  name: string;
+  size: string;
   paperType: PaperTypeOption | "";
   paperCustomName: string;
   density: string;

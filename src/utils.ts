@@ -1,6 +1,6 @@
 import type {
   AdFormData, ClientStore, DesktopCalendarPart, Dicts, FormData,
-  KashurovkaBlock, LaminationBlock, ManagerMarkerState, NotebookPart,
+  KashurovkaBlock, LaminationBlock, ManagerMarkerState, NotebookPart, OtherPaperEntry,
   PaperFinish, PaperSelectionValue, PresetEntry, PresetStore,
   QuarterAdPart, ReservedAssignment, SubcontractWork, SuccessImageStats,
 } from "./types";
@@ -589,6 +589,21 @@ export function createNotebookPart(): NotebookPart {
   };
 }
 
+export function createOtherPaperEntry(): OtherPaperEntry {
+  return {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    name: "",
+    size: "",
+    paperType: "",
+    paperCustomName: "",
+    density: "",
+    finish: "Матовая",
+    color: "Без печати",
+    lamination: defaultLaminationBlock(),
+    note: "",
+  };
+}
+
 export function createEmptyClientStore(): ClientStore {
   return { byManager: {} };
 }
@@ -616,7 +631,7 @@ export function createDefaultForm(): FormData {
     postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1", drillingDiameter: "", falcovka: false,
     lamination: defaultLaminationBlock(), kashurovka: defaultKashurovkaBlock(),
     binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springDiameter: "", springDiameterStrict: false, springPosition: "По широкой стороне", springHidden: false,
-    subcontractWorks: [], notebookCompositionEnabled: false, notebookParts: [],
+    subcontractWorks: [], notebookCompositionEnabled: false, notebookParts: [], otherPaperEntries: [],
     bagPaperType: "", bagHeight: "", bagWidth: "", bagDepth: "", bagPartsCount: "Из 2-х частей", bagExternalSheets: false, bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleType: "Верёвка", bagHandleColor: "Белый", bagHandleColorCustom: "", bagHandlePipsik: "Без пипсика",
     stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false, stickerPacks: false,
     ownReverse: false,
@@ -744,6 +759,9 @@ export function mergePresetIntoForm(base: FormData, presetData: Partial<FormData
     notebookParts: Array.isArray(presetData.notebookParts)
       ? presetData.notebookParts.map((part) => mergeValue(createNotebookPart(), part))
       : presetData.notebookParts,
+    otherPaperEntries: Array.isArray(presetData.otherPaperEntries)
+      ? presetData.otherPaperEntries.map((entry) => mergeValue(createOtherPaperEntry(), entry))
+      : presetData.otherPaperEntries,
     desktopCalendarParts: Array.isArray(presetData.desktopCalendarParts)
       ? presetData.desktopCalendarParts.map((part) => mergeValue(createDesktopCalendarPart(String(part.type || "Календарный блок")), part))
       : presetData.desktopCalendarParts,
@@ -839,7 +857,7 @@ export function ensureProductTypes(list: string[]): string[] {
 }
 
 export function resolveProductName(form: FormData): string {
-  return form.productType === "Другое..." ? form.productTypeCustom.trim() : form.productType;
+  return (form.productType === "Другое..." || form.productType === "Другое") ? form.productTypeCustom.trim() : form.productType;
 }
 
 export function formatProductNameForTZ(form: FormData, lower = false): string {
@@ -1570,11 +1588,13 @@ export function generateShortTZ(form: FormData): string {
     const stickerMaterialLine = [normalizeMaterial(form.stickerMaterial), formatShortColor(form.colorMode)].filter(Boolean).join(", ");
     if (stickerMaterialLine) parts.push(stickerMaterialLine.toLowerCase());
     if (form.stickerPlotterCut) parts.push("плоттерная резка");
+  } else if (form.productType === "Другое..." || form.productType === "Другое") {
+    const entries = form.otherPaperEntries.map(formatOtherPaperEntryForTZ).filter(Boolean);
+    if (entries.length) parts.push(entries.join("\n"));
   } else if (form.productType === "Воблеры") {
     const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
     const paperLine = [paperText, formatShortColor(form.colorMode)].filter(Boolean).join(", ");
     if (paperLine) parts.push(paperLine);
-    if (form.wobblerPlotterCut) parts.push("плоттерная резка");
     if (form.wobblerFootGlue) parts.push("приклейка ножки");
   } else if (form.productType === "Бейджи") {
     const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
@@ -1588,7 +1608,7 @@ export function generateShortTZ(form: FormData): string {
     const envelopePaperless = isEnvelope(form.productType) && form.paperType === "Без бумаги";
     if (templateFlags.showPaper && !envelopePaperless) {
       const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
-      const materialLine = [paperText, templateFlags.showColor ? formatShortColor(form.colorMode, form.ownReverse && form.productType === "Листовки") : ""].filter(Boolean).join(", ");
+      const materialLine = [paperText, templateFlags.showColor ? formatShortColor(form.colorMode, form.ownReverse && (form.productType === "Листовки" || form.productType === "Листовка")) : ""].filter(Boolean).join(", ");
       if (materialLine) parts.push(materialLine);
       } else if (templateFlags.showColor) {
         const colorText = formatShortColor(form.colorMode, form.ownReverse) || "—";
@@ -1850,11 +1870,21 @@ export function generateTZ(form: FormData, _tzNumber: number): string {
   } else if (isSticker(form.productType)) {
     lines.push(` Материал : ${[normalizeMaterial(form.stickerMaterial), normalizeColorMode(form.colorMode)].filter(Boolean).join(", ") || "—"}`);
     lines.push(` Плоттерная резка : ${form.stickerPlotterCut ? "Да" : "Нет"}`);
+  } else if (form.productType === "Другое..." || form.productType === "Другое") {
+    lines.push(" ВИДЫ БУМАГИ");
+    lines.push(" ------------");
+    if (form.otherPaperEntries.length === 0) lines.push(" Не указаны");
+    form.otherPaperEntries.forEach((entry, index) => {
+      lines.push(` ${index + 1}. ${entry.size || "Размер не указан"}`);
+      lines.push(`  Материал : ${formatPaperSelectionWithFinishForTZ(entry.paperType, entry.density, entry.paperCustomName, entry.finish) || "—"}`);
+      lines.push(`  Цветность : ${normalizeColorMode(entry.color) || "—"}`);
+      if (entry.lamination.enabled) lines.push(`  Ламинация : ${formatLamination(entry.lamination)}`);
+      if (entry.note.trim()) lines.push(`  Примечание : ${entry.note.trim()}`);
+    });
   } else if (form.productType === "Воблеры") {
     const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
     const paperLine = [paperText, normalizeColorMode(form.colorMode)].filter(Boolean).join(", ") || "—";
     lines.push(` Материал : ${paperLine}`);
-    if (form.wobblerPlotterCut) lines.push(" Плоттерная резка");
     if (form.wobblerFootGlue) lines.push(" Приклейка ножки");
   } else if (form.productType === "Бейджи") {
     const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
@@ -1869,10 +1899,10 @@ export function generateTZ(form: FormData, _tzNumber: number): string {
     if (form.kashurovka.enabled) lines.push(" Базовые материалы задаются в блоке кашировки");
     else if (templateFlags.showPaper && !envelopePaperless) {
       const paperText = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish) || normalizeMaterial(form.density);
-      const paperLine = [paperText, templateFlags.showColor ? formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки") : ""].filter(Boolean).join(", ") || "—";
+      const paperLine = [paperText, templateFlags.showColor ? formatColorWithReverse(form.colorMode, form.ownReverse && (form.productType === "Листовки" || form.productType === "Листовка")) : ""].filter(Boolean).join(", ") || "—";
       lines.push(` Материал : ${paperLine}`);
     } else if (templateFlags.showColor && !form.kashurovka.enabled) {
-      lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse && form.productType === "Листовки")}`);
+      lines.push(` Цветность : ${formatColorWithReverse(form.colorMode, form.ownReverse && (form.productType === "Листовки" || form.productType === "Листовка"))}`);
     }
   }
   lines.push("");
@@ -2012,6 +2042,10 @@ export function getDesktopCalendarKashShortTZ(form: FormData): string {
     `лайнер ${liner || "—"}`,
     value.forsacEnabled ? `форзац ${forsac || "—"}` : "",
   ].filter(Boolean).join("\n");
+}
+
+export function formatOtherPaperEntryForTZ(entry: OtherPaperEntry): string {
+  return [entry.size.trim(), formatPaperSelectionWithFinishForTZ(entry.paperType, entry.density, entry.paperCustomName, entry.finish), normalizeColorMode(entry.color), entry.lamination.enabled ? getLaminationShort(entry.lamination) : "", entry.note.trim()].filter(Boolean).join(", ");
 }
 
 export function formatDesktopCalendarPartShort(part: DesktopCalendarPart): string {

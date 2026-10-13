@@ -31,6 +31,7 @@ import type {
   LaminationBlock,
   ManagerMarkerState,
   NotebookPart,
+  OtherPaperEntry,
   PaperFinish,
   PaperSelectionValue,
   PresetEntry,
@@ -56,6 +57,7 @@ import {
     createEmptySuccessImageStats,
     createInitialDicts,
     createNotebookPart,
+  createOtherPaperEntry,
     createProductTemplateConfig,
     createQuarterAdPart,
     createResetDicts,
@@ -748,6 +750,18 @@ function LegacyApp() {
     });
   }
 
+  function updateOtherPaperEntry(id: string, patch: Partial<OtherPaperEntry>) {
+    setForm((prev) => ({ ...prev, otherPaperEntries: prev.otherPaperEntries.map((entry) => entry.id === id ? { ...entry, ...patch } : entry) }));
+  }
+
+  function addOtherPaperEntry() {
+    setForm((prev) => ({ ...prev, otherPaperEntries: [...prev.otherPaperEntries, createOtherPaperEntry()] }));
+  }
+
+  function removeOtherPaperEntry(id: string) {
+    setForm((prev) => ({ ...prev, otherPaperEntries: prev.otherPaperEntries.filter((entry) => entry.id !== id) }));
+  }
+
   function updateDesktopCalendarPart(id: string, patch: Partial<DesktopCalendarPart>) {
     setForm((prev) => ({
       ...prev,
@@ -836,7 +850,15 @@ function LegacyApp() {
     if (field === "subcontractTimePast") {
       return "Нельзя указывать прошедшее время подряда";
     }
-    return REQUIRED_FIELD_LABELS[field] ?? field;
+    const entry = form.otherPaperEntries.find((item) => field.includes(item.id));
+    const entryIndex = entry ? form.otherPaperEntries.indexOf(entry) : -1;
+    const base = entry
+      ? field.startsWith("otherPaperEntry-")
+        ? `otherPaperEntry${field.slice(`otherPaperEntry-${entry.id}-`.length).replace(/^./, (char) => char.toUpperCase())}`
+        : `otherPaperEntry${field.slice("otherPaper".length, field.indexOf(`-${entry.id}`)).replace(/^./, (char) => char.toUpperCase())}`
+      : field.replace(/-[^-]+$/, "");
+    const label = REQUIRED_FIELD_LABELS[base] ?? REQUIRED_FIELD_LABELS[field] ?? base;
+    return entryIndex >= 0 ? `${label} (бумага ${entryIndex + 1})` : label;
   });
   const adRequired = getRequiredAdFields(adForm);
   const adRequiredLabels = adRequired.map((field) => REQUIRED_FIELD_LABELS[field] ?? field);
@@ -930,9 +952,9 @@ function LegacyApp() {
   const filteredDictSections = dictSections.filter((section) => section.title.toLowerCase().includes(dictSectionQuery.trim().toLowerCase()));
 
   function focusFirstInvalidField(fields: string[]) {
-    const first = fields[0];
-    if (!first) return;
-    const element = document.querySelector(`[data-field="${first}"]`) as HTMLElement | null;
+    const selectors = fields.flatMap((field) => [field, field === "otherPaperEntries" ? "otherPaperType-" : "", field.startsWith("otherPaperEntry-") ? field : "", field.startsWith("otherPaper") && field.includes("-") ? field : "", field.startsWith("lamination") ? field : ""]).filter(Boolean);
+    const element = selectors.map((field) => field.endsWith("-") ? document.querySelector(`[data-field^="${field}"]`) as HTMLElement | null : document.querySelector(`[data-field="${field}"]`) as HTMLElement | null).find(Boolean) || document.querySelector("[data-field]") as HTMLElement | null;
+    if (!element) return;
     if (element) {
       const top = element.getBoundingClientRect().top + window.scrollY - 140;
       window.scrollTo({ top: Math.max(top, 0), behavior: "smooth" });
@@ -1182,6 +1204,8 @@ function LegacyApp() {
   const brochure = isBrochure(pt);
   const wobbler = pt === "Воблеры";
   const badge = pt === "Бейджи";
+  const flyer = pt === "Листовки" || pt === "Листовка";
+  const otherProduct = pt === "Другое..." || pt === "Другое";
   const templateFlags = getProductTemplate(pt).flags;
   const templateSizeLabel = getProductTemplateFieldLabel(pt, "size");
   const templatePaperLabel = getProductTemplateFieldLabel(pt, "paper");
@@ -1435,7 +1459,7 @@ function LegacyApp() {
                   <select data-field="productType" value={form.productType} className={selectFieldClass(showValidation && required.includes("productType"))} onChange={(e) => { const nextProductType = e.target.value; const notebookSelected = isNotebook(nextProductType); setForm((prev) => ({ ...createDefaultForm(), orderNumber: prev.orderNumber, clientName: prev.clientName, managerName: prev.managerName, deadline: prev.deadline, deadlineTime: prev.deadlineTime, quantity: prev.quantity, cellBooking: prev.cellBooking, subcontractWorks: prev.subcontractWorks, productType: nextProductType, binding: notebookSelected, bindingType: notebookSelected ? "Пружина" : "Скоба", bigkovka: notebookSelected ? false : prev.bigkovka, falcovka: notebookSelected ? false : prev.falcovka })); springDiameterManuallyEditedRef.current = false; setShowValidation(false); }}>
                     <option value="">— выберите —</option>{dicts.productTypes.map((t) => <option key={t}>{t}</option>)}
                   </select>
-                  {pt === "Другое..." && <input data-field="productTypeCustom" className={`${fieldClass(showValidation && required.includes("productTypeCustom"))} mt-2`} placeholder="Укажите тип изделия" value={form.productTypeCustom} onChange={(e) => update("productTypeCustom", e.target.value)} />}
+                  {otherProduct && <input data-field="productTypeCustom" className={`${fieldClass(showValidation && required.includes("productTypeCustom"))} mt-2`} placeholder="Укажите тип изделия" value={form.productTypeCustom} onChange={(e) => update("productTypeCustom", e.target.value)} />}
                 </Field>
                 {pt === "Визитки" ? (
                   <Field label={templateSizeLabel} required>
@@ -1448,7 +1472,7 @@ function LegacyApp() {
                   <Field label={templateSizeLabel} required>
                     <input data-field="paperSize" className={fieldClass(showValidation && required.includes("paperSize"))} placeholder="Например: 90×90 мм" value={form.paperSize} onChange={(e) => update("paperSize", e.target.value)} />
                   </Field>
-                ) : !envelope && !multiBlock && !calendar && !bag && (
+                ) : !envelope && !multiBlock && !calendar && !bag && !otherProduct && (
                   <Field label={templateSizeLabel} required>
                     <select data-field="paperSize" value={form.paperSize} className={selectFieldClass(showValidation && required.includes("paperSize"))} onChange={(e) => update("paperSize", e.target.value)}>
                       <option value="">— выберите —</option>{dicts.paperSizes.map((s) => <option key={s}>{s}</option>)}
@@ -1488,9 +1512,9 @@ function LegacyApp() {
                 )}
               </div>
 
-              {templateFlags.showPaper && !multiBlock && !notebook && !calendar && !bag && !form.kashurovka.enabled && pt && (
+              {templateFlags.showPaper && !multiBlock && !notebook && !calendar && !bag && !form.kashurovka.enabled && pt && !otherProduct && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {!sticker && (
+                  {!sticker && !otherProduct && (
                     <PaperSelectionField
                       label={templatePaperLabel}
                       typeValue={form.paperType}
@@ -1526,12 +1550,24 @@ function LegacyApp() {
                       <Field label={templateColorLabel} required><select data-field="colorMode" value={form.colorMode} disabled={(pt === "Листовки" || badge) && form.ownReverse} className={`${selectFieldClass(showValidation && required.includes("colorMode"))} ${(pt === "Листовки" || badge) && form.ownReverse ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{(sticker ? STICKER_COLOR_MODES : dicts.colors).map((c) => <option key={c}>{c}</option>)}</select></Field>
                     </>
                   )}
-                  {(pt === "Листовки" || badge) && (
+                  {badge && (
                     <Field label="Свой оборот">
                       <YesNo value={form.ownReverse} onChange={(value) => { update("ownReverse", value); if (value) update("colorMode", AUTO_REVERSE_COLOR); }} />
                     </Field>
                   )}
                   {cubariki && <Field label="Количество листов в блоке" required><input data-field="blockPages" type="number" min={1} className={fieldClass(showValidation && required.includes("blockPages"))} value={form.blockPages} onChange={(e) => update("blockPages", e.target.value)} placeholder="Например: 100" /></Field>}
+                </div>
+              )}
+
+              {flyer && (
+                <div className="mt-4"><Field label="Свой оборот"><YesNo value={form.ownReverse} onChange={(value) => { update("ownReverse", value); if (value) update("colorMode", AUTO_REVERSE_COLOR); }} /></Field></div>
+              )}
+
+              {otherProduct && (
+                <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/60 p-4 space-y-4">
+                  <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-violet-800">Виды бумаги</h3><p className="mt-1 text-xs text-violet-700">Добавьте каждую бумагу отдельной позицией.</p></div><button type="button" onClick={addOtherPaperEntry} className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100">＋ Добавить бумагу</button></div>
+                  {form.otherPaperEntries.map((entry, index) => <div key={entry.id} className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm space-y-3"><div className="flex items-center justify-between"><span className="text-xs font-semibold uppercase tracking-wide text-violet-500">Бумага {index + 1}</span><button type="button" onClick={() => removeOtherPaperEntry(entry.id)} className="text-xs text-red-600">Удалить</button></div><Field label="Размер / формат" required><input className={fieldClass(showValidation && !entry.size.trim())} value={entry.size} onChange={(e) => updateOtherPaperEntry(entry.id, { size: e.target.value })} placeholder="Например: 210×297 мм" /></Field><PaperSelectionField label="Бумага / материал" typeValue={entry.paperType} materialValue={entry.density} customValue={entry.paperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => updateOtherPaperEntry(entry.id, { paperType: value, density: "", paperCustomName: "" })} onMaterialChange={(value) => updateOtherPaperEntry(entry.id, { density: value })} onCustomChange={(value) => updateOtherPaperEntry(entry.id, { paperCustomName: value })} typeFieldName={`otherPaperType-${entry.id}`} materialFieldName={`otherPaperDensity-${entry.id}`} customFieldName={`otherPaperCustom-${entry.id}`} showValidation={showValidation} invalidType={!entry.paperType} invalidMaterial={!!entry.paperType && entry.paperType !== "Дизайнерская" && requiresPaperDensity(entry.paperType) && !entry.density.trim()} invalidCustom={entry.paperType === "Дизайнерская" && !entry.paperCustomName.trim()} /><PaperFinishField label="Поверхность" visible={entry.paperType === "Мелованная"} value={entry.finish} options={paperFinishOptionsForSelection(entry.paperType, entry.density)} onChange={(value) => updateOtherPaperEntry(entry.id, { finish: value })} /><Field label="Цветность"><select className={selectClass} value={entry.color} onChange={(e) => updateOtherPaperEntry(entry.id, { color: e.target.value })}><option>Без печати</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field><LaminationBlockComponent label="Ламинация" value={entry.lamination} onChange={(value) => updateOtherPaperEntry(entry.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} fieldPrefix={`otherPaperEntry-${entry.id}-`} /><Field label="Примечание"><input className={inputClass} value={entry.note} onChange={(e) => updateOtherPaperEntry(entry.id, { note: e.target.value })} /></Field></div>)}
+                  {form.otherPaperEntries.length === 0 && <p className="text-sm text-slate-500">Добавьте хотя бы одну бумагу.</p>}
                 </div>
               )}
 
@@ -1708,7 +1744,7 @@ function LegacyApp() {
                         <Field label="Цветность обложки" required><select data-field="coverColor" value={form.coverColor} disabled={form.coverUseKash} className={`${selectFieldClass(showValidation && required.includes("coverColor"))} ${form.coverUseKash ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("coverColor", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
                       </div>
                       <div className={form.coverUseKash ? "opacity-50 pointer-events-none" : ""}>
-                        <LaminationBlockComponent label="Ламинация обложки" value={form.coverLamination} onChange={(v: any) => update("coverLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                        <LaminationBlockComponent label="Ламинация обложки" value={form.coverLamination} onChange={(v: any) => update("coverLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} />
                       </div>
                       {form.coverUseKash && <p className="text-xs text-slate-500">Бумага, цветность и ламинация обложки задаются в блоке кашировки.</p>}
                       {notebook && (
@@ -1755,7 +1791,7 @@ function LegacyApp() {
                                   </select>
                                 </Field>
                               </div>
-                              <LaminationBlockComponent label="Ламинация подложки" value={form.backingLamination} onChange={(v: any) => update("backingLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                              <LaminationBlockComponent label="Ламинация подложки" value={form.backingLamination} onChange={(v: any) => update("backingLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} />
                             </div>
                           )}
                         </div>
@@ -1793,7 +1829,7 @@ function LegacyApp() {
                         <Field label="Цветность блока" required={!form.blockOffsetPrinting}><select data-field="blockColor" value={form.blockColor} disabled={form.blockOffsetPrinting} className={`${selectFieldClass(showValidation && !form.blockOffsetPrinting && required.includes("blockColor"))} ${form.blockOffsetPrinting ? "opacity-50 cursor-not-allowed" : ""}`} onChange={(e) => update("blockColor", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
                         <label className="md:col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"><input type="checkbox" checked={form.blockOffsetPrinting} onChange={(e) => { update("blockOffsetPrinting", e.target.checked); if (e.target.checked) update("blockColor", ""); }} className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />Печать блока на офсете</label>
                       </div>
-                      <div className={form.blockOffsetPrinting ? "pointer-events-none opacity-50" : ""}><LaminationBlockComponent label="Ламинация блока" value={form.blockLamination} onChange={(v: any) => update("blockLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
+                      <div className={form.blockOffsetPrinting ? "pointer-events-none opacity-50" : ""}><LaminationBlockComponent label="Ламинация блока" value={form.blockLamination} onChange={(v: any) => update("blockLamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} /></div>
                     </div>
                   </div>
                     </>
@@ -1883,7 +1919,7 @@ function LegacyApp() {
                                     </select>
                                   </Field>
                                   <div className="md:col-span-2">
-                                    <LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateNotebookPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                                    <LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateNotebookPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} />
                                   </div>
                                   <div className="md:col-span-2">
                                     <Field label="Примечание к части">
@@ -1918,7 +1954,7 @@ function LegacyApp() {
                         <PaperSelectionField label="Бумага постера" typeValue={form.quarterPosterPaperType} materialValue={form.quarterPosterDensity} customValue={form.quarterPosterPaperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => { update("quarterPosterPaperType", value); update("quarterPosterDensity", ""); update("quarterPosterPaperCustomName", ""); }} onMaterialChange={(value) => update("quarterPosterDensity", value)} onCustomChange={(value) => update("quarterPosterPaperCustomName", value)} typeFieldName="quarterPosterPaperType" materialFieldName="quarterPosterDensity" customFieldName="quarterPosterPaperCustomName" showValidation={showValidation} invalidType={showValidation && required.includes("quarterPosterPaperType")} invalidMaterial={showValidation && required.includes("quarterPosterDensity")} invalidCustom={showValidation && required.includes("quarterPosterPaperCustomName")} />
                         <Field label="Цветность постера"><select className={selectClass} value={form.quarterPosterColorMode} onChange={(e) => update("quarterPosterColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
                         <PaperFinishField label="Поверхность постера" visible={form.quarterPosterPaperType === "Мелованная"} value={form.quarterPosterFinish} options={paperFinishOptionsForSelection(form.quarterPosterPaperType, form.quarterPosterDensity)} onChange={(value) => update("quarterPosterFinish", value)} />
-                        <LaminationBlockComponent label="Ламинация постера" value={form.quarterPosterLamination} onChange={(value: LaminationBlock) => update("quarterPosterLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                        <LaminationBlockComponent label="Ламинация постера" value={form.quarterPosterLamination} onChange={(value: LaminationBlock) => update("quarterPosterLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} />
                       </div>
                       <div className="rounded-lg border border-amber-200 bg-white p-3 space-y-3">
                         <div className="flex items-center justify-between gap-3"><h4 className="text-sm font-semibold text-amber-800">Рекламные поля</h4><div className="flex gap-2"><button type="button" onClick={toggleQuarterAdFieldsSame} className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${form.quarterAdFieldsSame ? "border-amber-500 bg-amber-100 text-amber-900" : "border-amber-300 text-amber-800 hover:bg-amber-50"}`}>{form.quarterAdFieldsSame ? "Поля одинаковые: Да" : "Поля одинаковые"}</button><button type="button" onClick={addQuarterAdPart} className="rounded-lg border border-amber-300 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-50">＋ Добавить поле</button></div></div>
@@ -1929,7 +1965,7 @@ function LegacyApp() {
                             <PaperSelectionField label="Бумага" typeValue={part.paperType} materialValue={part.density} customValue={part.paperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => updateQuarterAdPart(part.id, { paperType: value, density: "", paperCustomName: "" })} onMaterialChange={(value) => updateQuarterAdPart(part.id, { density: value })} onCustomChange={(value) => updateQuarterAdPart(part.id, { paperCustomName: value })} typeFieldName={`quarterAdPartPaperType-${part.id}`} materialFieldName={`quarterAdPartDensity-${part.id}`} customFieldName={`quarterAdPartCustom-${part.id}`} showValidation={showValidation} invalidType={false} invalidMaterial={false} invalidCustom={false} />
                             <PaperFinishField label="Поверхность" visible={part.paperType === "Мелованная"} value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateQuarterAdPart(part.id, { finish: value })} />
                             <Field label="Цветность"><select className={selectClass} value={part.colorMode || ""} onChange={(e) => updateQuarterAdPart(part.id, { colorMode: e.target.value })}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
-                            <LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateQuarterAdPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                            <LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateQuarterAdPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} />
                           </div>
                         ))}
                       </div>
@@ -1966,7 +2002,7 @@ function LegacyApp() {
                           <Field label="Материал основания" required><select data-field="calendarBaseMaterial" value={form.calendarBaseMaterial} className={selectFieldClass(showValidation && required.includes("calendarBaseMaterial"))} onChange={(e) => { update("calendarBaseMaterial", e.target.value); if (e.target.value !== "Другое...") update("calendarBaseCustomName", ""); }}><option value="">— выберите —</option>{dicts.paperProfiles.calendarBase.map((item) => <option key={item}>{item}</option>)}</select>{form.calendarBaseMaterial === "Другое..." && <><input data-field="calendarBaseCustomName" className={`${inputClass} mt-2`} value={form.calendarBaseCustomName || ""} onChange={(e) => update("calendarBaseCustomName", e.target.value)} placeholder="Укажите материал" /><p className="mt-1 text-xs font-semibold text-amber-700">Материал под заказ.</p></>}</Field>
                           <PaperFinishField label="Поверхность основания" visible={false} value={form.calendarBaseFinish} onChange={(value) => update("calendarBaseFinish", value)} />
                           <Field label="Цветность основания"><select className={selectClass} value={form.calendarBaseColorMode} onChange={(e) => update("calendarBaseColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((item) => <option key={item}>{item}</option>)}</select></Field>
-                          <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация основания" value={form.calendarBaseLamination} onChange={(value) => update("calendarBaseLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
+                          <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация основания" value={form.calendarBaseLamination} onChange={(value) => update("calendarBaseLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} /></div>
                         </div>
                       </div>
                       <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
@@ -1981,7 +2017,7 @@ function LegacyApp() {
                       </Field>
                       <PaperFinishField label="Поверхность перекидных листов" visible={form.calendarHeaderPaperType === "Мелованная"} value={form.calendarHeaderPaperFinish} options={paperFinishOptionsForSelection(form.calendarHeaderPaperType, form.calendarHeaderPaperDensity)} onChange={(value) => update("calendarHeaderPaperFinish", value)} />
                       <Field label="Цветность перекидных листов"><select data-field="calendarHeaderColorMode" className={selectClass} value={form.calendarHeaderColorMode} onChange={(e) => update("calendarHeaderColorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((item) => <option key={item}>{item}</option>)}</select></Field>
-                      <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация перекидных листов" value={form.calendarHeaderLamination} onChange={(value) => update("calendarHeaderLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
+                      <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация перекидных листов" value={form.calendarHeaderLamination} onChange={(value) => update("calendarHeaderLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} /></div>
                         </div>
                       </div>
                       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -2003,7 +2039,7 @@ function LegacyApp() {
                       <Field label="Размер основания" required><input data-field="calendarBaseSize" className={fieldClass(showValidation && required.includes("calendarBaseSize"))} value={form.calendarBaseSize} onChange={(e) => update("calendarBaseSize", e.target.value)} placeholder="Например: 148×185 мм" /></Field>
                       <div className={form.calendarBaseUseKash ? "opacity-50 pointer-events-none" : ""}><PaperFinishField visible={false} value={form.calendarBaseFinish} onChange={(value) => update("calendarBaseFinish", value)} /></div>
                       <div className={`md:col-span-2 ${form.calendarBaseUseKash ? "opacity-50 pointer-events-none" : ""}`}>
-                        <LaminationBlockComponent label="Ламинация основания" value={form.calendarBaseLamination} onChange={(value) => update("calendarBaseLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                        <LaminationBlockComponent label="Ламинация основания" value={form.calendarBaseLamination} onChange={(value) => update("calendarBaseLamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} />
                       </div>
                       <Field label="Количество биговок основания"><input type="number" min={0} max={20} className={inputClass} value={form.calendarBaseBigovkaLines} onChange={(e) => { update("calendarBaseBigovkaLines", e.target.value); if (e.target.value && e.target.value !== "0" && form.bigkovka) update("bigkovka", false); }} placeholder="0" /></Field>
                       {form.calendarBaseUseKash && <p className="md:col-span-2 text-xs text-slate-500">Основание настольного календаря задаётся через блок кашировки.</p>}
@@ -2044,7 +2080,7 @@ function LegacyApp() {
                                 <PaperFinishField label="Поверхность" visible={part.paperType === "Мелованная"} value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateDesktopCalendarPart(part.id, { finish: value })} />
                                 <Field label="Цветность" required><select data-field="desktopCalendarPartColor" value={part.colorMode} className={selectFieldClass(showValidation && required.includes("desktopCalendarPartColor"))} onChange={(e) => updateDesktopCalendarPart(part.id, { colorMode: e.target.value })}><option value="">— выберите —</option>{dicts.colors.map((color) => <option key={color}>{color}</option>)}</select></Field>
                                 <Field label="Количество листов" required={part.type === "Календарный блок"}><input data-field="desktopCalendarPartQuantity" type="number" min={1} className={fieldClass(showValidation && required.includes("desktopCalendarPartQuantity"))} value={part.quantity} onChange={(e) => updateDesktopCalendarPart(part.id, { quantity: e.target.value })} placeholder={part.type === "Календарный блок" ? "Например: 11" : "Необязательно"} /></Field>
-                                <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateDesktopCalendarPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
+                                <div className="md:col-span-2"><LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateDesktopCalendarPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} /></div>
                                 <Field label="Примечание / обработка"><input className={inputClass} placeholder="Например: раскрой на ахе" value={part.note} onChange={(e) => updateDesktopCalendarPart(part.id, { note: e.target.value })} /></Field>
                               </div>
                             </div>
@@ -2103,7 +2139,7 @@ function LegacyApp() {
                       <PaperFinishField visible={form.paperType === "Мелованная"} value={form.densityFinish} onChange={(value) => update("densityFinish", value)} />
                       <Field label={templateColorLabel} required><select data-field="colorMode" value={form.colorMode} className={selectFieldClass(showValidation && required.includes("colorMode"))} onChange={(e) => update("colorMode", e.target.value)}><option value="">— выберите —</option>{dicts.colors.map((c) => <option key={c}>{c}</option>)}</select></Field>
                       <div className="md:col-span-2">
-                        <LaminationBlockComponent label="Ламинация" value={form.lamination} onChange={(value) => update("lamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} />
+                        <LaminationBlockComponent label="Ламинация" value={form.lamination} onChange={(value) => update("lamination", value)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} />
                       </div>
                     </div>
                   )}
@@ -2171,8 +2207,8 @@ function LegacyApp() {
                 </div>
               )}
 
-              {templateFlags.showLamination && !multiBlock && !notebook && !calendar && !form.kashurovka.enabled && pt && (
-                <div className="mt-4 p-3 rounded-xl border border-slate-100 bg-slate-50"><LaminationBlockComponent label={templateLaminationLabel} value={form.lamination} onChange={(v: any) => update("lamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} /></div>
+              {templateFlags.showLamination && !multiBlock && !notebook && !calendar && !form.kashurovka.enabled && pt && !otherProduct && (
+                <div className="mt-4 p-3 rounded-xl border border-slate-100 bg-slate-50"><LaminationBlockComponent label={templateLaminationLabel} value={form.lamination} onChange={(v: any) => update("lamination", v)} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} /></div>
               )}
             </Section>
 
@@ -2590,7 +2626,7 @@ function LegacyApp() {
                     <div className="space-y-2 text-sm mb-6">
                       <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">№ заказа</span><span className="font-medium text-slate-800">{form.orderNumber || "—"}</span></div>
                       <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Заказчик</span><span className="font-medium text-slate-800">{form.clientName || "—"}</span></div>
-                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Изделие</span><span className="font-medium text-slate-800">{form.productType === "Другое..." ? form.productTypeCustom : form.productType || "—"}</span></div>
+                      <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Изделие</span><span className="font-medium text-slate-800">{otherProduct ? form.productTypeCustom : form.productType || "—"}</span></div>
                       <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500">Тираж</span><span className="font-medium text-slate-800">{form.quantity ? `${formatQuantityText(form.quantity)} шт.` : "—"}</span></div>
                       <div className="flex justify-between py-1"><span className="text-slate-500">Срок</span><span className="font-medium text-slate-800">{form.deadline ? `${form.deadline.split("-").reverse().join(".")}${form.deadlineTime ? " " + form.deadlineTime : ""}` : "—"}</span></div>
                     </div>
