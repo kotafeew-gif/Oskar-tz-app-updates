@@ -1046,6 +1046,14 @@ ipcMain.handle('send-to-sheet', async (event, { kind, formData, adData, shortTz,
       requestBody: { values: [values] },
     });
 
+    // Y — состояние заявки для печатников. Z не трогаем: там хранится бронь ячеек.
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `'${targetSheet}'!Y${rowNumber}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [['не в работе']] },
+    });
+
     if (normalizedManagerMarker && reservationCount > 0) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
