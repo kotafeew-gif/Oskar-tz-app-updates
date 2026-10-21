@@ -625,7 +625,7 @@ export function createDefaultForm(): FormData {
     blockPaperType: "", blockPaperCustomName: "", blockDensity: "", blockFinish: "Матовая", blockColor: "", blockOffsetPrinting: false, blockLamination: defaultLaminationBlock(), blockPages: "",
     adBlocks: "3", calendarKind: "Настенный", wallMountType: "Ригель", wallMountDesc: "", wallMountColor: "", gridType: "Цифра", hasPlanka: false, plankaDesc: "", hasRigel: false,
     quarterPosterSize: "", quarterPosterPaperType: "Мелованная", quarterPosterPaperCustomName: "", quarterPosterDensity: "", quarterPosterFinish: "Матовая", quarterPosterColorMode: "", quarterPosterLamination: defaultLaminationBlock(), quarterAdBlocks: "1", quarterAdFieldsSame: false, quarterAdParts: [createQuarterAdPart()], quarterGridStandard: true, quarterGridName: "", quarterGridSize: "", quarterGridPaperType: "Мелованная", quarterGridPaperCustomName: "", quarterGridDensity: "", quarterGridFinish: "Матовая", quarterGridColorMode: "", quarterGridPrintMode: "У себя", quarterBackingEnabled: false, quarterBackingSize: "", quarterBackingPaperType: "Мелованная", quarterBackingPaperCustomName: "", quarterBackingDensity: "", quarterBackingFinish: "Матовая", quarterBackingColorMode: "", quarterMountType: "Планка", quarterMountColor: "Серебро", quarterSpringColor: "Белая", quarterCursorColor: "Красный", quarterCursorType: "Без резинки",
-    calendarBaseUseKash: false, calendarBaseMaterial: "", calendarBaseCustomName: "", calendarBaseSize: "", calendarBaseColorMode: "", calendarBaseFinish: "Матовая", calendarBaseLamination: defaultLaminationBlock(), calendarBaseBigovkaLines: "", calendarGridMaterial: "", calendarGridPages: "", calendarGridFinish: "Матовая", calendarGridColorMode: "", calendarOffsetColor: "Серый",
+    calendarBaseUseKash: false, calendarBaseMaterial: "", calendarBaseCustomName: "", calendarBaseSize: "", calendarBaseColorMode: "", calendarBaseFinish: "Матовая", calendarBaseLamination: defaultLaminationBlock(), calendarBaseBigovkaLines: "", calendarGridMaterial: "", calendarGridPages: "", calendarGridSize: "", calendarGridFinish: "Матовая", calendarGridColorMode: "", calendarOffsetColor: "Серый",
     desktopCalendarCompositionEnabled: false, desktopCalendarParts: [],
     calendarHeaderPaperType: "", calendarHeaderPaperCustomName: "", calendarHeaderPaperDensity: "", calendarHeaderPaperFinish: "Матовая", calendarHeaderSize: "", calendarHeaderColorMode: "", calendarHeaderLamination: defaultLaminationBlock(),
     postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1", drillingDiameter: "", falcovka: false,
@@ -1398,8 +1398,8 @@ export function getDisplaySize(form: FormData): string {
 export function formatNotebookPartForTZ(part: NotebookPart): string {
   const details = [
     part.offsetPrinting ? "печать на офсете" : formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish),
-    formatNotebookColorText(part.color),
-    part.lamination.enabled ? getLaminationShort(part.lamination) : "",
+    part.offsetPrinting ? "" : formatNotebookColorText(part.color),
+    part.offsetPrinting ? "" : part.lamination.enabled ? getLaminationShort(part.lamination) : "",
     part.note.trim(),
   ].filter(Boolean);
   const quantity = part.quantity ? `${part.quantity} шт.` : "";
@@ -1464,7 +1464,7 @@ export function generateShortTZ(form: FormData): string {
     if (covParts.length) parts.push(samePaper ? covParts.join(" ") : `обложка: ${covParts.join(" ")}`);
     if (blkParts.length) parts.push(samePaper ? blkParts.join(" ") : `блок: ${blkParts.join(" ")}`);
   } else if (isNotebook(form.productType)) {
-      if (form.blockPages) parts.push(`${form.blockPages} страниц в блоке`);
+      if (form.blockPages) parts.push(`${form.blockPages} листов в блоке`);
       if (form.notebookCompositionEnabled) {
         parts.push("составной");
       const composition = form.notebookParts.map(formatNotebookPartForTZ).filter(Boolean);
@@ -1480,13 +1480,13 @@ export function generateShortTZ(form: FormData): string {
         parts.push(form.backingEnabled ? `обложка: ${coverParts.join(" ")}` : `обложка/подложка: ${coverParts.join(" ")}`);
       }
       const blockParts = [
-              form.blockOffsetPrinting ? `Блок — ${form.blockPages || "—"} страниц, приедет с офсета` : formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish),
+              form.blockOffsetPrinting ? `Блок — ${form.blockPages || "—"} листов, приедет с офсета` : formatPaperSelectionWithFinishForTZ(form.blockPaperType, form.blockDensity, form.blockPaperCustomName, form.blockFinish),
               form.blockOffsetPrinting ? "" : normalizeColorMode(form.blockColor),
               form.blockOffsetPrinting ? "" : form.blockLamination.enabled ? getLaminationShort(form.blockLamination) : "",
             ].filter(Boolean);
             if (blockParts.length) {
               const blockLine = `блок: ${blockParts.join(" ")}`;
-              parts.push(form.blockPages ? `${blockLine}, ${form.blockPages} страниц` : blockLine);
+              parts.push(form.blockPages ? `${blockLine}, ${form.blockPages} листов` : blockLine);
             }
       if (form.backingEnabled) {
         const backingParts = [
@@ -1556,8 +1556,9 @@ export function generateShortTZ(form: FormData): string {
       if (form.desktopCalendarCompositionEnabled) {
         const composition = form.desktopCalendarParts.map(formatDesktopCalendarPartShort).filter(Boolean);
         if (composition.length) parts.push(composition.join("\n"));
-      } else if (form.calendarGridMaterial) {
+      } else if (form.calendarGridMaterial || form.calendarGridSize) {
         const gridParts = [
+          form.calendarGridSize ? `${form.calendarGridSize}` : "",
           formatMaterialWithFinish(form.calendarGridMaterial, form.calendarGridFinish),
           form.calendarGridPages ? `${form.calendarGridPages} листов` : "",
           form.calendarGridColorMode ? normalizeColorMode(form.calendarGridColorMode) : form.calendarOffsetColor,
@@ -1569,7 +1570,7 @@ export function generateShortTZ(form: FormData): string {
     const material = formatPaperSelectionWithFinishForTZ(form.paperType, form.density, form.paperCustomName, form.densityFinish);
     const materialLine = [material, formatShortColor(form.colorMode)].filter(Boolean).join(", ");
     if (materialLine) parts.push(materialLine);
-    if (form.blockPages) parts.push(`${form.blockPages} страниц`);
+    if (form.blockPages) parts.push(`${form.blockPages} листов`);
   } else if (isBag(form.productType)) {
     if (!form.bagExternalSheets) {
       const bagPaper = formatBagPaperSelection(form);
@@ -1746,13 +1747,17 @@ export function generateTZ(form: FormData, _tzNumber: number): string {
       if (form.notebookParts.length === 0) lines.push(" Части не добавлены");
       form.notebookParts.forEach((part, index) => {
         lines.push(` ${index + 1}. ${part.type || "Часть"}${part.quantity ? ` — ${part.quantity} шт.` : ""}`);
-        lines.push(`    Бумага : ${part.offsetPrinting ? "печать на офсете (бумага не указана)" : formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish) || "—"}`);
-        lines.push(`    Цветность : ${formatNotebookColorText(part.color) || "—"}`);
-        if (part.lamination.enabled) lines.push(`    Ламинация : ${formatLamination(part.lamination)}`);
+        if (part.offsetPrinting) {
+          lines.push("    Печать на офсете (бумага не указана)");
+        } else {
+          lines.push(`    Бумага : ${formatPaperSelectionWithFinishForTZ(part.paperType, part.density, part.paperCustomName, part.finish) || "—"}`);
+          lines.push(`    Цветность : ${formatNotebookColorText(part.color) || "—"}`);
+          if (part.lamination.enabled) lines.push(`    Ламинация : ${formatLamination(part.lamination)}`);
+        }
         if (part.note.trim()) lines.push(`    Примечание : ${part.note.trim()}`);
       });
     } else {
-      lines.push(` Блок : ${form.blockPages || "—"} страниц`);
+      lines.push(` Блок : ${form.blockPages || "—"} листов`);
       lines.push("");
       lines.push(form.backingEnabled ? " ОБЛОЖКА" : " ОБЛОЖКА/ПОДЛОЖКА");
       if (form.coverUseKash) lines.push(" Обложка задаётся в блоке кашировки");
@@ -1839,6 +1844,7 @@ export function generateTZ(form: FormData, _tzNumber: number): string {
         form.desktopCalendarParts.forEach((part, index) => lines.push(...formatDesktopCalendarPartTZ(part, index)));
       } else {
         lines.push(` Блок/сетка : ${form.gridType || "—"}`);
+        if (form.calendarGridSize) lines.push(` Размер перекидных листов : ${form.calendarGridSize}`);
         lines.push(` Материал блока/сетки : ${[formatMaterialWithFinish(form.calendarGridMaterial, form.calendarGridFinish), form.gridType === "Цифра" ? normalizeColorMode(form.calendarGridColorMode) : normalizeColorMode(form.calendarOffsetColor)].filter(Boolean).join(", ") || "—"}`);
         if (form.calendarGridPages) lines.push(` Количество листов сетки : ${form.calendarGridPages}`);
       }

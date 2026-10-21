@@ -14,8 +14,8 @@ import {
   LS_KEYS, PAPER_PROFILE_LABELS, PAPER_TYPE_OPTIONS,
   PAPER_TYPE_TO_LIBRARY_KEY, PRODUCT_LAYOUT_META, PRODUCT_LAYOUT_OPTIONS,
   PRODUCT_TEMPLATE_FIELD_KEYS, RARE_SUCCESS_IMAGE_NAMES, SPRING_COLORS,
-  SPRING_SPECS, STICKER_COLOR_MODES, STICKER_MATERIALS, SUCCESS_IMAGE_NAMES,
-  SUCCESS_IMAGE_SRCS, SUCCESS_IMAGE_WEIGHTS, UPDATE_SUMMARY_POINTS, runtimeState,
+  SPRING_SPECS, STANDARD_GRID_NAMES, STICKER_COLOR_MODES, STICKER_MATERIALS,
+  SUCCESS_IMAGE_NAMES, SUCCESS_IMAGE_SRCS, SUCCESS_IMAGE_WEIGHTS, UPDATE_SUMMARY_POINTS, runtimeState,
   type BagPaperTypeOption, type PaperLibraryKey, type PaperProfileKey,
   type PaperTypeOption, type ProductLayoutKind, type ProductTemplateConfig,
   type ProductTemplateFieldConfig, type ProductTemplateFieldKey,
@@ -1855,7 +1855,7 @@ function LegacyApp() {
 
                           {form.notebookParts.map((part, index) => {
                             const partNeedsQuantity = part.type === "Листы блока" || part.type === "Вкладыш";
-                            const partUsesOffsetPrinting = part.type === "Листы блока" && part.offsetPrinting;
+                            const partUsesOffsetPrinting = part.offsetPrinting;
                             const invalidPart = showValidation && (!part.type || (partNeedsQuantity && (!part.quantity || Number(part.quantity) <= 0)) || (!partUsesOffsetPrinting && (!part.paperType || (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()))));
                             return (
                               <div key={part.id} className="rounded-xl border border-violet-200 bg-white p-4 shadow-sm">
@@ -1900,17 +1900,17 @@ function LegacyApp() {
                                       invalidCustom={showValidation && !partUsesOffsetPrinting && part.paperType === "Дизайнерская" && !part.paperCustomName.trim()}
                                     />
                                   </div>
-                                  {part.type === "Листы блока" && (
-                                    <label className="md:col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                                      <input
-                                        type="checkbox"
-                                        checked={part.offsetPrinting}
-                                        onChange={(e) => updateNotebookPart(part.id, { offsetPrinting: e.target.checked })}
-                                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                      />
-                                      Печатается на офсете
-                                    </label>
-                                  )}
+                                  <label className="md:col-span-2 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                                    <input
+                                      type="checkbox"
+                                      checked={part.offsetPrinting}
+                                      onChange={(e) => updateNotebookPart(part.id, { offsetPrinting: e.target.checked })}
+                                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    Печатается на офсете (бумага, печать и ламинация не заполняются)
+                                  </label>
+                                  {!part.offsetPrinting && (
+                                    <>
                                   <PaperFinishField label="Поверхность" visible={part.paperType === "Мелованная"} value={part.finish} options={paperFinishOptionsForSelection(part.paperType, part.density)} onChange={(value) => updateNotebookPart(part.id, { finish: value })} />
                                   <Field label="Цветность">
                                     <select value={part.color} className={selectClass} onChange={(e) => updateNotebookPart(part.id, { color: e.target.value })}>
@@ -1921,13 +1921,15 @@ function LegacyApp() {
                                   <div className="md:col-span-2">
                                     <LaminationBlockComponent label="Ламинация" value={part.lamination} onChange={(value: LaminationBlock) => updateNotebookPart(part.id, { lamination: value })} laminationKinds={dicts.laminationKinds} laminationThickness={dicts.laminationThickness} showValidation={showValidation} />
                                   </div>
+                                    </>
+                                  )}
                                   <div className="md:col-span-2">
                                     <Field label="Примечание к части">
                                       <input type="text" className={fieldClass(false)} placeholder="Например: печать на цифре" value={part.note} onChange={(e) => updateNotebookPart(part.id, { note: e.target.value })} />
                                     </Field>
                                   </div>
                                 </div>
-                                {invalidPart && <p className="mt-3 text-xs text-red-500">Заполните тип части, бумагу и количество только для листов или вкладышей. Для листов можно выбрать печать на офсете без указания бумаги.</p>}
+                                {invalidPart && <p className="mt-3 text-xs text-red-500">Заполните тип части, бумагу и количество только для листов или вкладышей. При печати на офсете бумага не указывается.</p>}
                               </div>
                             );
                           })}
@@ -1972,7 +1974,7 @@ function LegacyApp() {
                       <div className="rounded-lg border border-amber-200 bg-white p-3 space-y-3">
                         <h4 className="text-sm font-semibold text-amber-800">Календарная сетка</h4>
                         <Field label="Сетка стандартная"><YesNo value={form.quarterGridStandard} onChange={(value) => update("quarterGridStandard", value)} /></Field>
-                        {form.quarterGridStandard ? <Field label="Какая стандартная сетка" required><input data-field="quarterGridName" className={fieldClass(showValidation && required.includes("quarterGridName"))} placeholder="Например: серая Донарита" value={form.quarterGridName} onChange={(e) => update("quarterGridName", e.target.value)} /></Field> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {form.quarterGridStandard ? <Field label="Какая стандартная сетка" required><select data-field="quarterGridName" className={selectFieldClass(showValidation && required.includes("quarterGridName"))} value={form.quarterGridName} onChange={(e) => update("quarterGridName", e.target.value)}><option value="">— выберите —</option>{STANDARD_GRID_NAMES.map((name) => <option key={name}>{name}</option>)}</select></Field> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <Field label="Размер сетки" required><input data-field="quarterGridSize" className={fieldClass(showValidation && required.includes("quarterGridSize"))} value={form.quarterGridSize} onChange={(e) => update("quarterGridSize", e.target.value)} /></Field>
                           <PaperSelectionField label="Бумага сетки" typeValue={form.quarterGridPaperType} materialValue={form.quarterGridDensity} customValue={form.quarterGridPaperCustomName} library={dicts.paperLibrary} productType={form.productType} onTypeChange={(value) => { update("quarterGridPaperType", value); update("quarterGridDensity", ""); update("quarterGridPaperCustomName", ""); }} onMaterialChange={(value) => update("quarterGridDensity", value)} onCustomChange={(value) => update("quarterGridPaperCustomName", value)} typeFieldName="quarterGridPaperType" materialFieldName="quarterGridDensity" customFieldName="quarterGridPaperCustomName" showValidation={showValidation} invalidType={showValidation && required.includes("quarterGridPaperType")} invalidMaterial={showValidation && required.includes("quarterGridDensity")} invalidCustom={showValidation && required.includes("quarterGridPaperCustomName")} />
                           <PaperFinishField label="Поверхность сетки" visible={form.quarterGridPaperType === "Мелованная"} value={form.quarterGridFinish} options={paperFinishOptionsForSelection(form.quarterGridPaperType, form.quarterGridDensity)} onChange={(value) => update("quarterGridFinish", value)} />
@@ -2089,6 +2091,7 @@ function LegacyApp() {
                       )}
                       {!form.desktopCalendarCompositionEnabled && <>
                       <Field label="Тип блока/сетки"><select value={form.gridType} className={selectClass} onChange={(e) => update("gridType", e.target.value)}><option>Цифра</option><option>Офсет</option></select></Field>
+                      <Field label="Размер перекидных листов"><input className={inputClass} value={form.calendarGridSize || ""} onChange={(e) => update("calendarGridSize", e.target.value)} placeholder="Например: 210×148 мм" /></Field>
                       <Field label="Количество листов блока/сетки"><input type="number" min={1} className={inputClass} value={form.calendarGridPages || ""} onChange={(e) => update("calendarGridPages", e.target.value)} placeholder="Необязательно" /></Field>
                       {form.gridType === "Цифра" ? (
                         <>

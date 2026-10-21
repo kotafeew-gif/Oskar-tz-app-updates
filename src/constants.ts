@@ -124,6 +124,7 @@ export const SPRING_SPECS: SpringSpec[] = [
 ];
 export const DRILL_DIAMETERS = ["2 мм", "3 мм", "4 мм", "5 мм", "6 мм", "8 мм", "10 мм", "12 мм"];
 export const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голубой", "3в1 (серый)"];
+export const STANDARD_GRID_NAMES = ["Стандартная серая", "Стандартная голубая", "Стандартная желтая", "Стандартная эконом"];
 export const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
 export const BAG_HANDLE_TYPES = ["Верёвка", "Лента"];
 // Картинки успеха: обычные с весом 1, Exclusive — 1 к 10, Legendary — 1 к 50.
