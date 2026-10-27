@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveClientEntry: (data) => ipcRenderer.invoke('save-client-entry', data),
   loadPresetStore: () => ipcRenderer.invoke('load-preset-store'),
   savePresetEntry: (data) => ipcRenderer.invoke('save-preset-entry', data),
+  deletePresetEntry: (data) => ipcRenderer.invoke('delete-preset-entry', data),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   onUpdateStatus: (callback) => {

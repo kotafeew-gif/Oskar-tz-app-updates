@@ -176,6 +176,25 @@ async function upsertPresetEntry(managerName, presetName, presetData) {
   return { success: true, store };
 }
 
+async function deletePresetEntry(presetId) {
+  const store = await loadPresetStoreFromDisk();
+  let removed = false;
+
+  Object.entries(store.byManager || {}).forEach(([managerKey, list]) => {
+    if (!Array.isArray(list)) return;
+    const nextList = list.filter((item) => String(item?.id) !== String(presetId));
+    if (nextList.length !== list.length) {
+      removed = true;
+      store.byManager[managerKey] = nextList;
+    }
+  });
+
+  if (!removed) return { success: false, error: 'preset_not_found' };
+
+  await savePresetStoreToDisk(store);
+  return { success: true, store };
+}
+
 function formatDateTimeCell(date, time) {
   const dateText = date ? date.split('-').reverse().join('.') : 'вЂ”';
   return time ? `${dateText}\n${time}` : dateText;
@@ -901,6 +920,14 @@ ipcMain.handle('load-preset-store', async () => {
 ipcMain.handle('save-preset-entry', async (event, { managerName, presetName, presetData }) => {
   try {
     return await upsertPresetEntry(managerName, presetName, presetData);
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('delete-preset-entry', async (event, { presetId }) => {
+  try {
+    return await deletePresetEntry(presetId);
   } catch (error) {
     return { success: false, error: error.message };
   }

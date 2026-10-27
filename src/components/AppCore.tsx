@@ -107,6 +107,7 @@ import {
   getDisplaySize,
   getLaminationSideNotation,
   getPaperLibraryItems,
+  getPresetLaminationFixes,
   getProductLayoutKind,
   getProductTemplate,
   getProductTemplateFieldConfig,
@@ -444,6 +445,36 @@ function LegacyApp() {
     }
   }
 
+  function openPresetManageModal() {
+    setPresetPendingDeleteId(null);
+    setPresetManageMsg(null);
+    setShowPresetManageModal(true);
+  }
+
+  async function deletePresetById(presetId: string) {
+    setPresetDeleteBusy(true);
+    setPresetManageMsg(null);
+    try {
+      const result = await (window as any).electronAPI?.deletePresetEntry?.({ presetId });
+      if (!result?.success || !result.store) {
+        setPresetManageMsg(result?.error ? `Не удалось удалить пресет: ${result.error}` : "Не удалось удалить пресет.");
+        setPresetDeleteBusy(false);
+        return;
+      }
+      if (selectedPresetId === presetId) {
+        setSelectedPresetId("");
+        setPresetSearchDraft("");
+      }
+      setPresetStore(result.store);
+      setPresetPendingDeleteId(null);
+      setPresetDeleteBusy(false);
+      setPresetManageMsg("Пресет удалён.");
+    } catch (error) {
+      setPresetManageMsg(error instanceof Error ? `Не удалось удалить пресет: ${error.message}` : "Не удалось удалить пресет.");
+      setPresetDeleteBusy(false);
+    }
+  }
+
   function clearReservation() {
     setReservedAssignment(null);
     setReserveState("idle");
@@ -511,11 +542,24 @@ function LegacyApp() {
 
   function applyPreset(presetId: string) {
     setSelectedPresetId(presetId);
-    if (!presetId) return;
+    if (!presetId) {
+      setPresetApplyMsg(null);
+      return;
+    }
 
     const preset = availablePresets.find((item) => item.id === presetId);
-    if (!preset) return;
+    if (!preset) {
+      setPresetApplyMsg(null);
+      return;
+    }
     setPresetSearchDraft(preset.name);
+
+    const fixes = getPresetLaminationFixes(preset.data);
+    setPresetApplyMsg(
+      fixes.length > 0
+        ? `Пресет применён. ${fixes.join(", ")} — в пресете ламинация сохранена без параметров и отключена. Проверьте заявку.`
+        : null
+    );
 
     setForm((prev) => ({
       ...mergePresetIntoForm(createDefaultForm(), preset.data),
@@ -582,6 +626,7 @@ function LegacyApp() {
   const [presetStore, setPresetStore] = useState<PresetStore>(() => createEmptyPresetStore());
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [presetMsg, setPresetMsg] = useState<string | null>(null);
+  const [presetApplyMsg, setPresetApplyMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"form" | "ads" | "dicts">("form");
   const [showValidation, setShowValidation] = useState(false);
   const [showAdValidation, setShowAdValidation] = useState(false);
@@ -613,6 +658,10 @@ function LegacyApp() {
   const [selectedPresetId, setSelectedPresetId] = useState("");
   const springDiameterManuallyEditedRef = useRef(false);
   const [presetSaveStatus, setPresetSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
+  const [showPresetManageModal, setShowPresetManageModal] = useState(false);
+  const [presetPendingDeleteId, setPresetPendingDeleteId] = useState<string | null>(null);
+  const [presetDeleteBusy, setPresetDeleteBusy] = useState(false);
+  const [presetManageMsg, setPresetManageMsg] = useState<string | null>(null);
   const [reservedAssignment, setReservedAssignment] = useState<ReservedAssignment | null>(null);
   const [reserveState, setReserveState] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [reserveMsg, setReserveMsg] = useState<string | null>(null);
@@ -833,6 +882,9 @@ function LegacyApp() {
 
   const availablePresets = Object.entries(presetStore.byManager || {}).flatMap(([managerName, presets]) =>
     presets.map((preset) => ({ ...preset, managerName }))
+  );
+  const sortedPresets = [...availablePresets].sort(
+    (a, b) => a.managerName.localeCompare(b.managerName, "ru") || a.name.localeCompare(b.name, "ru")
   );
 
   useEffect(() => {
@@ -1094,6 +1146,7 @@ function LegacyApp() {
     springDiameterManuallyEditedRef.current = false;
     setSavedMsg(null);
     setPresetMsg(null);
+    setPresetApplyMsg(null);
     setSelectedPresetId("");
     setPresetSearchDraft("");
     setShowResetConfirm(false);
@@ -1266,6 +1319,7 @@ function LegacyApp() {
                     onChange={(e) => {
                       const nextValue = e.target.value;
                       setPresetSearchDraft(nextValue);
+                      setPresetApplyMsg(null);
                       const trimmed = nextValue.trim().toLowerCase();
                       if (!trimmed) {
                         setSelectedPresetId("");
@@ -1283,8 +1337,20 @@ function LegacyApp() {
                     ))}
                   </datalist>
                 </div>
+                <button
+                  type="button"
+                  onClick={openPresetManageModal}
+                  title="Управление пресетами"
+                  aria-label="Управление пресетами"
+                  className="shrink-0 w-9 h-9 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 flex items-center justify-center transition-colors"
+                >
+                  <UiIcon name="gear" className="h-4 w-4" />
+                </button>
               </div>
               <p className="mt-1 text-[11px] text-slate-400">Подсказки фильтруются автоматически по введённым буквам.</p>
+              {presetApplyMsg && (
+                <p className="mt-1.5 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{presetApplyMsg}</p>
+              )}
             </div>
           )}
         </div>
@@ -2775,6 +2841,72 @@ function LegacyApp() {
                   {presetSaveStatus === "saving" ? "Сохранение..." : "Сохранить"}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showPresetManageModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowPresetManageModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 z-10 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white">
+              <h2 className="font-semibold text-slate-800 text-lg">Управление пресетами</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Все пресеты на этом компьютере — {sortedPresets.length}. Удалённые пресеты восстановить нельзя.
+              </p>
+            </div>
+            <div className="px-5 py-4 space-y-3 max-h-[60vh] overflow-y-auto">
+              {presetManageMsg && (
+                <div className={`rounded-xl border px-4 py-3 text-sm font-medium ${
+                  presetManageMsg.startsWith("Не удалось")
+                    ? "border-red-200 bg-red-50 text-red-700"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                }`}>
+                  {presetManageMsg}
+                </div>
+              )}
+              {sortedPresets.length === 0 ? (
+                <p className="text-sm text-slate-400 py-6 text-center">Нет сохранённых пресетов.</p>
+              ) : (
+                sortedPresets.map((preset) => {
+                  const pending = presetPendingDeleteId === preset.id;
+                  const managerLabel = preset.managerName === "__default__" ? "Без менеджера" : preset.managerName;
+                  return (
+                    <div key={preset.id} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-slate-800 truncate">{preset.name}</div>
+                        <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-400">
+                          <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">{managerLabel}</span>
+                          <span>обновлён {new Date(preset.updatedAt).toLocaleDateString("ru-RU")}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={presetDeleteBusy}
+                        onClick={() => {
+                          if (!pending) {
+                            setPresetPendingDeleteId(preset.id);
+                            setPresetManageMsg(null);
+                            return;
+                          }
+                          deletePresetById(preset.id);
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
+                          pending
+                            ? "bg-red-600 text-white hover:bg-red-700"
+                            : "border border-red-200 text-red-600 hover:bg-red-50"
+                        } ${presetDeleteBusy ? "opacity-60 cursor-wait" : ""}`}
+                      >
+                        {pending ? "Точно удалить?" : "Удалить"}
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="px-5 pb-5 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowPresetManageModal(false)} className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm hover:bg-slate-50 transition-colors">Закрыть</button>
             </div>
           </div>
         </div>

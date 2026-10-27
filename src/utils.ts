@@ -739,6 +739,45 @@ export function buildPresetPayload(form: FormData): Partial<FormData> {
   return cleanValue(form, defaults, []) || {};
 }
 
+function normalizeLaminationFromPreset(value: unknown): LaminationBlock {
+  const block = isPlainObject(value) ? (value as Partial<LaminationBlock>) : {};
+  const complete = !!(
+    String(block.side ?? "").trim() &&
+    String(block.thickness ?? "").trim() &&
+    String(block.kind ?? "").trim()
+  );
+  return {
+    enabled: block.enabled === true && complete,
+    side: String(block.side ?? ""),
+    thickness: String(block.thickness ?? ""),
+    kind: String(block.kind ?? ""),
+    kindCustom: String(block.kindCustom ?? ""),
+  };
+}
+
+function normalizePresetFormLaminations(form: FormData): FormData {
+  const next: FormData = { ...form };
+  next.lamination = normalizeLaminationFromPreset(next.lamination);
+  next.coverLamination = normalizeLaminationFromPreset(next.coverLamination);
+  next.backingLamination = normalizeLaminationFromPreset(next.backingLamination);
+  next.blockLamination = normalizeLaminationFromPreset(next.blockLamination);
+  next.quarterPosterLamination = normalizeLaminationFromPreset(next.quarterPosterLamination);
+  next.calendarBaseLamination = normalizeLaminationFromPreset(next.calendarBaseLamination);
+  next.calendarHeaderLamination = normalizeLaminationFromPreset(next.calendarHeaderLamination);
+  next.kashurovka = {
+    ...next.kashurovka,
+    linerLamination: normalizeLaminationFromPreset(next.kashurovka.linerLamination),
+    forsacLamination: normalizeLaminationFromPreset(next.kashurovka.forsacLamination),
+    slimPaperTopLamination: normalizeLaminationFromPreset(next.kashurovka.slimPaperTopLamination),
+    slimPaperBottomLamination: normalizeLaminationFromPreset(next.kashurovka.slimPaperBottomLamination),
+  };
+  next.quarterAdParts = next.quarterAdParts.map((part) => ({ ...part, lamination: normalizeLaminationFromPreset(part.lamination) }));
+  next.desktopCalendarParts = next.desktopCalendarParts.map((part) => ({ ...part, lamination: normalizeLaminationFromPreset(part.lamination) }));
+  next.notebookParts = next.notebookParts.map((part) => ({ ...part, lamination: normalizeLaminationFromPreset(part.lamination) }));
+  next.otherPaperEntries = next.otherPaperEntries.map((entry) => ({ ...entry, lamination: normalizeLaminationFromPreset(entry.lamination) }));
+  return next;
+}
+
 export function mergePresetIntoForm(base: FormData, presetData: Partial<FormData>): FormData {
   const mergeValue = (current: any, patch: any): any => {
     if (patch === undefined) return current;
@@ -767,7 +806,30 @@ export function mergePresetIntoForm(base: FormData, presetData: Partial<FormData
       : presetData.desktopCalendarParts,
   };
 
-  return mergeValue(base, normalizedPresetData) as FormData;
+  return normalizePresetFormLaminations(mergeValue(base, normalizedPresetData) as FormData);
+}
+
+// Какие ламинации пресета будут отключены при применении (включена, но без параметров) —
+// чтобы показать менеджеру уведомление «проверьте заявку». Метки совпадают с видом в UI.
+export function getPresetLaminationFixes(presetData: Partial<FormData>): string[] {
+  const fixes: string[] = [];
+  const add = (label: string, block: unknown) => {
+    const b = isPlainObject(block) ? (block as Partial<LaminationBlock>) : {};
+    const complete = !!(String(b.side ?? "").trim() && String(b.thickness ?? "").trim() && String(b.kind ?? "").trim());
+    if (b.enabled === true && !complete) fixes.push(label);
+  };
+  add("ламинация", presetData.lamination);
+  add("ламинация обложки", presetData.coverLamination);
+  add("ламинация подложки", presetData.backingLamination);
+  add("ламинация блока", presetData.blockLamination);
+  add("ламинация постера", presetData.quarterPosterLamination);
+  add("ламинация основания", presetData.calendarBaseLamination);
+  add("ламинация шапки", presetData.calendarHeaderLamination);
+  (presetData.quarterAdParts || []).forEach((part, i) => add(`ламинация рекламного поля ${i + 1}`, part?.lamination));
+  (presetData.desktopCalendarParts || []).forEach((part, i) => add(`ламинация части календаря ${i + 1}`, part?.lamination));
+  (presetData.notebookParts || []).forEach((part, i) => add(`ламинация части блокнота ${i + 1}`, part?.lamination));
+  (presetData.otherPaperEntries || []).forEach((entry, i) => add(`ламинация бумаги ${i + 1}`, entry?.lamination));
+  return fixes;
 }
 
 // ─── Вспомогательные функции ────────────────────────────────────────────────
