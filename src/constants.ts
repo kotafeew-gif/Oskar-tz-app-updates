@@ -127,18 +127,23 @@ export const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голуб
 export const STANDARD_GRID_NAMES = ["Стандартная серая", "Стандартная голубая", "Стандартная желтая", "Стандартная эконом"];
 export const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
 export const BAG_HANDLE_TYPES = ["Верёвка", "Лента"];
-// Картинки успеха: обычные с весом 1, Exclusive — 1 к 10, Legendary — 1 к 50.
+// Картинки успеха: обычные с весом 1, завершающие заказ («Заявка оформлена») — в 3 раза чаще,
+// Exclusive — 1 к 10, Legendary — 1 к 50.
 export const SUCCESS_IMAGE_NAMES = ["Cat.png", "1.png", "2.png", "3.png", "4.png", "5.png", "6.png", "7.png", "8.png"];
+export const FINISH_SUCCESS_IMAGE_NAMES = ["9.jpg", "10.jpg", "11.jpg", "12.jpg", "13.jpg", "14.jpg", "15.jpg"];
 export const RARE_SUCCESS_IMAGE_NAMES = ["Exclusive.png", "Legendary.png", "Mific.png"];
+// Вес завершающих картинок: во сколько раз чаще обычных (у обычных вес 1).
+export const FINISH_SUCCESS_IMAGE_WEIGHT = 3;
 export const SUCCESS_IMAGE_WEIGHTS: Record<string, number> = (() => {
   const map: Record<string, number> = {};
   SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = 1; });
+  FINISH_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = FINISH_SUCCESS_IMAGE_WEIGHT; });
   map["Exclusive.png"] = 0.1;
   map["Legendary.png"] = 0.02;
   map["Mific.png"] = 0.0005;
   return map;
 })();
-export const SUCCESS_IMAGE_SRCS = [...SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => `${import.meta.env.BASE_URL}${name}`);
+export const SUCCESS_IMAGE_SRCS = [...SUCCESS_IMAGE_NAMES, ...FINISH_SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => `${import.meta.env.BASE_URL}${name}`);
 export const STICKER_MATERIALS = [
   "Самоклеящаяся бумага без просечки",
   "Самоклеящаяся бумага с просечкой",

@@ -12,6 +12,7 @@ import {
   DEFAULT_PRODUCT_TEMPLATES, DEFAULT_PRODUCT_TYPES, DRILL_DIAMETERS,
   FORSAC_PAPER_TYPES, KASHUROVKA_BASE_TYPES, KASHUROVKA_LINER_TYPES,
   LS_KEYS, PAPER_PROFILE_LABELS, PAPER_TYPE_OPTIONS,
+  FINISH_SUCCESS_IMAGE_NAMES,
   PAPER_TYPE_TO_LIBRARY_KEY, PRODUCT_LAYOUT_META, PRODUCT_LAYOUT_OPTIONS,
   PRODUCT_TEMPLATE_FIELD_KEYS, RARE_SUCCESS_IMAGE_NAMES, SPRING_COLORS,
   SPRING_SPECS, STANDARD_GRID_NAMES, STICKER_COLOR_MODES, STICKER_MATERIALS,
@@ -984,7 +985,7 @@ function LegacyApp() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div>
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Всего выпадений</h4>
-              <div className="space-y-1 text-sm">{[...SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => <div key={name} className="flex justify-between border-b border-slate-100 py-1"><span>{name}</span><span className="font-semibold">{successImageStats.byImage[name] || 0}</span></div>)}</div>
+              <div className="space-y-1 text-sm">{[...SUCCESS_IMAGE_NAMES, ...FINISH_SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => <div key={name} className="flex justify-between border-b border-slate-100 py-1"><span>{name}</span><span className="font-semibold">{successImageStats.byImage[name] || 0}</span></div>)}</div>
             </div>
             <div>
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">По менеджерам</h4>
@@ -1272,7 +1273,7 @@ function LegacyApp() {
   const isAdFormValid = adRequired.length === 0;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100 flex flex-col">
+    <div className="min-h-screen autumn-page flex flex-col">
       <UpdateNotice
         state={updateState}
         onDownload={handleDownloadUpdate}
@@ -1299,14 +1300,15 @@ function LegacyApp() {
       </header>
 
       <div className="max-w-5xl mx-auto w-full px-4 mt-4">
-        <div className="flex flex-col lg:flex-row lg:items-stretch gap-3">
+        <div className="flex flex-col lg:flex-row lg:items-center gap-3">
           <div className="flex gap-1 bg-white rounded-xl p-1 shadow-sm border border-slate-200 w-fit">
             <button onClick={() => setActiveTab("form")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "form" ? "bg-blue-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><UiIcon name="clipboard" className="h-4 w-4" />Форма ТЗ</button>
             <button onClick={() => setActiveTab("ads")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "ads" ? "bg-orange-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><UiIcon name="flash" className="h-4 w-4" />Реклама</button>
             <button onClick={() => setActiveTab("dicts")} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === "dicts" ? "bg-indigo-600 text-white shadow" : "text-slate-600 hover:bg-slate-100"}`}><UiIcon name="settings" className="h-4 w-4" />Справочники</button>
           </div>
-          {activeTab === "form" && (
-            <div className="w-full lg:flex-1 bg-white rounded-xl px-3 py-2.5 shadow-sm border border-slate-200 min-w-0">
+          <div className="w-full lg:flex-1 min-w-0 lg:h-[84px] flex items-center">
+            {activeTab === "form" && (
+            <div className="w-full bg-white rounded-xl px-3 py-2.5 shadow-sm border border-slate-200 min-w-0">
               <div className="flex items-center gap-3 w-full">
                 <label className="text-xs font-medium text-slate-600 uppercase tracking-wide whitespace-nowrap">Пресет</label>
                 <div className="min-w-0 flex-1 w-full">
@@ -1348,12 +1350,13 @@ function LegacyApp() {
                 </button>
               </div>
               <p className="mt-1 text-[11px] text-slate-400">Подсказки фильтруются автоматически по введённым буквам.</p>
-              {presetApplyMsg && (
-                <p className="mt-1.5 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{presetApplyMsg}</p>
-              )}
             </div>
-          )}
+            )}
+          </div>
         </div>
+        {presetApplyMsg && activeTab === "form" && (
+          <p className="mt-2 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">{presetApplyMsg}</p>
+        )}
       </div>
 
       <main className="max-w-5xl mx-auto w-full px-4 py-4 flex-1">

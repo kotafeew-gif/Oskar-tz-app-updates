@@ -110,7 +110,7 @@ export function getRequiredFields(form: FormData): string[] {
         if (!part.type) errors.push("notebookPartType");
         const partNeedsQuantity = part.type === "Листы блока" || part.type === "Вкладыш";
         if (partNeedsQuantity && (!part.quantity || Number(part.quantity) <= 0)) errors.push("notebookPartQuantity");
-        const partUsesOffsetPrinting = part.type === "Листы блока" && part.offsetPrinting;
+        const partUsesOffsetPrinting = part.offsetPrinting;
         if (!partUsesOffsetPrinting) {
           if (!part.paperType) errors.push("notebookPartPaperType");
           else if (part.paperType === "Дизайнерская" ? !part.paperCustomName.trim() : requiresPaperDensity(part.paperType) && !part.density.trim()) {
@@ -253,7 +253,7 @@ export function getRequiredFields(form: FormData): string[] {
       }
     }
   }
-  if (form.binding && form.bindingType === "Пружина" && !form.springDiameter) errors.push("springDiameter");
+  // Диаметр пружины НЕ обязателен: менеджеры часто оставляют выбор печатнику.
   if (templateFlags.showPostProcessing && (form.postProcessing.includes("Тиснение фольгой") || form.postProcessing.includes("Фольгирование")) && !form.foilColor.trim()) errors.push("foilColor");
   if (templateFlags.showPostProcessing && form.postProcessing.includes("Сверление отверстий") && !form.drillingDiameter.trim()) errors.push("drillingDiameter");
   const laminations: LaminationBlock[] = [
@@ -261,7 +261,8 @@ export function getRequiredFields(form: FormData): string[] {
     form.quarterPosterLamination, form.calendarBaseLamination, form.calendarHeaderLamination,
     ...form.quarterAdParts.map((part) => part.lamination),
     ...form.desktopCalendarParts.map((part) => part.lamination),
-    ...form.notebookParts.map((part) => part.lamination),
+    // Офсетные части блокнота бумагу/печать/ламинацию не заполняют — их ламинация не проверяется.
+    ...form.notebookParts.filter((part) => !part.offsetPrinting).map((part) => part.lamination),
     // Ламинация позиций «Другое» проверяется выше с адресом конкретной карточки.
   ];
   laminations.forEach((lamination) => {

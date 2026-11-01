@@ -112,4 +112,21 @@ describe("getRequiredFields", () => {
     expect(getRequiredFields(form)).not.toContain("paperType");
     expect(getRequiredFields(form)).not.toContain("colorMode");
   });
+
+  it("диаметр пружины не обязателен", () => {
+    const form = makeForm({
+      clientName: "Тест", managerName: "Алёна", productType: "Листовки", quantity: "100",
+      paperSize: "A4 (210×297 мм)", paperType: "Мелованная", density: "150 г/м²",
+      colorMode: "4+4 (полноцвет, две стороны)",
+      deadline: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
+      binding: true, bindingType: "Пружина", springDiameter: "",
+    });
+    const errors = getRequiredFields(form);
+    expect(errors).not.toContain("springDiameter");
+    expect(errors).toHaveLength(0);
+    // в ТЗ диаметр просто не выводится, остальная пружина на месте
+    const short = generateShortTZ(form);
+    expect(short).toContain("пружина");
+    expect(short).not.toContain("СТРОГО");
+  });
 });

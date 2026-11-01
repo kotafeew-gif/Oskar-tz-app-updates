@@ -1,1 +1,16 @@
 @import "tailwindcss";
+
+/* Осенний фон приложения: готовый паттерн (листья, грибы, жёлуди, ягоды) из
+   src/assets/autumn-bg.jpg + мягкая светлая вуаль, чтобы белые карточки читались.
+   Картинка лежит в src/assets, поэтому Vite сам подставит относительный путь —
+   это важно для file:// в собранном Electron. */
+.autumn-page {
+  background-color: #f5eddd;
+  background-image:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.66) 0%, rgba(255, 251, 243, 0.58) 50%, rgba(255, 248, 236, 0.66) 100%),
+    url("./assets/autumn-bg.jpg");
+  background-repeat: no-repeat, no-repeat;
+  background-size: cover, cover;
+  background-position: center, center;
+  background-attachment: fixed, fixed;
+}

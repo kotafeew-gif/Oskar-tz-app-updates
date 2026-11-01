@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { generateShortTZ, generateTZ, createDefaultForm, createNotebookPart } from "../utils";
+import { getRequiredFields } from "../validation";
 import type { FormData } from "../types";
 
 function makeForm(overrides: Partial<FormData> = {}): FormData {
@@ -99,5 +100,40 @@ describe("проверка правок 2.7.6", () => {
     expect(full).not.toContain("Ламинация :");
     // обычная часть без офсета — параметры на месте
     expect(short).toContain("Вкладыш — 5 шт. — Офсетная 80 г/м², 1+0");
+  });
+
+  it("составной блокнот: часть с офсета не требует бумаги и не проверяет ламинацию", () => {
+    const offsetPart = createNotebookPart();
+    offsetPart.type = "Вкладыш";
+    offsetPart.quantity = "5";
+    offsetPart.offsetPrinting = true;
+    offsetPart.paperType = "";
+    offsetPart.density = "";
+    offsetPart.lamination = { enabled: true, side: "", thickness: "", kind: "" } as never;
+
+    const form = makeForm({
+      productType: "Блокноты",
+      clientName: "ООО Тест",
+      managerName: "Оля",
+      deadline: "2030-01-01",
+      quantity: "50",
+      paperSize: "A5 (148×210 мм)",
+      notebookCompositionEnabled: true,
+      notebookParts: [offsetPart],
+    });
+
+    const errors = getRequiredFields(form);
+    expect(errors).not.toContain("notebookPartPaperType");
+    expect(errors).not.toContain("notebookPartDensity");
+    expect(errors).not.toContain("laminationSide");
+    expect(errors).not.toContain("laminationThickness");
+    expect(errors).not.toContain("laminationKind");
+
+    // без галочки офсета та же часть снова требует бумагу
+    const plainForm = makeForm({
+      ...form,
+      notebookParts: [{ ...offsetPart, offsetPrinting: false, lamination: createNotebookPart().lamination }],
+    });
+    expect(getRequiredFields(plainForm)).toContain("notebookPartPaperType");
   });
 });
