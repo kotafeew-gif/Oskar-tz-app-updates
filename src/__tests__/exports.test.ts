@@ -183,9 +183,12 @@ describe("full export verification", () => {
     expect(m.SPRING_SPECS).toBeDefined();
     expect(m.STICKER_COLOR_MODES).toBeDefined();
     expect(m.STICKER_MATERIALS).toBeDefined();
-    expect(m.SUCCESS_IMAGE_NAMES).toBeDefined();
     expect(m.SUCCESS_IMAGE_SRCS).toBeDefined();
     expect(m.SUCCESS_IMAGE_WEIGHTS).toBeDefined();
+    expect(m.COMMON_SUCCESS_IMAGE_NAMES).toBeDefined();
+    expect(m.UNCOMMON_SUCCESS_IMAGE_NAMES).toBeDefined();
+    expect(m.CARD_ALBUM_TIERS).toBeDefined();
+    expect(m.CARD_TIER_BY_NAME).toBeDefined();
     expect(m.UPDATE_SUMMARY_POINTS).toBeDefined();
     expect(m.runtimeState).toBeDefined();
   });

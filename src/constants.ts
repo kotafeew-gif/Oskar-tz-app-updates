@@ -127,23 +127,84 @@ export const CALENDAR_OFFSET_COLORS = ["Серый", "Жёлтый", "Голуб
 export const STANDARD_GRID_NAMES = ["Стандартная серая", "Стандартная голубая", "Стандартная желтая", "Стандартная эконом"];
 export const BAG_COLOR_OPTIONS = ["Белый", "Чёрный", "Синий", "Красный", "Золото", "Серебро", "Другой цвет..."];
 export const BAG_HANDLE_TYPES = ["Верёвка", "Лента"];
-// Картинки успеха: обычные с весом 1, завершающие заказ («Заявка оформлена») — в 3 раза чаще,
-// Exclusive — 1 к 10, Legendary — 1 к 50.
-export const SUCCESS_IMAGE_NAMES = ["Cat.png", "1.png", "2.png", "3.png", "4.png", "5.png", "6.png", "7.png", "8.png"];
-export const FINISH_SUCCESS_IMAGE_NAMES = ["9.jpg", "10.jpg", "11.jpg", "12.jpg", "13.jpg", "14.jpg", "15.jpg"];
-export const RARE_SUCCESS_IMAGE_NAMES = ["Exclusive.png", "Legendary.png", "Mific.png"];
+// ─── Карточки успеха: редкость и веса ────────────────────────────────────────
+// Вес = относительная частота выпадения. У обычных вес 1, дальше — по убыванию.
+// Завершающие заказ (9–22) показываются в 3 раза чаще обычных — это их штатное
+// поведение с 2.7.x, в альбоме они лежат в разделе «Обычные» (фон у них такой же).
+export type CardTierId = "common" | "uncommon" | "rare" | "exclusive" | "legendary" | "mythic";
+
+export interface CardTier {
+  id: CardTierId;
+  label: string;
+  names: string[];
+  /** Вес каждой карточки этого раздела (кроме «Обычных» — там вес задаётся по группам). */
+  weight: number;
+}
+
+/** Обычные (белые): вес 1. */
+export const COMMON_SUCCESS_IMAGE_NAMES = [
+  "Cat.png", "1.png", "2.png", "3.png", "4.png", "5.png", "6.png", "7.png", "8.png",
+  "23.jpg", "24.jpg", "25.jpg", "26.jpg", "27.jpg",
+];
+/** Завершающие заказ: вес FINISH_SUCCESS_IMAGE_WEIGHT. */
+export const FINISH_SUCCESS_IMAGE_NAMES = ["9.jpg", "10.jpg", "11.jpg", "12.jpg", "13.jpg", "14.jpg", "15.jpg", "16.jpg", "17.jpg", "18.jpg", "19.jpg", "20.jpg", "21.jpg", "22.jpg"];
+/** Необычные (зелёные, суффикс g). */
+export const UNCOMMON_SUCCESS_IMAGE_NAMES = ["28g.jpg", "29g.jpg", "30g.jpg", "31g.jpg", "32g.jpg", "33g.jpg", "34g.jpg", "35g.jpg", "36g.jpg", "37g.jpg"];
+/** Редкие (синие, суффикс b). */
+export const RARE_SUCCESS_IMAGE_NAMES = ["38b.jpg", "39b.jpg", "40b.jpg", "41b.jpg", "42b.jpg"];
+/** Эксклюзивные / легендарные / мифическая — по одной. */
+export const EXCLUSIVE_SUCCESS_IMAGE_NAMES = ["Exclusive.png"];
+export const LEGENDARY_SUCCESS_IMAGE_NAMES = ["Legendary.png"];
+export const MYTHIC_SUCCESS_IMAGE_NAMES = ["Mific.png"];
+
 // Вес завершающих картинок: во сколько раз чаще обычных (у обычных вес 1).
 export const FINISH_SUCCESS_IMAGE_WEIGHT = 3;
+// Зелёные и синие подогнаны под РЕАЛЬНЫЙ объём: 2160 заявок за 90 дней, у менеджера
+// 4–9 заявок в рабочий день (медиана ~5). Вес 1.5 даёт ~1 зелёную в день, вес 0.6 —
+// ~1 синюю в неделю на менеджера. Меньше делать нельзя: при 0.6/0.3 зелёная выпадала
+// раз в 2 дня, синяя — раз в 1.5 недели, и печатники жаловались «падают только белые».
+export const UNCOMMON_SUCCESS_IMAGE_WEIGHT = 1.5;
+export const RARE_SUCCESS_IMAGE_WEIGHT = 0.6;
+// Редкие одиночные карточки — как было: 1 к 10, 1 к 50, 1 к 2000.
+export const EXCLUSIVE_SUCCESS_IMAGE_WEIGHT = 0.1;
+export const LEGENDARY_SUCCESS_IMAGE_WEIGHT = 0.02;
+export const MYTHIC_SUCCESS_IMAGE_WEIGHT = 0.0005;
+
+/**
+ * Разделы альбома в порядке показа. Единственный источник и для списка карточек,
+ * и для весов: всё ниже считается из этого массива.
+ */
+export const CARD_ALBUM_TIERS: CardTier[] = [
+  { id: "common", label: "Обычные", names: [...COMMON_SUCCESS_IMAGE_NAMES, ...FINISH_SUCCESS_IMAGE_NAMES], weight: 1 },
+  { id: "uncommon", label: "Необычные", names: UNCOMMON_SUCCESS_IMAGE_NAMES, weight: UNCOMMON_SUCCESS_IMAGE_WEIGHT },
+  { id: "rare", label: "Редкие", names: RARE_SUCCESS_IMAGE_NAMES, weight: RARE_SUCCESS_IMAGE_WEIGHT },
+  { id: "exclusive", label: "Эксклюзивные", names: EXCLUSIVE_SUCCESS_IMAGE_NAMES, weight: EXCLUSIVE_SUCCESS_IMAGE_WEIGHT },
+  { id: "legendary", label: "Легендарные", names: LEGENDARY_SUCCESS_IMAGE_NAMES, weight: LEGENDARY_SUCCESS_IMAGE_WEIGHT },
+  { id: "mythic", label: "Мифическая", names: MYTHIC_SUCCESS_IMAGE_NAMES, weight: MYTHIC_SUCCESS_IMAGE_WEIGHT },
+];
+
 export const SUCCESS_IMAGE_WEIGHTS: Record<string, number> = (() => {
   const map: Record<string, number> = {};
-  SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = 1; });
+  COMMON_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = 1; });
   FINISH_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = FINISH_SUCCESS_IMAGE_WEIGHT; });
-  map["Exclusive.png"] = 0.1;
-  map["Legendary.png"] = 0.02;
-  map["Mific.png"] = 0.0005;
+  UNCOMMON_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = UNCOMMON_SUCCESS_IMAGE_WEIGHT; });
+  RARE_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = RARE_SUCCESS_IMAGE_WEIGHT; });
+  EXCLUSIVE_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = EXCLUSIVE_SUCCESS_IMAGE_WEIGHT; });
+  LEGENDARY_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = LEGENDARY_SUCCESS_IMAGE_WEIGHT; });
+  MYTHIC_SUCCESS_IMAGE_NAMES.forEach((name) => { map[name] = MYTHIC_SUCCESS_IMAGE_WEIGHT; });
   return map;
 })();
-export const SUCCESS_IMAGE_SRCS = [...SUCCESS_IMAGE_NAMES, ...FINISH_SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => `${import.meta.env.BASE_URL}${name}`);
+
+/** Полный пул в порядке альбома: обычные, необычные, редкие, эксклюзивные, легендарные, мифическая. */
+export const ALL_SUCCESS_IMAGE_NAMES = CARD_ALBUM_TIERS.flatMap((tier) => tier.names);
+export const SUCCESS_IMAGE_SRCS = ALL_SUCCESS_IMAGE_NAMES.map((name) => `${import.meta.env.BASE_URL}${name}`);
+
+/** Раздел альбома, к которому относится карточка. */
+export const CARD_TIER_BY_NAME: Record<string, CardTier> = (() => {
+  const map: Record<string, CardTier> = {};
+  CARD_ALBUM_TIERS.forEach((tier) => tier.names.forEach((name) => { map[name] = tier; }));
+  return map;
+})();
 export const STICKER_MATERIALS = [
   "Самоклеящаяся бумага без просечки",
   "Самоклеящаяся бумага с просечкой",
@@ -231,6 +292,7 @@ export const LS_KEYS = {
   sheetName: "config_sheetName",
   updateSummaryVersion: "update_summary_version",
   successImageStats: "success_image_stats",
+  albumManager: "album_manager",
 };
 
 export type ProductLayoutKind =

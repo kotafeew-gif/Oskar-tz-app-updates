@@ -12,11 +12,11 @@ import {
   DEFAULT_PRODUCT_TEMPLATES, DEFAULT_PRODUCT_TYPES, DRILL_DIAMETERS,
   FORSAC_PAPER_TYPES, KASHUROVKA_BASE_TYPES, KASHUROVKA_LINER_TYPES,
   LS_KEYS, PAPER_PROFILE_LABELS, PAPER_TYPE_OPTIONS,
-  FINISH_SUCCESS_IMAGE_NAMES,
+  FINISH_SUCCESS_IMAGE_NAMES, CARD_ALBUM_TIERS,
   PAPER_TYPE_TO_LIBRARY_KEY, PRODUCT_LAYOUT_META, PRODUCT_LAYOUT_OPTIONS,
-  PRODUCT_TEMPLATE_FIELD_KEYS, RARE_SUCCESS_IMAGE_NAMES, SPRING_COLORS,
+  PRODUCT_TEMPLATE_FIELD_KEYS, SPRING_COLORS,
   SPRING_SPECS, STANDARD_GRID_NAMES, STICKER_COLOR_MODES, STICKER_MATERIALS,
-  SUCCESS_IMAGE_NAMES, SUCCESS_IMAGE_SRCS, SUCCESS_IMAGE_WEIGHTS, UPDATE_SUMMARY_POINTS, runtimeState,
+  SUCCESS_IMAGE_SRCS, SUCCESS_IMAGE_WEIGHTS, UPDATE_SUMMARY_POINTS, runtimeState,
   type BagPaperTypeOption, type PaperLibraryKey, type PaperProfileKey,
   type PaperTypeOption, type ProductLayoutKind, type ProductTemplateConfig,
   type ProductTemplateFieldConfig, type ProductTemplateFieldKey,
@@ -148,6 +148,7 @@ import {
   loadProductTemplates,
   loadSpringSpecs,
   loadSuccessImageStats,
+  successTierRates,
   mergePresetIntoForm,
   mergeUniqueStrings,
   normalizeClientName,
@@ -192,6 +193,7 @@ import { fieldClass, selectFieldClass, actionFieldClass, inputClass, selectClass
 import UiIcon, { getSectionIcon, DICT_ICON_MAP } from "./UiIcon";
 import Section from "./Section";
 import Field from "./Field";
+import AutoTextarea from "./AutoTextarea";
 
 import DateTimeField from "./DateTimeField";
 import UpdateNotice from "./UpdateNotice";
@@ -204,6 +206,7 @@ import PaperSelectionField from "./PaperSelectionField";
 import KashurovkaBlockComponent from "./KashurovkaBlock";
 import ShortTZPanel from "./ShortTZPanel";
 import AdShortTZPanel from "./AdShortTZPanel";
+import SuccessAlbum from "./SuccessAlbum";
 
 import DictEditor from "./DictEditor";
 import SpringSpecsEditor from "./SpringSpecsEditor";
@@ -651,6 +654,7 @@ function LegacyApp() {
   const [sendAutoSaveMsg, setSendAutoSaveMsg] = useState("");
   const [sendSuccessImageSrc, setSendSuccessImageSrc] = useState(() => getRandomSuccessImageSrc());
   const [successImageStats, setSuccessImageStats] = useState<SuccessImageStats>(() => loadSuccessImageStats());
+  const [showSuccessAlbum, setShowSuccessAlbum] = useState(false);
   const [previewText, setPreviewText] = useState("");
   const [updateState, setUpdateState] = useState<UpdateState | null>(null);
   const [cellBookingDraftCount, setCellBookingDraftCount] = useState("");
@@ -985,7 +989,7 @@ function LegacyApp() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div>
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Всего выпадений</h4>
-              <div className="space-y-1 text-sm">{[...SUCCESS_IMAGE_NAMES, ...FINISH_SUCCESS_IMAGE_NAMES, ...RARE_SUCCESS_IMAGE_NAMES].map((name) => <div key={name} className="flex justify-between border-b border-slate-100 py-1"><span>{name}</span><span className="font-semibold">{successImageStats.byImage[name] || 0}</span></div>)}</div>
+              <div className="space-y-1 text-sm">{successTierRates().map((rate) => <div key={rate.id}><div className="mt-2 mb-1 flex flex-wrap items-baseline gap-x-2 text-[11px] font-semibold uppercase tracking-wide text-slate-400"><span>{rate.label}</span><span className="font-normal normal-case text-slate-500">ср. вес {rate.weight.toFixed(2)} · {(rate.groupShare * 100).toFixed(1)}% · 1 из {Math.round(rate.sendsPerDrop)} заявок</span></div>{CARD_ALBUM_TIERS.find((tier) => tier.id === rate.id)!.names.map((name) => <div key={name} className="flex justify-between border-b border-slate-100 py-1"><span>{name}</span><span className="font-semibold">{successImageStats.byImage[name] || 0}</span></div>)}</div>)}</div>
             </div>
             <div>
               <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">По менеджерам</h4>
@@ -2397,7 +2401,14 @@ function LegacyApp() {
             </Section>
 
             <Section title="📝 Дополнительные примечания">
-              <textarea rows={3} className={`${inputClass} resize-none`} placeholder="Любые дополнительные требования, пожелания..." value={form.notes} onChange={(e) => update("notes", e.target.value)} />
+              <AutoTextarea
+                className={inputClass}
+                minRows={6}
+                maxRows={18}
+                placeholder="Любые дополнительные требования, пожелания..."
+                value={form.notes}
+                onChange={(value) => update("notes", value)}
+              />
             </Section>
 
             <ShortTZPanel form={form} />
@@ -2507,12 +2518,13 @@ function LegacyApp() {
                 </Field>
 
                 <Field label="Дополнительные примечания">
-                  <textarea
-                    rows={3}
-                    className={`${inputClass} resize-none`}
+                  <AutoTextarea
+                    className={inputClass}
+                    minRows={6}
+                    maxRows={18}
                     placeholder="Любые уточнения по рекламному заказу..."
                     value={adForm.notes}
-                    onChange={(e) => updateAd("notes", e.target.value)}
+                    onChange={(value) => updateAd("notes", value)}
                   />
                 </Field>
               </div>
@@ -2542,6 +2554,22 @@ function LegacyApp() {
         {/* ═══ СПРАВОЧНИКИ ══════════════════════════════════════════════════════ */}
         {activeTab === "dicts" && (
           <div className="space-y-4 pb-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 shadow-sm">
+              <div className="flex items-center gap-3">
+                <UiIcon name="sparkles" className="h-6 w-6 text-amber-500" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">Альбом карточек</p>
+                  <p className="mt-0.5 text-xs text-amber-700">Какие карточки успеха уже выпали вам, а какие ещё нет. Открывается без пароля.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSuccessAlbum(true)}
+                className="rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-800 transition-colors hover:bg-amber-100"
+              >
+                Открыть альбом
+              </button>
+            </div>
             {isDictLocked ? (
               <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm">
                 <UiIcon name="lock" className="mx-auto mb-4 h-12 w-12 text-slate-500" />
@@ -2637,6 +2665,15 @@ function LegacyApp() {
           </div>
         )}
       </main>
+
+      {showSuccessAlbum && (
+        <SuccessAlbum
+          stats={successImageStats}
+          managers={dicts.managers}
+          initialManager={form.managerName}
+          onClose={() => setShowSuccessAlbum(false)}
+        />
+      )}
 
       {showPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowPreview(false)}>

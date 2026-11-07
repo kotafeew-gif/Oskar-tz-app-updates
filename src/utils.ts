@@ -20,7 +20,7 @@ import {
   DEFAULT_AD_MANAGERS, DEFAULT_PRODUCT_TEMPLATE_FIELDS,
   DEFAULT_PRODUCT_TEMPLATE_FLAGS, DEFAULT_PRODUCT_TEMPLATE_KINDS,
   PRODUCT_TEMPLATE_FIELD_KEYS, SPRING_SPECS,
-  SUCCESS_IMAGE_NAMES, SUCCESS_IMAGE_SRCS, SUCCESS_IMAGE_WEIGHTS, runtimeState,
+  SUCCESS_IMAGE_SRCS, SUCCESS_IMAGE_WEIGHTS, ALL_SUCCESS_IMAGE_NAMES, CARD_ALBUM_TIERS, runtimeState,
   type BagPaperTypeOption, type PaperLibraryKey, type PaperProfileKey,
   type PaperTypeOption, type ProductLayoutKind,
   type ProductTemplateConfig, type ProductTemplateFieldConfig,
@@ -43,6 +43,118 @@ export function getRandomSuccessImageSrc(previousSrc = ""): string {
     pick -= weight;
   }
   return pool[pool.length - 1];
+}
+
+// ─── Альбом карточек успеха ──────────────────────────────────────────────────
+
+export interface SuccessAlbumSlot {
+  /** Имя файла — ТОЛЬКО у открытого слота, иначе пустая строка. */
+  name: string;
+  /** Ссылка на картинку — ТОЛЬКО у открытого слота, иначе пустая строка. */
+  src: string;
+  count: number;
+  unlocked: boolean;
+}
+
+export interface SuccessAlbumSection {
+  id: string;
+  label: string;
+  slots: SuccessAlbumSlot[];
+}
+
+/**
+ * Слоты альбома для конкретного менеджера. Закрытый слот намеренно не несёт ни
+ * имени файла, ни ссылки: менеджер не должен видеть карточки, которые ему ещё не
+ * выпали — даже через исходник страницы или инструменты разработчика.
+ */
+export function buildSuccessAlbum(
+  stats: SuccessImageStats,
+  managerName: string,
+  names: string[] = ALL_SUCCESS_IMAGE_NAMES,
+): SuccessAlbumSlot[] {
+  const manager = (managerName || "").trim();
+  const cards = (manager && stats.byManager?.[manager]) || {};
+  return names.map((name) => {
+    const count = Math.max(0, Number(cards[name]) || 0);
+    return count > 0
+      ? { name, src: `${import.meta.env.BASE_URL}${name}`, count, unlocked: true }
+      : { name: "", src: "", count: 0, unlocked: false };
+  });
+}
+
+/** Альбом, разбитый по разделам редкости (порядок разделов — из constants). */
+export function buildSuccessAlbumSections(
+  stats: SuccessImageStats,
+  managerName: string,
+  tiers: { id: string; label: string; names: string[] }[] = CARD_ALBUM_TIERS,
+): SuccessAlbumSection[] {
+  const manager = (managerName || "").trim();
+  const cards = (manager && stats.byManager?.[manager]) || {};
+  return tiers.map((tier) => ({
+    id: tier.id,
+    label: tier.label,
+    slots: tier.names.map((name) => {
+      const count = Math.max(0, Number(cards[name]) || 0);
+      return count > 0
+        ? { name, src: `${import.meta.env.BASE_URL}${name}`, count, unlocked: true }
+        : { name: "", src: "", count: 0, unlocked: false };
+    }),
+  }));
+}
+
+export function successAlbumProgress(slots: SuccessAlbumSlot[]): { unlocked: number; total: number; percent: number } {
+  const total = slots.length;
+  const unlocked = slots.filter((slot) => slot.unlocked).length;
+  return { unlocked, total, percent: total ? Math.round((unlocked / total) * 100) : 0 };
+}
+
+export interface SuccessTierRate {
+  id: string;
+  label: string;
+  /** Средний вес одной карточки раздела (у «Обычных» внутри два веса: 1 и 3). */
+  weight: number;
+  /** Доля раздела среди всех выпадений, 0..1. */
+  groupShare: number;
+  /** Доля одной карточки раздела, 0..1. */
+  cardShare: number;
+  /** Сколько заявок в среднем нужно на одну карточку раздела. */
+  sendsPerDrop: number;
+}
+
+/**
+ * Реальные шансы выпадения по разделам. Считается из тех же весов, что и розыгрыш,
+ * поэтому цифры в интерфейсе не разъезжаются с поведением.
+ */
+export function successTierRates(
+  tiers: { id: string; label: string; names: string[] }[] = CARD_ALBUM_TIERS,
+): SuccessTierRate[] {
+  const totalWeight = Object.values(SUCCESS_IMAGE_WEIGHTS).reduce((sum, weight) => sum + weight, 0);
+  if (!totalWeight) return [];
+  return tiers.map((tier) => {
+    // Вес берём СУММОЙ по карточкам: у раздела «Обычные» внутри два разных веса.
+    const tierWeight = tier.names.reduce((sum, name) => sum + (SUCCESS_IMAGE_WEIGHTS[name] ?? 0), 0);
+    const groupShare = tierWeight / totalWeight;
+    return {
+      id: tier.id,
+      label: tier.label,
+      weight: tier.names.length ? tierWeight / tier.names.length : 0,
+      groupShare,
+      cardShare: tier.names.length ? groupShare / tier.names.length : 0,
+      sendsPerDrop: groupShare > 0 ? 1 / groupShare : Infinity,
+    };
+  });
+}
+
+/** Список менеджеров для альбома: справочник + те, у кого уже есть карточки. */
+export function listAlbumManagers(stats: SuccessImageStats, managers: string[]): string[] {
+  const names = new Set<string>();
+  const push = (value: string) => {
+    const trimmed = (value || "").trim();
+    if (trimmed) names.add(trimmed);
+  };
+  managers.forEach(push);
+  Object.keys(stats.byManager || {}).forEach(push);
+  return [...names].sort((a, b) => a.localeCompare(b, "ru"));
 }
 
 export function loadList(key: string, defaults: string[]): string[] {
