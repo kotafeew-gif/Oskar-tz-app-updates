@@ -84,7 +84,7 @@ export interface FormData {
   postProcessing: string[]; foilColor: string; uvType: string; bigkovka: boolean; bigkovkaLines: string; drillingDiameter: string;
   falcovka: boolean;
   lamination: LaminationBlock; kashurovka: KashurovkaBlock;
-  binding: boolean; bindingType: string; stapleCount: string; staplePosition: string; springColor: string; springColorCustom: string; springDiameter: string; springDiameterStrict: boolean; springPosition: string; springHidden: boolean;
+  binding: boolean; bindingType: string; stapleCount: string; staplePosition: string; springColor: string; springColorCustom: string; springNote: string; springPosition: string; springHidden: boolean;
   subcontractWorks: SubcontractWork[];
   notebookCompositionEnabled: boolean; notebookParts: NotebookPart[]; otherPaperEntries: OtherPaperEntry[];
   bagPaperType: BagPaperTypeOption | ""; bagHeight: string; bagWidth: string; bagDepth: string; bagPartsCount: string; bagExternalSheets: boolean; bagEyeletColor: string; bagEyeletColorCustom: string; bagHandleColor: string; bagHandleColorCustom: string; bagHandlePipsik: string;

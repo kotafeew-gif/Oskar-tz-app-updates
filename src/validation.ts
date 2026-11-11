@@ -393,7 +393,6 @@ export const REQUIRED_FIELD_LABELS: Record<string, string> = {
   kashSlimPaperBottomPaperType: "Тип бумаги 2 в слим-кашировке",
   kashSlimPaperBottomPaperDensity: "Плотность бумаги 2 в слим-кашировке",
   kashSlimPaperBottomPaperCustomName: "Название дизайнерской бумаги 2 в слим-кашировке",
-  springDiameter: "Диаметр пружины",
   foilColor: "Цвет фольги",
   drillingDiameter: "Диаметр сверления",
   laminationSide: "Сторонность ламинации",

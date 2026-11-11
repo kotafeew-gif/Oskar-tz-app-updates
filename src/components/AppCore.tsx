@@ -48,7 +48,6 @@ import type {
 import {
   applyProductTemplateMigrations,
   buildPresetPayload,
-  buildSpringSuggestion,
   createDefaultAdForm,
   createDefaultForm,
   createDefaultManagerMarkers,
@@ -68,7 +67,6 @@ import {
     DESKTOP_CALENDAR_PART_TYPES,
   ensureProductTypes,
   estimateThicknessMm,
-  findSpringSpecForThickness,
   formatBagPaperSelection,
   formatColorWithReverse,
   formatDateForFilename,
@@ -114,10 +112,6 @@ import {
   getProductTemplateFieldConfig,
   getProductTemplateFieldLabel,
   getRandomSuccessImageSrc,
-  getSpringColor,
-  getSpringDiameterText,
-  getSpringOutputParts,
-  getSpringSpecNote,
   getTZNumber,
   getTodayLocalIso,
   interpolateThickness,
@@ -661,7 +655,6 @@ function LegacyApp() {
   const [presetNameDraft, setPresetNameDraft] = useState("");
   const [presetSearchDraft, setPresetSearchDraft] = useState("");
   const [selectedPresetId, setSelectedPresetId] = useState("");
-  const springDiameterManuallyEditedRef = useRef(false);
   const [presetSaveStatus, setPresetSaveStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [showPresetManageModal, setShowPresetManageModal] = useState(false);
   const [presetPendingDeleteId, setPresetPendingDeleteId] = useState<string | null>(null);
@@ -920,8 +913,6 @@ function LegacyApp() {
   const adRequired = getRequiredAdFields(adForm);
   const adRequiredLabels = adRequired.map((field) => REQUIRED_FIELD_LABELS[field] ?? field);
   const todayIso = getTodayLocalIso();
-  const springSuggestion = form.bindingType === "Пружина" ? buildSpringSuggestion(form) : null;
-  const springDiameterIsCustomOrder = springSuggestion?.subcontract || false;
   const missingFileLink = !form.fileLink.trim();
   const adMissingFileLink = !adForm.fileLink.trim();
   const dictSections = [
@@ -1018,14 +1009,6 @@ function LegacyApp() {
       window.setTimeout(() => element.focus(), 180);
     }
   }
-
-  useEffect(() => {
-    const suggestion = buildSpringSuggestion(form);
-    const shouldAutoUpdate = !springDiameterManuallyEditedRef.current;
-    if (suggestion && form.bindingType === "Пружина" && shouldAutoUpdate && form.springDiameter !== suggestion.diameter) {
-      setForm((prev) => ({ ...prev, springDiameter: suggestion.diameter, springDiameterStrict: false }));
-    }
-  }, [form.productType, form.bindingType, form.pageCount, form.blockPages, form.density, form.densityFinish, form.blockDensity, form.blockFinish, form.blockOffsetPrinting, form.coverDensity, form.coverFinish, form.coverUseKash, form.kashurovka.linerType, form.kashurovka.linerFinish, form.kashurovka.baseType, form.kashurovka.baseCustomName, form.kashurovka.linerPaperDensity, form.kashurovka.forsacEnabled, form.kashurovka.forsacPaper, form.kashurovka.forsacPaperDensity, form.kashurovka.forsacFinish, form.calendarBaseUseKash, form.calendarGridMaterial, form.calendarGridPages, form.calendarGridFinish, form.desktopCalendarCompositionEnabled, form.desktopCalendarParts, form.notebookCompositionEnabled, form.notebookParts]);
 
   useEffect(() => {
     const next: Partial<FormData> = {};
@@ -1148,7 +1131,6 @@ function LegacyApp() {
       setShowValidation(false);
       clearReservation();
     }
-    springDiameterManuallyEditedRef.current = false;
     setSavedMsg(null);
     setPresetMsg(null);
     setPresetApplyMsg(null);
@@ -1529,7 +1511,7 @@ function LegacyApp() {
             <Section title="🖨 Параметры изделия">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Field label="Тип изделия" required>
-                  <select data-field="productType" value={form.productType} className={selectFieldClass(showValidation && required.includes("productType"))} onChange={(e) => { const nextProductType = e.target.value; const notebookSelected = isNotebook(nextProductType); setForm((prev) => ({ ...createDefaultForm(), orderNumber: prev.orderNumber, clientName: prev.clientName, managerName: prev.managerName, deadline: prev.deadline, deadlineTime: prev.deadlineTime, quantity: prev.quantity, cellBooking: prev.cellBooking, subcontractWorks: prev.subcontractWorks, productType: nextProductType, binding: notebookSelected, bindingType: notebookSelected ? "Пружина" : "Скоба", bigkovka: notebookSelected ? false : prev.bigkovka, falcovka: notebookSelected ? false : prev.falcovka })); springDiameterManuallyEditedRef.current = false; setShowValidation(false); }}>
+                  <select data-field="productType" value={form.productType} className={selectFieldClass(showValidation && required.includes("productType"))} onChange={(e) => { const nextProductType = e.target.value; const notebookSelected = isNotebook(nextProductType); setForm((prev) => ({ ...createDefaultForm(), orderNumber: prev.orderNumber, clientName: prev.clientName, managerName: prev.managerName, deadline: prev.deadline, deadlineTime: prev.deadlineTime, quantity: prev.quantity, cellBooking: prev.cellBooking, subcontractWorks: prev.subcontractWorks, productType: nextProductType, binding: notebookSelected, bindingType: notebookSelected ? "Пружина" : "Скоба", bigkovka: notebookSelected ? false : prev.bigkovka, falcovka: notebookSelected ? false : prev.falcovka })); setShowValidation(false); }}>
                     <option value="">— выберите —</option>{dicts.productTypes.map((t) => <option key={t}>{t}</option>)}
                   </select>
                   {otherProduct && <input data-field="productTypeCustom" className={`${fieldClass(showValidation && required.includes("productTypeCustom"))} mt-2`} placeholder="Укажите тип изделия" value={form.productTypeCustom} onChange={(e) => update("productTypeCustom", e.target.value)} />}
@@ -2267,7 +2249,7 @@ function LegacyApp() {
                     </Field>
                     {form.bagHandleType !== "Лента" ? (
                       <>
-                        <Field label="Цвет люверсов"><select value={form.bagEyeletColor} className={selectClass} onChange={(e) => update("bagEyeletColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagEyeletColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagEyeletColorCustom} onChange={(e) => update("bagEyeletColorCustom", e.target.value)} />}</Field>
+                        <Field label="Цвет люверсов"><select value={form.bagEyeletColor} className={selectClass} onChange={(e) => update("bagEyeletColor", e.target.value)}><option value="">— выберите —</option>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagEyeletColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagEyeletColorCustom} onChange={(e) => update("bagEyeletColorCustom", e.target.value)} />}</Field>
                         <Field label="Цвет ручек"><select value={form.bagHandleColor} className={selectClass} onChange={(e) => update("bagHandleColor", e.target.value)}>{BAG_COLOR_OPTIONS.map((c) => <option key={c}>{c}</option>)}</select>{form.bagHandleColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} value={form.bagHandleColorCustom} onChange={(e) => update("bagHandleColorCustom", e.target.value)} />}</Field>
                         <Field label="Пипсик на ручках" required>
                           <select value={form.bagHandlePipsik} className={selectFieldClass(showValidation && required.includes("bagHandlePipsik"))} onChange={(e) => update("bagHandlePipsik", e.target.value)}>
@@ -2372,20 +2354,18 @@ function LegacyApp() {
                     )}
                     {form.bindingType === "Пружина" && (
                       <div className="pl-3 border-l-2 border-blue-100 space-y-3">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <Field label="Цвет пружины"><select value={form.springColor} className={selectClass} onChange={(e) => update("springColor", e.target.value)}><option value="">— выберите —</option>{SPRING_COLORS.map((c) => <option key={c}>{c}</option>)}</select>{form.springColor === "Другой цвет..." && <input className={`${inputClass} mt-2`} placeholder="Укажите цвет" value={form.springColorCustom} onChange={(e) => update("springColorCustom", e.target.value)} />}</Field>
-                          <Field label="Диаметр пружины">
-                            <select value={form.springDiameter} className={selectClass} onChange={(e) => { springDiameterManuallyEditedRef.current = true; update("springDiameter", e.target.value); update("springDiameterStrict", Boolean(e.target.value)); }}><option value="">— выберите —</option>{dicts.springSpecs.map((spec) => <option key={`${spec.diameter}-${spec.pitch}`} value={spec.diameter}>{[spec.diameter, getSpringSpecNote(spec)].filter(Boolean).join(", ")}</option>)}</select>
-                            {springSuggestion && <p className="text-xs text-slate-500 mt-1">Диаметр подобран автоматически.</p>}
-                            {springDiameterIsCustomOrder && <p className="text-xs font-semibold text-amber-700 mt-1">Пружина изготавливается на подрядном оборудовании.</p>}
-                          </Field>
-                          <Field label="Расположение">
+                          <Field label="Место сшивки">
                             <select value={form.springPosition} className={selectClass} onChange={(e) => update("springPosition", e.target.value)}>
                               <option>По широкой стороне</option>
                               <option>По узкой стороне</option>
                             </select>
                           </Field>
                         </div>
+                        <Field label="Пожелания по диаметру пружины">
+                          <input className={inputClass} placeholder="Например: 12 мм, строго" value={form.springNote} onChange={(e) => update("springNote", e.target.value)} />
+                        </Field>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                           <Field label="Скрытая пружина"><YesNo value={form.springHidden} onChange={(v) => update("springHidden", v)} /></Field>
                         </div>

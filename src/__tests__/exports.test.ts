@@ -75,7 +75,7 @@ describe("full export verification", () => {
     expect(m.getProductTemplateFieldLabel).toBeDefined();
     expect(m.getRandomSuccessImageSrc).toBeDefined();
     expect(m.getSpringColor).toBeDefined();
-    expect(m.getSpringDiameterText).toBeDefined();
+    expect(m.getSpringNoteText).toBeDefined();
     expect(m.getSpringOutputParts).toBeDefined();
     expect(m.getSpringSpecNote).toBeDefined();
     expect(m.getTZNumber).toBeDefined();

@@ -1,8 +1,8 @@
-version: 2.8.1
+version: 2.8.2
 files:
-  - url: oscar-print-app-setup-2.8.1.exe
-    sha512: Vm6mcgASU8YDut2HocMoyEzbvppYCTk8Vn0atIajKa0lKL7Piezynhn6vHVx4BfYriV20JEXKpKfj7DStE91fQ==
-    size: 99290727
-path: oscar-print-app-setup-2.8.1.exe
-sha512: Vm6mcgASU8YDut2HocMoyEzbvppYCTk8Vn0atIajKa0lKL7Piezynhn6vHVx4BfYriV20JEXKpKfj7DStE91fQ==
-releaseDate: '2026-11-07T23:00:46.571Z'
+  - url: oscar-print-app-setup-2.8.2.exe
+    sha512: rZ40oAscZTq+ZptKFQW2lm9Oe+1+tJTeJspDsHd+qG+4duUZ0sPaFyEsdzAL7USdvaTPrEeyLlwqKK0OWTQG6g==
+    size: 99287794
+path: oscar-print-app-setup-2.8.2.exe
+sha512: rZ40oAscZTq+ZptKFQW2lm9Oe+1+tJTeJspDsHd+qG+4duUZ0sPaFyEsdzAL7USdvaTPrEeyLlwqKK0OWTQG6g==
+releaseDate: '2026-11-10T17:14:32.594Z'

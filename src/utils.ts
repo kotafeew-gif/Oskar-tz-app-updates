@@ -742,9 +742,9 @@ export function createDefaultForm(): FormData {
     calendarHeaderPaperType: "", calendarHeaderPaperCustomName: "", calendarHeaderPaperDensity: "", calendarHeaderPaperFinish: "Матовая", calendarHeaderSize: "", calendarHeaderColorMode: "", calendarHeaderLamination: defaultLaminationBlock(),
     postProcessing: [], foilColor: "", uvType: "Обычный", bigkovka: false, bigkovkaLines: "1", drillingDiameter: "", falcovka: false,
     lamination: defaultLaminationBlock(), kashurovka: defaultKashurovkaBlock(),
-    binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springDiameter: "", springDiameterStrict: false, springPosition: "По широкой стороне", springHidden: false,
+    binding: false, bindingType: "Скоба", stapleCount: "Одна", staplePosition: "Лево", springColor: "Белая", springColorCustom: "", springNote: "", springPosition: "По широкой стороне", springHidden: false,
     subcontractWorks: [], notebookCompositionEnabled: false, notebookParts: [], otherPaperEntries: [],
-    bagPaperType: "", bagHeight: "", bagWidth: "", bagDepth: "", bagPartsCount: "Из 2-х частей", bagExternalSheets: false, bagEyeletColor: "Белый", bagEyeletColorCustom: "", bagHandleType: "Верёвка", bagHandleColor: "Белый", bagHandleColorCustom: "", bagHandlePipsik: "Без пипсика",
+    bagPaperType: "", bagHeight: "", bagWidth: "", bagDepth: "", bagPartsCount: "Из 2-х частей", bagExternalSheets: false, bagEyeletColor: "", bagEyeletColorCustom: "", bagHandleType: "Верёвка", bagHandleColor: "Белый", bagHandleColorCustom: "", bagHandlePipsik: "Без пипсика",
     stickerMaterial: "", stickerFinish: "Матовая", stickerPlotterCut: false, stickerPacks: false,
     ownReverse: false,
     wobblerPlotterCut: false, wobblerFootGlue: false,
@@ -1351,22 +1351,21 @@ export function getSpringColor(form: FormData): string {
   return form.springColor === "Другой цвет..." ? form.springColorCustom.trim() : form.springColor;
 }
 
-export function getSpringDiameterText(form: FormData): string {
-  if (!form.springDiameter) return "";
-  return form.springDiameterStrict ? `СТРОГО ${form.springDiameter}` : form.springDiameter;
-}
-
 export function getSpringSpecNote(spec: SpringSpec): string {
   return spec.note || (spec.subcontract ? "подряд" : "");
+}
+
+export function getSpringNoteText(form: FormData): string {
+  return form.springNote.trim();
 }
 
 export function getSpringOutputParts(form: FormData): string[] {
   return [
     "пружина",
     getSpringColor(form)?.toLowerCase(),
-    getSpringDiameterText(form),
     form.springPosition?.toLowerCase(),
     form.springHidden ? "скрытая" : "",
+    getSpringNoteText(form),
   ].filter(Boolean);
 }
 
@@ -2154,7 +2153,7 @@ export function generateTZ(form: FormData, _tzNumber: number): string {
       const col = getSpringColor(form);
       lines.push(` Тип : Пружина`);
       if (col) lines.push(` Цвет : ${col}`);
-      if (form.springDiameter) lines.push(` Диаметр : ${getSpringDiameterText(form)}`);
+      if (getSpringNoteText(form)) lines.push(` Пожелания по диаметру : ${getSpringNoteText(form)}`);
       lines.push(` Расположение : ${form.springPosition}`);
       if (form.springHidden) lines.push(" Скрытая пружина : Да");
     } else lines.push(` Тип : ${form.bindingType || "не указан"}`);
